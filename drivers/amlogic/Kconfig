@@ -133,5 +133,7 @@ source "drivers/amlogic/dolby_fw/Kconfig"
 source "drivers/amlogic/cpu_info/Kconfig"
 source "drivers/amlogic/ethernet/phy/Kconfig"
 
+source "drivers/amlogic/aes_hwkey_gcm/Kconfig"
+
 endmenu
 endif
