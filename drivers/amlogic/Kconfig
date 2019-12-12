@@ -91,6 +91,10 @@ source "drivers/amlogic/ddr_tool/Kconfig"
 source "drivers/amlogic/crypto/Kconfig"
 source "drivers/amlogic/mailbox/Kconfig"
 source "drivers/amlogic/reg_access/Kconfig"
+source "drivers/amlogic/cpu_hotplug/Kconfig"
+
+source "drivers/amlogic/cpu_version/Kconfig"
+
 source "drivers/amlogic/media/Kconfig"
 source "drivers/amlogic/pci/Kconfig"
 source "drivers/amlogic/thermal/Kconfig"
