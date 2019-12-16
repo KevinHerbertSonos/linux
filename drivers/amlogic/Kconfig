@@ -51,6 +51,9 @@ config AMLOGIC_MEDIA_V4L_DEC
 		need to support this feature, you need to enable
 		this configuration item.
 
+source "drivers/amlogic/cpuidle/Kconfig"
+
+source "drivers/amlogic/cpu_version/Kconfig"
 
 #
 # Amlogic DVB configuration
