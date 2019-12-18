@@ -17,6 +17,7 @@ obj-$(CONFIG_AMLOGIC_MHU_MBOX)		+= mailbox/
 obj-$(CONFIG_AMLOGIC_CPU_VERSION)	+= cpu_version/
 obj-$(CONFIG_AMLOGIC_SUSPEND)		+= pm/
 obj-$(CONFIG_AMLOGIC_PCIE)		+= pci/
+obj-$(CONFIG_AMLOGIC_CRYPTO)		+= crypto/
 obj-$(CONFIG_AMLOGIC_MEDIA_ENABLE)	+= media/
 obj-$(CONFIG_AMLOGIC_PCIE)		+= pci/
 obj-$(CONFIG_AMLOGIC_THERMAL)		+= thermal/
