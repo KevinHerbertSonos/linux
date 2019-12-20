@@ -93,6 +93,8 @@ source "drivers/amlogic/reg_access/Kconfig"
 source "drivers/amlogic/cpu_hotplug/Kconfig"
 
 
+source "drivers/amlogic/reg_access/Kconfig"
+
 source "drivers/amlogic/media/Kconfig"
 source "drivers/amlogic/pci/Kconfig"
 source "drivers/amlogic/thermal/Kconfig"
