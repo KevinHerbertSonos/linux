@@ -12,7 +12,6 @@ obj-$(CONFIG_AMLOGIC_CRYPTO_DMA)	+= crypto/
 obj-$(CONFIG_AMLOGIC_MHU_MBOX)		+= mailbox/
 obj-$(CONFIG_AMLOGIC_SUSPEND)		+= pm/
 obj-$(CONFIG_AMLOGIC_PCIE)		+= pci/
-obj-$(CONFIG_AMLOGIC_CRYPTO)		+= crypto/
 obj-$(CONFIG_AMLOGIC_REG_ACCESS)	+= reg_access/
 obj-$(CONFIG_AMLOGIC_MEDIA_ENABLE)	+= media/
 obj-$(CONFIG_AMLOGIC_PCIE)		+= pci/

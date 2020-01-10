@@ -323,6 +323,7 @@ static void amlogic_pcie_assert_reset(struct amlogic_pcie *amlogic_pcie)
 			gpio_direction_input(
 				amlogic_pcie->reset_gpio);
 		}
+
 		if (amlogic_pcie->reset_gpio >= 0)
 			devm_gpio_free(dev, amlogic_pcie->reset_gpio);
 	} else {
@@ -344,6 +345,10 @@ static void amlogic_pcie_assert_reset(struct amlogic_pcie *amlogic_pcie)
 		}
 		if (amlogic_pcie->reset_gpio >= 0)
 			devm_gpio_free(dev, amlogic_pcie->reset_gpio);
+			usleep_range(5000, 6000);
+			gpio_set_value_cansleep(
+				amlogic_pcie->reset_gpio, 1);
+		}
 	}
 
 }
@@ -435,6 +440,10 @@ static void amlogic_pcie_init_dw(struct amlogic_pcie *amlogic_pcie)
 	val = amlogic_cfg_readl(amlogic_pcie, PCIE_CFG0);
 	val &= (~APP_LTSSM_ENABLE);
 	amlogic_cfg_writel(amlogic_pcie, val, PCIE_CFG0);
+
+	val = amlogic_elb_readl(amlogic_pcie, PCIE_PORT_LINK_CTRL_OFF);
+	val |= (1<<7);
+	amlogic_elb_writel(amlogic_pcie, val, PCIE_PORT_LINK_CTRL_OFF);
 
 	val = amlogic_elb_readl(amlogic_pcie, PCIE_PORT_LINK_CTRL_OFF);
 	val &= (~(0x3f<<16));
@@ -739,7 +748,7 @@ static int amlogic_pcie_probe(struct platform_device *pdev)
 	u32 tee_start, tee_end;
 	const void *prop;
 	union pcie_phy_m31_r0 r0;
-
+	const void *prop;
 	dev_info(&pdev->dev, "meson pcie rc probe!\n");
 
 	amlogic_pcie = devm_kzalloc(dev, sizeof(*amlogic_pcie), GFP_KERNEL);
@@ -1065,6 +1074,8 @@ fail_pcie_phy:
 	if (!amlogic_pcie->phy->phy_type)
 		writel(0x1d, pcie_aml_regs_v2.pcie_phy_r[0]);
 	amlogic_pcie->phy->power_state = 0;
+	port_num--;
+fail_pcie_phy:
 	return ret;
 }
 
@@ -1239,6 +1250,12 @@ static int amlogic_pcie_resume_noirq(struct device *dev)
 	if (amlogic_pcie->phy->device_attch == 0) {
 		dev_info(dev, "PCIE phy power off, no resume noirq\n");
 		return 0;
+	}
+
+	if (amlogic_pcie->pcie_num == 1) {
+		writel(0x1c, pcie_aml_regs_v2.pcie_phy_r[0]);
+		amlogic_pcie->phy->power_state = 1;
+		udelay(500);
 	}
 
 	if (amlogic_pcie->device_attch == 0) {
