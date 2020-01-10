@@ -759,7 +759,7 @@ int get_reserve_partition_off_from_tbl(void)
 	return -1;
 }
 
-/* static void show_mmc_partition (struct partitions *part, int part_num)
+/* static void show_mmc_patition (struct partitions *part, int part_num)
  * {
  * int i, cnt_stuff;
 

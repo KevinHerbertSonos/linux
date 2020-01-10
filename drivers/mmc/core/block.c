@@ -44,7 +44,7 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/mmc.h>
 #include <linux/mmc/sd.h>
-
+#include <linux/mmc/emmc_partitions.h>
 #include <linux/uaccess.h>
 
 #include "queue.h"

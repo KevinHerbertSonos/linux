@@ -144,6 +144,10 @@ struct meson_host {
 	struct clk *mux[2];
 	struct clk *mux1_in;
 	struct clk *clk[3];
+	struct clk *core_clk;
+	struct clk *tx_clk;
+	struct clk *mux_clk;
+	struct clk *mmc_clk;
 	unsigned long req_rate;
 	bool ddr;
 

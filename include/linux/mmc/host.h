@@ -281,6 +281,9 @@ struct mmc_host {
 	u32			ocr_avail_sdio;	/* SDIO-specific OCR */
 	u32			ocr_avail_sd;	/* SD-specific OCR */
 	u32			ocr_avail_mmc;	/* MMC-specific OCR */
+#ifdef CONFIG_AMLOGIC_MODIFY
+	u8			first_init_flag;
+#endif
 	u32			max_current_330;
 	u32			max_current_300;
 	u32			max_current_180;
