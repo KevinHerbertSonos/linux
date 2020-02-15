@@ -51,6 +51,13 @@ config AMLOGIC_MEDIA_V4L_DEC
 		need to support this feature, you need to enable
 		this configuration item.
 
+if AMLOGIC_DRIVER
+menu "Amlogic Device Drivers"
+# Please add folders in alphabetical order
+source "drivers/amlogic/cpufreq/Kconfig"
+
+source "drivers/amlogic/cpu_hotplug/Kconfig"
+
 source "drivers/amlogic/cpuidle/Kconfig"
 
 source "drivers/amlogic/cpu_version/Kconfig"
