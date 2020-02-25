@@ -387,6 +387,8 @@ int __init aml_mhu_init(void)
 	return platform_driver_register(&mhu_driver);
 }
 
+core_initcall(mhu_init);
+
 void __exit aml_mhu_exit(void)
 {
 	platform_driver_unregister(&mhu_driver);

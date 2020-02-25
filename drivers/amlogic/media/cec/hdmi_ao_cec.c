@@ -884,6 +884,10 @@ static void ao_cecb_init(void)
 
 void eecec_irq_enable(bool enable)
 {
+/* move cpu_type to  /media, 5.4 support sm1 and later*/
+#if 0
+	if (cec_dev->cpu_type < MESON_CPU_MAJOR_ID_TXLX) {
+
 	u32 tmp;
 
 	if (cec_dev->plat_data->chip_id < CEC_CHIP_TXLX) {
@@ -903,16 +907,18 @@ void eecec_irq_enable(bool enable)
 		}
 		CEC_INFO("%s-0:int %d mask:0x%x\n", __func__, enable,
 			 hdmirx_cec_read(DWC_AUD_CEC_IEN));
-	} else {
-		if (enable) {
-			write_ao(AO_CECB_INTR_MASKN, CECB_IRQ_EN_MASK);
-		} else {
-			tmp = read_ao(AO_CECB_INTR_MASKN);
-			tmp &= ~CECB_IRQ_EN_MASK;
-			write_ao(AO_CECB_INTR_MASKN, tmp);
-		}
-		CEC_INFO("%s-1:int %d mask:0x%x\n", __func__, enable,
-			 read_ao(AO_CECB_INTR_MASKN));
+	} else
+#endif
+	{
+		if (enable)
+			writel(CECB_IRQ_EN_MASK,
+			       cec_dev->cec_reg + AO_CECB_INTR_MASKN);
+		else
+			writel(readl(cec_dev->cec_reg + AO_CECB_INTR_MASKN)
+			       & ~CECB_IRQ_EN_MASK,
+			       cec_dev->cec_reg + AO_CECB_INTR_MASKN);
+		CEC_INFO("cecb enable:int mask:0x%x\n",
+			 readl(cec_dev->cec_reg + AO_CECB_INTR_MASKN));
 	}
 }
 
@@ -2418,7 +2424,8 @@ static void cec_task(struct work_struct *work)
 
 		/*for check rx buffer for old chip version, cec rx irq process*/
 		/*in internal hdmi rx, for avoid msg lose*/
-		if (cec_dev->plat_data->chip_id <= CEC_CHIP_TXLX &&
+#if 0 /* move cpu_type to media, 5.4 support sm1 or later*/
+		if (cec_dev->cpu_type < MESON_CPU_MAJOR_ID_TXLX &&
 		    cec_cfg == CEC_FUNC_CFG_ALL) {
 			if (cec_late_check_rx_buffer()) {
 				/*msg in*/
@@ -4386,6 +4393,8 @@ static int aml_cec_probe(struct platform_device *pdev)
 	cec_dev->dev_type = CEC_PLAYBACK_DEVICE_1_ADDR;
 	cec_dev->dbg_dev  = &pdev->dev;
 	cec_dev->tx_dev   = get_hdmitx_device();
+	/* move cpu_type to /media, 5.4 support sm1 or later*/
+
 	/* cec_dev->cpu_type = get_cpu_type(); */
 	cec_dev->node = pdev->dev.of_node;
 	cec_dev->probe_finish = false;
