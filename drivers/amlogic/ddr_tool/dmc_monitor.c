@@ -26,10 +26,58 @@
 #include <linux/interrupt.h>
 #include <linux/amlogic/page_trace.h>
 #include <linux/arm-smccc.h>
-#include <linux/amlogic/dmc_monitor.h>
-#include <linux/amlogic/ddr_port.h>
+#include "dmc_monitor.h"
+#include "ddr_port.h"
 
 static struct dmc_monitor *dmc_mon;
+
+static unsigned long init_dev_mask;
+static unsigned long init_start_addr;
+static unsigned long init_end_addr;
+
+static int early_dmc_param(char *buf)
+{
+	unsigned long s_addr, e_addr, mask;
+	/*
+	 * Patten:  dmc_montiro=[start_addr],[end_addr],[mask]
+	 * Example: dmc_monitor=0x00000000,0x20000000,0x7fce
+	 */
+	if (!buf)
+		return -EINVAL;
+
+	if (sscanf(buf, "%lx,%lx,%lx", &s_addr, &e_addr, &mask) != 3)
+		return -EINVAL;
+
+	init_start_addr = s_addr;
+	init_end_addr   = e_addr;
+	init_dev_mask   = mask;
+
+	pr_info("%s, buf:%s, %lx-%lx, %lx\n",
+		__func__, buf, s_addr, e_addr, mask);
+
+	return 0;
+}
+
+#ifdef MODULE
+static char *dmc_param = "";
+
+static int set_dmc_param(const char *val, const struct kernel_param *kp)
+{
+	param_set_charp(val, kp);
+
+	return early_dmc_param(dmc_param);
+}
+
+static const struct kernel_param_ops dmc_param_ops = {
+	.set = set_dmc_param,
+	.get = param_get_charp,
+};
+
+module_param_cb(dmc_monitor, &dmc_param_ops, &dmc_param, 0644);
+MODULE_PARM_DESC(jtag, "dmc_monitor");
+#else
+early_param("dmc_monitor", early_dmc_param);
+#endif
 
 unsigned long dmc_rw(unsigned long addr, unsigned long value, int rw)
 {
@@ -449,7 +497,7 @@ static struct platform_driver dmc_monitor_driver = {
 	.remove = dmc_monitor_remove,
 };
 
-static int __init dmc_monitor_init(void)
+int __init dmc_monitor_init(void)
 {
 #ifdef CONFIG_OF
 	const struct of_device_id *match_id;
@@ -461,12 +509,8 @@ static int __init dmc_monitor_init(void)
 	return platform_driver_probe(&dmc_monitor_driver, dmc_monitor_probe);
 }
 
-static void __exit dmc_monitor_exit(void)
+void dmc_monitor_exit(void)
 {
 	platform_driver_unregister(&dmc_monitor_driver);
 }
 
-module_init(dmc_monitor_init);
-module_exit(dmc_monitor_exit);
-MODULE_DESCRIPTION("amlogic dmc monitor driver");
-MODULE_LICENSE("GPL");
