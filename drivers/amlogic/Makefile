@@ -3,11 +3,9 @@
 ########## Amlogic Drivers ###############
 ##########################################
 
-
 # GKI extern modules if enabled AMLOGIC_GKI
 obj-$(CONFIG_AMLOGIC_MESON_CPUFREQ)	+= cpufreq/
 obj-$(CONFIG_AMLOGIC_EFUSE_UNIFYKEY)    += efuse_unifykey/
-obj-$(CONFIG_AMLOGIC_CPU_HOTPLUG)	+= cpu_hotplug/
 obj-$(CONFIG_AMLOGIC_CPUIDLE)		+= cpuidle/
 obj-$(CONFIG_CPU_FREQ)			+= cpufreq/
 obj-$(CONFIG_AMLOGIC_CPU_VERSION)	+= cpu_version/
