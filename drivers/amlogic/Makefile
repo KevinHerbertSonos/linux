@@ -2,12 +2,8 @@
 ##########################################
 ########## Amlogic Drivers ###############
 ##########################################
-
-# GKI extern modules if enabled AMLOGIC_GKI
-obj-$(CONFIG_AMLOGIC_MESON_CPUFREQ)	+= cpufreq/
-obj-$(CONFIG_AMLOGIC_EFUSE_UNIFYKEY)    += efuse_unifykey/
 obj-$(CONFIG_AMLOGIC_CPUIDLE)		+= cpuidle/
-obj-$(CONFIG_CPU_FREQ)			+= cpufreq/
+obj-$(CONFIG_AMLOGIC_MESON_CPUFREQ)	+= cpufreq/
 obj-$(CONFIG_MMC_MESON_GX)		+= mmc/
 obj-$(CONFIG_AMLOGIC_EFUSE_UNIFYKEY)    += efuse_unifykey/
 obj-$(CONFIG_AMLOGIC_DEFENDKEY)		+= defendkey/
@@ -68,7 +64,6 @@ obj-$(CONFIG_AMLOGIC_HWSPINLOCK)     += aml_hwspinlock/
 obj-$(CONFIG_AMLOGIC_MESON_RTC)     += rtc/
 obj-$(CONFIG_VAD_WAKEUP_ASR) += asr/
 obj-$(CONFIG_AES_HWKEY_GCM) += aes_hwkey_gcm/
-obj-$(CONFIG_AMLOGIC_CPU_HOTPLUG)	+= cpu_hotplug/
 
 KBUILD_CFLAGS_MODULE += $(GKI_EXT_MODULE_PREDEFINE)
 
