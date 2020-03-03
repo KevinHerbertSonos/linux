@@ -14,7 +14,17 @@
 #include <linux/amlogic/efuse.h>
 #include <linux/kallsyms.h>
 #include "efuse.h"
-#include <linux/amlogic/secmon.h>
+
+static DEFINE_MUTEX(efuse_lock);
+
+static unsigned long get_sharemem_info(unsigned long function_id)
+{
+	struct arm_smccc_res res;
+
+	arm_smccc_smc((unsigned long)function_id, 0, 0, 0, 0, 0, 0, 0, &res);
+
+	return res.a0;
+}
 
 static ssize_t meson_efuse_fn_smc(struct efuse_hal_api_arg *arg)
 {
@@ -22,6 +32,10 @@ static ssize_t meson_efuse_fn_smc(struct efuse_hal_api_arg *arg)
 	unsigned int cmd, offset, size;
 	unsigned long *retcnt = (unsigned long *)(arg->retcnt);
 	struct arm_smccc_res res;
+	void *sharemem_in_base = NULL;
+	void *sharemem_out_base;
+	long phy_in_base = 0;
+	long phy_out_base = 0;
 
 	if (arg->cmd == EFUSE_HAL_API_READ)
 		cmd = efuse_cmd.read_cmd;
@@ -33,11 +47,19 @@ static ssize_t meson_efuse_fn_smc(struct efuse_hal_api_arg *arg)
 	offset = arg->offset;
 	size = arg->size;
 
-	meson_sm_mutex_lock();
+	mutex_lock(&efuse_lock);
 
-	if (arg->cmd == EFUSE_HAL_API_WRITE)
-		memcpy((void *)sharemem_input_base,
+	if (arg->cmd == EFUSE_HAL_API_WRITE) {
+		phy_in_base = get_sharemem_info(efuse_cmd.mem_in_base_cmd);
+
+		if (!valid_phys_addr_range(phy_in_base, size))
+			sharemem_in_base = ioremap_nocache(phy_in_base, size);
+		else
+			sharemem_in_base = phys_to_virt(phy_in_base);
+
+		memcpy((void *)sharemem_in_base,
 		       (const void *)arg->buffer, size);
+	}
 
 	asm __volatile__("" : : : "memory");
 
@@ -45,11 +67,25 @@ static ssize_t meson_efuse_fn_smc(struct efuse_hal_api_arg *arg)
 	ret = res.a0;
 	*retcnt = res.a0;
 
-	if ((arg->cmd == EFUSE_HAL_API_READ) && (ret != 0))
-		memcpy((void *)arg->buffer,
-		       (const void *)sharemem_output_base, ret);
+	if (arg->cmd == EFUSE_HAL_API_WRITE) {
+		if (!valid_phys_addr_range(phy_in_base, size))
+			iounmap(sharemem_in_base);
+	} else if ((arg->cmd == EFUSE_HAL_API_READ) && (ret != 0)) {
+		phy_out_base = get_sharemem_info(efuse_cmd.mem_out_base_cmd);
 
-	meson_sm_mutex_unlock();
+		if (!valid_phys_addr_range(phy_out_base, ret))
+			sharemem_out_base = ioremap_nocache(phy_out_base, ret);
+		else
+			sharemem_out_base = phys_to_virt(phy_out_base);
+
+		memcpy((void *)arg->buffer,
+		       (const void *)sharemem_out_base, ret);
+
+		if (!valid_phys_addr_range(phy_out_base, ret))
+			iounmap(sharemem_out_base);
+	}
+
+	mutex_unlock(&efuse_lock);
 
 	if (!ret)
 		return -1;
@@ -74,197 +110,96 @@ static ssize_t meson_trustzone_efuse(struct efuse_hal_api_arg *arg)
 	return ret;
 }
 
-/* BEGIN added by Sonos */
-
-static int meson_efuse_obj_rw_fn(u32 cmd, u32 obj_id, uint8_t *buff, u32 *size)
+static unsigned long efuse_data_process(unsigned long type,
+					unsigned long buffer,
+					unsigned long length,
+					unsigned long option)
 {
-	u32 rc = EFUSE_OBJ_ERR_UNKNOWN;
-	u32 len = 0;
 	struct arm_smccc_res res;
+	void *sharemem_in_base;
+	long phy_in_base;
+	struct page *page;
 
-	if (!sharemem_input_base || !sharemem_output_base || !buff || !size) {
-		return -1;
-	}
+	mutex_lock(&efuse_lock);
 
-	/* pr_info("%s cmd:0x%x, obj_id:0x%x[%d] size:%d\n",
-	 * __func__, cmd, obj_id, obj_id, *size);
-	 */
+	phy_in_base = get_sharemem_info(efuse_cmd.mem_in_base_cmd);
+	page = pfn_to_page(phy_in_base >> PAGE_SHIFT);
 
-	meson_sm_mutex_lock();
+	if (!valid_phys_addr_range(phy_in_base, length))
+		sharemem_in_base = ioremap_nocache(phy_in_base, length);
+	else
+		sharemem_in_base = phys_to_virt(phy_in_base);
 
-	if (cmd == efuse_cmd.write_obj_cmd) {
-		if (obj_id == EFUSE_OBJ_GP_REE && buff && *size == 16) {
-			memcpy((void *)sharemem_input_base, buff, *size);
-		} else {
-			rc = -EFUSE_OBJ_ERR_INVALID_DATA;
-			goto out;
-		}
-	}
+	memcpy((void *)sharemem_in_base,
+	       (const void *)buffer, length);
 
 	asm __volatile__("" : : : "memory");
-	arm_smccc_smc(cmd, obj_id, *size, 0, 0, 0, 0, 0, &res);
-	rc = res.a0;
-
-	if (cmd == efuse_cmd.read_obj_cmd) {
-		len = res.a1;
-		/* pr_info("%s read rc:%d len:%d\n", __func__, rc, len); */
-		if (rc == EFUSE_OBJ_SUCCESS) {
-			if (*size >= len) {
-				memcpy(buff, (const void *)sharemem_output_base, len);
-				*size = len;
-			} else {
-				rc = -EFUSE_OBJ_ERR_SIZE;
-			}
-		} else {
-			rc = -rc;
-		}
-	} else {
-		/* pr_info("%s write rc:%d\n", __func__, rc); */
-		if (rc != EFUSE_OBJ_SUCCESS) {
-			rc = -rc;
-		}
-	}
-
-out:
-	meson_sm_mutex_unlock();
-
-	return rc;
-}
-
-int meson_efuse_obj_read_sonos(u32 obj_id, u8 *buff, u32 *size)
-{
-	struct cpumask task_cpumask;
-	int rc;
-
-	cpumask_copy(&task_cpumask, current->cpus_ptr);
-	set_cpus_allowed_ptr(current, cpumask_of(0));
-
-	rc = meson_efuse_obj_rw_fn(efuse_cmd.read_obj_cmd, obj_id, buff, size);
-	set_cpus_allowed_ptr(current, &task_cpumask);
-
-	if (rc != EFUSE_OBJ_SUCCESS) {
-		pr_err("%s failed:%d\n", __func__, rc);
-	}
-	return rc;
-}
-
-int meson_efuse_obj_write_sonos(u32 obj_id, u8 *buff, u32 *size)
-{
-	struct cpumask task_cpumask;
-	int rc;
-
-	cpumask_copy(&task_cpumask, current->cpus_ptr);
-	set_cpus_allowed_ptr(current, cpumask_of(0));
-
-	rc = meson_efuse_obj_rw_fn(efuse_cmd.write_obj_cmd, obj_id, buff, size);
-	set_cpus_allowed_ptr(current, &task_cpumask);
-
-	if (rc != EFUSE_OBJ_SUCCESS) {
-		pr_err("%s failed:%d\n", __func__, rc);
-	}
-	return rc;
-}
-
-/* END added by Sonos */
-
-static u32 meson_efuse_obj_read(u32 obj_id, u8 *buff, u32 *size)
-{
-	u32 rc = EFUSE_OBJ_ERR_UNKNOWN;
-	u32 len = 0;
-	struct arm_smccc_res res;
-
-	meson_sm_mutex_lock();
-
-	memcpy((void *)sharemem_input_base, buff, *size);
 
 	do {
-		arm_smccc_smc((unsigned long)EFUSE_OBJ_READ,
-			      (unsigned long)obj_id,
-			      (unsigned long)*size,
-			      0, 0, 0, 0, 0, &res);
-
+		arm_smccc_smc((unsigned long)AML_DATA_PROCESS,
+			      (unsigned long)type,
+			      (unsigned long)phy_in_base,
+			      (unsigned long)length,
+			      (unsigned long)option,
+			      0, 0, 0, &res);
 	} while (0);
 
-	rc = res.a0;
-	len = res.a1;
+	if (!valid_phys_addr_range(phy_in_base, length))
+		iounmap(sharemem_in_base);
 
-	if (rc == EFUSE_OBJ_SUCCESS) {
-		if (*size >= len) {
-			memcpy(buff, (const void *)sharemem_output_base, len);
-			*size = len;
-		} else {
-			rc = EFUSE_OBJ_ERR_SIZE;
-		}
-	}
-
-	meson_sm_mutex_unlock();
-
-	return rc;
-}
-
-static u32 meson_efuse_obj_write(u32 obj_id, u8 *buff, u32 size)
-{
-	struct arm_smccc_res res;
-
-	meson_sm_mutex_lock();
-
-	memcpy((void *)sharemem_input_base, buff, size);
-
-	do {
-		arm_smccc_smc((unsigned long)EFUSE_OBJ_WRITE,
-			      (unsigned long)obj_id,
-			      (unsigned long)size,
-			      0, 0, 0, 0, 0, &res);
-
-	} while (0);
-
-	meson_sm_mutex_unlock();
+	mutex_unlock(&efuse_lock);
 
 	return res.a0;
 }
 
-u32 efuse_obj_write(u32 obj_id, char *name, u8 *buff, u32 size)
+unsigned long efuse_amlogic_set(char *buf, size_t count)
 {
-	u32 ret;
-	struct efuse_obj_field_t efuseinfo;
+	unsigned long ret;
 	struct cpumask task_cpumask;
-
-	if (efuse_obj_cmd_status != 1)
-		return EFUSE_OBJ_ERR_NOT_FOUND;
 
 	cpumask_copy(&task_cpumask, current->cpus_ptr);
 	set_cpus_allowed_ptr(current, cpumask_of(0));
 
-	memset(&efuseinfo, 0, sizeof(efuseinfo));
-	strncpy(efuseinfo.name, name, sizeof(efuseinfo.name) - 1);
-	if (size > sizeof(efuseinfo.data))
-		return EFUSE_OBJ_ERR_SIZE;
-	efuseinfo.size = size;
-	memcpy(efuseinfo.data, buff, efuseinfo.size);
-	ret = meson_efuse_obj_write(obj_id, (uint8_t *)&efuseinfo, sizeof(efuseinfo));
+	ret = efuse_data_process(AML_D_P_W_EFUSE_AMLOGIC,
+				 (unsigned long)buf, (unsigned long)count, 0);
 	set_cpus_allowed_ptr(current, &task_cpumask);
 
 	return ret;
 }
 
-u32 efuse_obj_read(u32 obj_id, char *name, u8 *buff, u32 *size)
+static ssize_t meson_trustzone_efuse_get_max(struct efuse_hal_api_arg *arg)
 {
-	u32 ret;
-	struct efuse_obj_field_t efuseinfo;
+	ssize_t ret;
+	unsigned int cmd;
+	struct arm_smccc_res res;
+
+	if (arg->cmd != EFUSE_HAL_API_USER_MAX)
+		return -1;
+
+	cmd = efuse_cmd.get_max_cmd;
+
+	asm __volatile__("" : : : "memory");
+	arm_smccc_smc(cmd, 0, 0, 0, 0, 0, 0, 0, &res);
+	ret = res.a0;
+
+	if (!ret)
+		return -1;
+
+	return ret;
+}
+
+ssize_t efuse_get_max(void)
+{
+	struct efuse_hal_api_arg arg;
+	ssize_t ret;
 	struct cpumask task_cpumask;
 
-	if (efuse_obj_cmd_status != 1)
-		return EFUSE_OBJ_ERR_NOT_FOUND;
+	arg.cmd = EFUSE_HAL_API_USER_MAX;
 
 	cpumask_copy(&task_cpumask, current->cpus_ptr);
 	set_cpus_allowed_ptr(current, cpumask_of(0));
 
-	memset(&efuseinfo, 0, sizeof(efuseinfo));
-	strncpy(efuseinfo.name, name, sizeof(efuseinfo.name) - 1);
-	*size = sizeof(efuseinfo);
-	ret = meson_efuse_obj_read(obj_id, (uint8_t *)&efuseinfo, size);
-	memcpy(buff, efuseinfo.data, efuseinfo.size);
-	*size = efuseinfo.size;
+	ret = meson_trustzone_efuse_get_max(&arg);
 	set_cpus_allowed_ptr(current, &task_cpumask);
 
 	return ret;
@@ -275,7 +210,7 @@ static ssize_t _efuse_read(char *buf, size_t count, loff_t *ppos)
 	unsigned int pos = *ppos;
 
 	struct efuse_hal_api_arg arg;
-	unsigned long retcnt;
+	unsigned int retcnt;
 	ssize_t ret;
 
 	arg.cmd = EFUSE_HAL_API_READ;
@@ -297,7 +232,7 @@ static ssize_t _efuse_write(const char *buf, size_t count, loff_t *ppos)
 	unsigned int pos = *ppos;
 
 	struct efuse_hal_api_arg arg;
-	unsigned long retcnt;
+	unsigned int retcnt;
 	ssize_t ret;
 
 	arg.cmd = EFUSE_HAL_API_WRITE;

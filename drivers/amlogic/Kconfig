@@ -51,15 +51,6 @@ config AMLOGIC_MEDIA_V4L_DEC
 		need to support this feature, you need to enable
 		this configuration item.
 
-if AMLOGIC_DRIVER
-menu "Amlogic Device Drivers"
-# Please add folders in alphabetical order
-source "drivers/amlogic/cpufreq/Kconfig"
-
-source "drivers/amlogic/cpuidle/Kconfig"
-
-source "drivers/amlogic/cpu_version/Kconfig"
-
 #
 # Amlogic DVB configuration
 #
@@ -100,10 +91,6 @@ source "drivers/amlogic/crypto/Kconfig"
 source "drivers/amlogic/mailbox/Kconfig"
 source "drivers/amlogic/reg_access/Kconfig"
 source "drivers/amlogic/cpu_hotplug/Kconfig"
-
-source "drivers/amlogic/cpu_version/Kconfig"
-
-source "drivers/amlogic/mailbox/Kconfig"
 
 source "drivers/amlogic/media/Kconfig"
 source "drivers/amlogic/pci/Kconfig"
