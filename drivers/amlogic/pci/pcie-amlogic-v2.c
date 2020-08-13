@@ -1252,12 +1252,6 @@ static int amlogic_pcie_resume_noirq(struct device *dev)
 		return 0;
 	}
 
-	if (amlogic_pcie->pcie_num == 1) {
-		writel(0x1c, pcie_aml_regs_v2.pcie_phy_r[0]);
-		amlogic_pcie->phy->power_state = 1;
-		udelay(500);
-	}
-
 	if (amlogic_pcie->device_attch == 0) {
 		dev_info(dev, "controller power off, no resume noirq\n");
 		return 0;
