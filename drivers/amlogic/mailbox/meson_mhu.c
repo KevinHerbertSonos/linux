@@ -24,7 +24,6 @@
 #include "meson_mhu.h"
 #include "../firmware/bl40_module.h"
 
-struct device *the_scpi_device;
 u32 num_scp_chans;
 u32 send_listen_chans;
 u32 isr_send;
@@ -78,13 +77,6 @@ u32 isr_m4;
 #define PAYLOAD_OFFSET		0x400
 #define RX_PAYLOAD(chan)	((chan) * PAYLOAD_OFFSET)
 #define TX_PAYLOAD(chan)	((chan) * PAYLOAD_OFFSET + PAYLOAD_MAX_SIZE)
-
-struct mhu_chan {
-	int index;
-	int rx_irq;
-	struct mhu_ctlr *ctlr;
-	struct mhu_data_buf *data;
-};
 
 struct mhu_ctlr {
 	struct device *dev;
@@ -151,8 +143,9 @@ static irqreturn_t mbox_handler(int irq, void *p)
 					data->rx_size =
 					readl(mbox_base + RX_STATUS(idx));
 
-				memcpy(data->rx_buf, payload + RX_PAYLOAD(idx),
-				       data->rx_size);
+				memcpy_fromio(data->rx_buf,
+					      payload + RX_PAYLOAD(idx),
+					      data->rx_size);
 			}
 		}
 		mbox_chan_received_data(link, data);
@@ -199,7 +192,8 @@ static int mhu_startup(struct mbox_chan *link)
 	struct mhu_chan *chan = link->con_priv;
 	int err, mbox_irq = chan->rx_irq;
 
-	err = request_threaded_irq(mbox_irq, mbox_handler, NULL, IRQF_ONESHOT,
+	err = request_threaded_irq(mbox_irq, mbox_handler,
+				   NULL, IRQF_ONESHOT,
 				   DRIVER_NAME, link);
 	return err;
 }
@@ -245,6 +239,7 @@ static int mhu_probe(struct platform_device *pdev)
 		CHANNEL_HIGH_PRIORITY
 	};
 
+	pr_debug("mhu to scp init\n");
 	ctlr = devm_kzalloc(dev, sizeof(*ctlr), GFP_KERNEL);
 	if (!ctlr)
 		return -ENOMEM;
@@ -319,8 +314,6 @@ static int mhu_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	the_scpi_device = dev;
-
 	if (!send_listen_chans)
 		goto probe_done;
 
@@ -351,6 +344,10 @@ static int mhu_probe(struct platform_device *pdev)
 		}
 	}
 probe_done:
+	mhu_device = dev;
+	/*set mhu type*/
+	mhu_f |= MASK_MHU;
+	pr_info("mhu %pK to scp done 0x%x\n", mhu_device, mhu_f);
 	return 0;
 }
 
@@ -385,18 +382,13 @@ static struct platform_driver mhu_driver = {
 	},
 };
 
-static int __init mhu_init(void)
+int __init aml_mhu_init(void)
 {
 	return platform_driver_register(&mhu_driver);
 }
-core_initcall(mhu_init);
 
-static void __exit mhu_exit(void)
+void __exit aml_mhu_exit(void)
 {
 	platform_driver_unregister(&mhu_driver);
 }
-module_exit(mhu_exit);
 
-MODULE_AUTHOR("yan wang <yan.wang@amlogic.com>");
-MODULE_DESCRIPTION("MESON MHU mailbox driver");
-MODULE_LICENSE("GPL");
