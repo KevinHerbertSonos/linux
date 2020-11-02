@@ -1907,7 +1907,19 @@ void get_hist(enum hdr_module_sel module_sel, enum hdr_hist_sel hist_sel)
 {
 	unsigned int hist_ctrl_port = 0;
 	unsigned int hist_height, hist_width, i;
-	u32 num_pixel, total_pixel, percentile_index;
+	u32 num_pixel, total_pixel;
+	int j;
+	int k = 0;
+	enum hdr_module_sel module_sel = VD1_HDR;
+	unsigned int hdr2_hist_rd;
+
+	hist_width = 0;
+	hist_height = 0;
+
+	if (vd_path == VD1_PATH)
+		module_sel = VD1_HDR;
+	else
+		module_sel = VD2_HDR;
 
 	if (module_sel == VD1_HDR)
 		hist_ctrl_port = VD1_HDR2_HIST_CTRL;
