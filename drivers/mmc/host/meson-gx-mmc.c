@@ -638,6 +638,44 @@ static int meson_mmc_clk_init(struct meson_host *host)
 	return clk_prepare_enable(host->mmc_clk);
 }
 
+static int meson_mmc_pxp_clk_init(struct meson_host *host)
+{
+	u32 reg_val, val;
+	struct mmc_phase *mmc_phase_init = &host->sdmmc.init;
+
+	writel(0, host->regs + SD_EMMC_V3_ADJUST);
+	writel(0, host->regs + SD_EMMC_DELAY1);
+	writel(0, host->regs + SD_EMMC_DELAY2);
+	writel(0, host->regs + SD_EMMC_CLOCK);
+
+	reg_val = 0;
+	reg_val |= CLK_ALWAYS_ON(host);
+	reg_val |= CLK_DIV_MASK;
+	writel(reg_val, host->regs + SD_EMMC_CLOCK);
+
+	val = readl(host->clk_tree_base);
+	pr_info("clk tree base:0x%x\n", val);
+	if (aml_card_type_non_sdio(host))
+		writel(0x800000, host->clk_tree_base);
+
+	else
+		writel(0x80, host->clk_tree_base);
+
+	reg_val = readl(host->regs);
+	reg_val &= ~CLK_DIV_MASK;
+	reg_val |= 60;
+	writel(reg_val, host->regs);
+
+	meson_mmc_set_phase_delay(host, CLK_CORE_PHASE_MASK,
+									mmc_phase_init->core_phase);
+	meson_mmc_set_phase_delay(host, CLK_TX_PHASE_MASK,
+									mmc_phase_init->tx_phase);
+	reg_val = readl(host->regs + SD_EMMC_CFG);
+	reg_val |= CFG_AUTO_CLK;
+	reg_val = readl(host->regs + SD_EMMC_CFG);
+	return 0;
+}
+
 static unsigned int aml_sd_emmc_clktest(struct mmc_host *mmc)
 {
 	struct meson_host *host = mmc_priv(mmc);
@@ -3085,6 +3123,7 @@ static int meson_mmc_probe(struct platform_device *pdev)
 	mmc = mmc_alloc_host(sizeof(struct meson_host), &pdev->dev);
 	if (!mmc)
 		return -ENOMEM;
+
 	host = mmc_priv(mmc);
 	host->mmc = mmc;
 	host->dev = &pdev->dev;
@@ -3186,19 +3225,23 @@ static int meson_mmc_probe(struct platform_device *pdev)
 		host->pins_clk_gate = NULL;
 	}
 
-	host->core_clk = devm_clk_get(&pdev->dev, "core");
-	if (IS_ERR(host->core_clk)) {
-		ret = PTR_ERR(host->core_clk);
-		goto free_host;
+	if (host->run_pxp_flag == 0) {
+		host->core_clk = devm_clk_get(&pdev->dev, "core");
+		if (IS_ERR(host->core_clk)) {
+			ret = PTR_ERR(host->core_clk);
+			goto free_host;
+		}
+
+		ret = clk_prepare_enable(host->core_clk);
+		if (ret)
+			goto free_host;
+
+		ret = meson_mmc_clk_init(host);
+		if (ret)
+			goto err_core_clk;
+	} else {
+		meson_mmc_pxp_clk_init(host);
 	}
-
-	ret = clk_prepare_enable(host->core_clk);
-	if (ret)
-		goto free_host;
-
-	ret = meson_mmc_clk_init(host);
-	if (ret)
-		goto err_core_clk;
 
 	/* set config to sane default */
 	meson_mmc_cfg_init(host);
