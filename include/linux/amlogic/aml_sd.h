@@ -224,6 +224,13 @@ struct meson_host {
 	irqreturn_t (*cd_gpio_isr)(int irq, void *dev_id);
 	int is_uart;
 	int sd_uart_init;
+	int first_temp_index;
+	int cur_temp_index;
+	int compute_cmd_delay;
+	int compute_coef;
+	unsigned int save_para;
+	unsigned int src_clk_rate;
+	struct aml_tuning_para para;
 };
 
 int sdio_reset_comm(struct mmc_card *card);
