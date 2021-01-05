@@ -937,13 +937,16 @@
 				<&clkc CLKID_SD_EMMC_A_CLK_MUX>,
 				 <&clkc CLKID_SD_EMMC_A_CLK>,
 				 <&xtal>,
-				 <&clkc CLKID_FCLK_DIV2>;
+				 <&clkc CLKID_GP0_PLL>;
 			clock-names = "core", "mux0", "mux1",
 					"clkin0", "clkin1";
 			card_type = <3>;
 			mmc_debug_flag;
 			cap-sdio-irq;
 			keep-power-in-suspend;
+			src_clk_rate = <1152000000>;
+			use_intf3_tuning;
+			mmc_debug_flag;
 			//resets = <&reset RESET_SD_EMMC_A>;
 		};
 
@@ -2227,7 +2230,8 @@
 				 "sdio_clk_x",
 				 "sdio_cmd_x";
 			function = "sdio";
-			bias-disable;
+			//bias-disable;
+			bias-pull-up;
 			drive-strength-microamp = <4000>;
 		};
 	};
