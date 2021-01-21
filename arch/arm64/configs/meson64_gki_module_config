@@ -124,6 +124,9 @@ CONFIG_AMLOGIC_VOUT_CLK_SERVE=y
 # aml_pcie_v2.ko
 CONFIG_AMLOGIC_PCIE=m
 
+#meson-leds-state.ko
+CONFIG_AMLOGIC_LEDS_STATE=m
+
 # meson-clk-debug.ko
 CONFIG_AMLOGIC_CLK_DEBUG=m
 
