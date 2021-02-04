@@ -131,6 +131,11 @@ struct hifi4dsp_dsp {
 	struct clk *dsp_clk;
 	struct clk *dsp_gate;
 
+	/*power domain for dsp*/
+	struct device *pd_dsp;
+	enum dsp_start_mode start_mode;
+	u32 dspstarted;
+
 	void *info;
 	void *priv;
 };
