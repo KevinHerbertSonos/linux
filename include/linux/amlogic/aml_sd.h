@@ -144,12 +144,6 @@ struct meson_host {
 	struct clk *mux[2];
 	struct clk *mux1_in;
 	struct clk *clk[3];
-	struct clk *core_clk;
-	struct clk *tx_clk;
-	struct clk *mmc_clk;
-	struct clk *mux[2];
-	struct clk *mux1_in;
-	struct clk *clk[3];
 	unsigned long req_rate;
 	bool ddr;
 
@@ -235,6 +229,7 @@ struct meson_host {
 	int run_pxp_flag;
 	bool ignore_desc_busy;
 	bool use_intf3_tuning;
+	struct dentry *debugfs_root;
 };
 
 int sdio_reset_comm(struct mmc_card *card);
@@ -346,6 +341,7 @@ void aml_host_bus_fsm_show(struct mmc_host *mmc, int status);
 #define   IRQ_RESP_STATUS BIT(14)
 #define   IRQ_SDIO BIT(15)
 #define   CFG_CMD_SETUP BIT(17)
+#define   BUS_FSM_MASK GENMASK(29, 26)
 #define   IRQ_EN_MASK \
 	(IRQ_CRC_ERR | IRQ_TIMEOUTS | IRQ_END_OF_CHAIN | IRQ_RESP_STATUS |\
 	 IRQ_SDIO)
