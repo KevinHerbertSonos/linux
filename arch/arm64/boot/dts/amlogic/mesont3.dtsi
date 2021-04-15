@@ -1882,7 +1882,7 @@
 		pwr-ctl = <0>;
 		phy-type = <1>;
 		power-domains = <&pwrdm PDID_T3_PCIE>;
-		pcie-ctrl-sleep-shift = <15>;
+		//power-domains = <&pwrdm PDID_SC2_PCIE>;
 		pcie-hhi-mem-pd-shift = <26>;
 		pcie-hhi-mem-pd-mask = <0xf>;
 		pcie-ctrl-iso-shift = <15>;

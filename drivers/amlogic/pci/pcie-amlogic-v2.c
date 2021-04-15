@@ -748,7 +748,7 @@ static int amlogic_pcie_probe(struct platform_device *pdev)
 	u32 tee_start, tee_end;
 	const void *prop;
 	union pcie_phy_m31_r0 r0;
-	const void *prop;
+
 	dev_info(&pdev->dev, "meson pcie rc probe!\n");
 
 	amlogic_pcie = devm_kzalloc(dev, sizeof(*amlogic_pcie), GFP_KERNEL);
@@ -899,9 +899,14 @@ static int amlogic_pcie_probe(struct platform_device *pdev)
 			pcie_aml_regs_v2.pcie_phy_r[j] = (void __iomem *)
 				((unsigned long)amlogic_pcie->phy->phy_base
 					 + 4*j);
-		if (!amlogic_pcie->phy->phy_type)
+		if (amlogic_pcie->phy->phy_type == 1) {
+			r0.d32 = readl(pcie_aml_regs_v2.pcie_phy_r[0]);
+			r0.b.FSLSSERIALMODE = 0;
+			r0.b.TX_SE0 = 0;
+			writel(r0.d32, pcie_aml_regs_v2.pcie_phy_r[0]);
+		} else {
 			writel(0x1c, pcie_aml_regs_v2.pcie_phy_r[0]);
-
+		}
 		amlogic_pcie->phy->power_state = 1;
 	}
 
