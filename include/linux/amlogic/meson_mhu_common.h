@@ -28,6 +28,7 @@
 #define MASK_MHU                (BIT(0))
 #define MASK_MHU_FIFO           (BIT(1))
 #define MASK_MHU_PL             (BIT(2))
+#define MASK_MHU_ALL            (MASK_MHU | MASK_MHU_FIFO | MASK_MHU_PL)
 
 extern struct device *mhu_device;
 extern struct device *mhu_fifo_device;
@@ -42,6 +43,7 @@ struct mhu_data_buf {
 	int rx_size;
 	void *rx_buf;
 	void *cl_data;
+	int head_off;
 };
 
 enum call_type {

@@ -14,7 +14,16 @@
 struct meson_vrtc_data {
 	void __iomem *io_alarm;
 	struct rtc_device *rtc;
+#ifdef CONFIG_AMLOGIC_MODIFY
+	s64 alarm_time;
+	struct timer_list alarm;
+	bool find_mboxes;
+	bool is_mbox_data_packet;
+	/* boot time when suspend */
+	struct timespec64 sus_time;
+#else
 	unsigned long alarm_time;
+#endif
 	bool enabled;
 };
 
@@ -84,6 +93,29 @@ static int meson_vrtc_probe(struct platform_device *pdev)
 		return PTR_ERR(vrtc->rtc);
 
 	vrtc->rtc->ops = &meson_vrtc_ops;
+
+#ifdef CONFIG_AMLOGIC_MODIFY
+	vrtc->find_mboxes = false;
+	if (of_find_property(pdev->dev.of_node, "mboxes", NULL))
+		vrtc->find_mboxes = true;
+	if (vrtc->find_mboxes) {
+		if (mbox_message_send_ao_sync(&pdev->dev, SCPI_CMD_GET_RTC,
+				NULL, 0, &vrtc_val, sizeof(vrtc_val), 0) < 0) {
+			vrtc_init_date = 0;
+		} else {
+			vrtc_init_date = vrtc_val;
+		}
+	} else {
+		if (scpi_get_vrtc(&vrtc_val) == 0)
+			vrtc_init_date = vrtc_val;
+		else
+			vrtc_init_date = 0;
+	}
+
+	timer_setup(&vrtc->alarm, meson_vrtc_alarm_handler, 0);
+	vrtc->alarm.expires = 0;
+#endif
+
 	ret = rtc_register_device(vrtc->rtc);
 	if (ret)
 		return ret;
@@ -133,6 +165,22 @@ static int __maybe_unused meson_vrtc_resume(struct device *dev)
 
 static SIMPLE_DEV_PM_OPS(meson_vrtc_pm_ops,
 			 meson_vrtc_suspend, meson_vrtc_resume);
+
+#ifdef CONFIG_AMLOGIC_MODIFY
+static void meson_vrtc_shutdown(struct platform_device *pdev)
+{
+	struct timespec64 now;
+	struct meson_vrtc_data *vrtc = dev_get_drvdata(&pdev->dev);
+
+	ktime_get_real_ts64(&now);
+	if (vrtc->find_mboxes) {
+		mbox_message_send_ao_sync(&pdev->dev, SCPI_CMD_SET_RTC,
+				&now.tv_sec, sizeof(now.tv_sec), NULL, 0, 0);
+	} else {
+		scpi_set_vrtc(now.tv_sec);
+	}
+}
+#endif
 
 static const struct of_device_id meson_vrtc_dt_match[] = {
 	{ .compatible = "amlogic,meson-vrtc"},
