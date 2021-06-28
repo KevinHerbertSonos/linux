@@ -28,11 +28,17 @@
 #define MASK_MHU                (BIT(0))
 #define MASK_MHU_FIFO           (BIT(1))
 #define MASK_MHU_PL             (BIT(2))
-#define MASK_MHU_ALL            (MASK_MHU | MASK_MHU_FIFO | MASK_MHU_PL)
+#define MASK_MHU_SEC            (BIT(3))
+#define MASK_MHU_ALL            (MASK_MHU | MASK_MHU_FIFO | MASK_MHU_PL | MASK_MHU_SEC)
+
+#define MBOX_MAX		6
+#define MHUDEV_MAX		(MBOX_MAX / 2)
+#define CDEV_NAME_SIZE		32
 
 extern struct device *mhu_device;
 extern struct device *mhu_fifo_device;
 extern struct device *mhu_pl_device;
+extern struct device *mhu_sec_device;
 
 extern u32 mhu_f;
 
@@ -63,7 +69,7 @@ struct mhu_chan {
 	int index;
 	int rx_irq;
 	int mhu_id;
-	char mhu_name[32];
+	char mhu_name[CDEV_NAME_SIZE];
 	struct mhu_ctlr *ctlr;
 	struct mhu_data_buf *data;
 };
@@ -81,5 +87,49 @@ struct mhu_mbox {
 	struct device *mhu_dev;
 	/*mhu lock for mhu hw reg*/
 	spinlock_t mhu_lock;
+};
+
+struct mhu_ctlr {
+	struct device *dev;
+	/*for old mhu*/
+	void __iomem *mbox_base;
+	void __iomem *payload_base;
+	/*for fifo mhu*/
+	void __iomem *mbox_wr_base;
+	void __iomem *mbox_rd_base;
+	void __iomem *mbox_fset_base;
+	void __iomem *mbox_fclr_base;
+	void __iomem *mbox_fsts_base;
+	void __iomem *mbox_irq_base;
+	void __iomem *mbox_payload_base;
+	int mhu_id[MBOX_MAX];
+	int mhu_irq;
+	int mhu_irqctlr;
+	int mhu_irqmax;
+	/*for pl mhu*/
+	void __iomem *mbox_sts_base[MHUDEV_MAX];
+	void __iomem *mbox_set_base[MHUDEV_MAX];
+	void __iomem *mbox_clr_base[MHUDEV_MAX];
+	void __iomem *mbox_pl_base[MHUDEV_MAX];
+	/*for common*/
+	struct mutex mutex;
+	struct mbox_controller mbox_con;
+	struct mhu_chan *channels;
+};
+
+struct mhu_dev {
+	int chan_idx;
+	u32 dest;
+	u32 r_size;
+	struct list_head list;
+	dev_t char_no;
+	struct cdev char_cdev;
+	struct device *dev;
+	struct device *p_dev;
+	const char *name;
+	char *data;
+	bool busy;
+	struct completion complete;
+
 };
 #endif
