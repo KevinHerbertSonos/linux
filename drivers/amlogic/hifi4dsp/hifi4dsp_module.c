@@ -55,6 +55,11 @@ static struct mutex hifi4dsp_flock;
 static struct reserved_mem hifi4_rmem;
 
 struct hifi4dsp_priv *hifi4dsp_p[HIFI4DSP_MAX_CNT];
+struct delayed_work dsp_status_work;
+struct workqueue_struct *dsp_status_wq;
+static unsigned long dsp_online;
+static unsigned int dsp_monitor_period_ms = 2000;
+#define		SUSPEND_CLK_FREQ	24000000
 
 #define MASK_BF(x, mask, shift)			((((x) & (mask)) << (shift)))
 
@@ -786,6 +791,334 @@ static struct hifi4dsp_pdata dsp_pdatas[] = {/*ARRAY_SIZE(dsp_pdatas)*/
 	},
 };
 
+static int hifi4dsp_attach_pd(struct device *dev, int dsp_cnt)
+{
+	struct hifi4dsp_dsp *dsp = dev_get_drvdata(dev);
+	struct device_link *link;
+	char *pd_name[2] = {"dspa", "dspb"};
+	int i;
+
+	if (dev->pm_domain)
+		return -1;
+	for (i = 0; i < dsp_cnt; i++) {
+		dsp += i;
+		dsp->pd_dsp = dev_pm_domain_attach_by_name(dev, pd_name[i]);
+		if (IS_ERR(dsp->pd_dsp))
+			return PTR_ERR(dsp->pd_dsp);
+		if (!dsp->pd_dsp)
+			return -1;
+		link = device_link_add(dev, dsp->pd_dsp,
+				       DL_FLAG_STATELESS |
+				       DL_FLAG_PM_RUNTIME |
+				       DL_FLAG_RPM_ACTIVE);
+		if (!link) {
+			dev_err(dev, "Failed to add device_link to %s pd.\n",
+				pd_name[i]);
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+static int get_hifi_firmware_mem(struct reserved_mem *fwmem, struct platform_device *pdev)
+{
+	int ret = -1;
+	struct device_node *mem_node;
+	struct reserved_mem *tmp = NULL;
+	struct page *cma_pages = NULL;
+	u32 dspsrambase = 0, dspsramsize = 0;
+
+	/*parse sram fwmem*/
+	ret = of_property_read_u32(pdev->dev.of_node, "dspsrambase", &dspsrambase);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Can't retrieve srambase\n");
+		goto parse_cma;
+	}
+	pr_debug("of read dspsrambase=0x%08x\n", dspsrambase);
+
+	ret = of_property_read_u32(pdev->dev.of_node, "dspsramsize", &dspsramsize);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Can't retrieve dspsramsize\n");
+		goto parse_cma;
+	}
+	pr_debug("of read dspsramsize=0x%08x\n", dspsramsize);
+
+	fwmem->size = dspsramsize;
+	fwmem->base = dspsrambase;
+	fwmem->priv = "sram";
+	pr_info("of get sram memory region success[0x%lx 0x%lx]\n",
+		(unsigned long)fwmem->base, (unsigned long)fwmem->size);
+	return 0;
+
+	/*parse ddr fwmem*/
+parse_cma:
+	ret = of_reserved_mem_device_init(&pdev->dev);
+	if (ret) {
+		pr_debug("reserved memory init fail:%d\n", ret);
+		goto out;
+	}
+	mem_node = of_parse_phandle(pdev->dev.of_node, "memory-region", 0);
+	if (!mem_node) {
+		ret = -1;
+		goto out;
+	}
+	tmp = of_reserved_mem_lookup(mem_node);
+	of_node_put(mem_node);
+	if (tmp) {
+		fwmem->size = tmp->size;
+		cma_pages = cma_alloc(dev_get_cma_area(&pdev->dev),
+		      PAGE_ALIGN(fwmem->size) >> PAGE_SHIFT, 0, false);
+		if (cma_pages) {
+			fwmem->base = page_to_phys(cma_pages);
+			fwmem->priv = "ddr";
+			pr_info("of read fwmem phys = [0x%lx 0x%lx]\n",
+				(unsigned long)fwmem->base, (unsigned long)fwmem->size);
+		}
+	} else {
+		ret = -1;
+		dev_err(&pdev->dev, "Can't retrieve reserve memory region\n");
+	}
+out:
+	return ret;
+}
+
+static int get_hifi_share_mem(struct reserved_mem *shmem, struct platform_device *pdev)
+{
+	struct resource *dsp_shm_res;
+
+	/*parse shmem*/
+	dsp_shm_res = platform_get_resource(pdev, IORESOURCE_MEM, 4);
+	if (!dsp_shm_res) {
+		dev_err(&pdev->dev, "failed to get dsp share memory resource.\n");
+		return -1;
+	}
+	shmem->base = dsp_shm_res->start;
+	shmem->size = resource_size(dsp_shm_res);
+	pr_info("of read shmem phys = [0x%lx 0x%lx]\n",
+		(unsigned long)shmem->base, (unsigned long)shmem->size);
+
+	return 0;
+}
+
+static void hifi_fw_mem_update(int dsp_id, phys_addr_t *base, int *size)
+{
+	if (!strcmp(hifi4_rmem.priv, "sram")) {
+		*base = hifi4_rmem.base + (dsp_id == 0 ? 0 : hifi4_rmem.size >> 1);
+		*size = hifi4_rmem.size >> 1;
+	}
+}
+
+static void *hifi_fw_mem_map(phys_addr_t base, int size)
+{
+	if (!strcmp(hifi4_rmem.priv, "sram"))
+		return ioremap_nocache(base, size);
+	else
+		return mm_vmap(base, size, pgprot_dmacoherent(PAGE_KERNEL));
+}
+
+void *get_hifi_fw_mem_type(void)
+{
+	return hifi4_rmem.priv;
+}
+
+static int hifi4dsp_clk_to_24M(struct hifi4dsp_dsp *dsp)
+{
+	int ret;
+
+	if (!dsp->dsp_clk) {
+		pr_err("dsp_clk=NULL\n");
+		return  -EINVAL;
+	}
+
+	ret = clk_set_rate(dsp->dsp_clk, SUSPEND_CLK_FREQ);
+	if (ret) {
+		pr_err("%s: error in setting dsp clk rate!\n",
+		       __func__);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int hifi4dsp_clk_to_normal(struct hifi4dsp_dsp *dsp)
+{
+	int ret;
+
+	if (!dsp->dsp_clk) {
+		pr_err("dsp_clk=NULL\n");
+		return  -EINVAL;
+	}
+
+	ret = clk_set_rate(dsp->dsp_clk, dsp->freq);
+	if (ret) {
+		pr_err("%s: error in setting dsp clk rate!\n",
+		       __func__);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int hifi4dsp_driver_dsp_suspend(struct hifi4dsp_dsp *dsp)
+{
+	char message[30];
+
+	strcpy(message, "SCPI_CMD_HIFI4SUSPEND");
+
+	if (!dsp->id)
+		scpi_send_data(message, sizeof(message),
+				  SCPI_DSPA, SCPI_CMD_HIFI4SUSPEND,
+				  message, sizeof(message));
+	else
+		scpi_send_data(message, sizeof(message),
+				  SCPI_DSPB, SCPI_CMD_HIFI4SUSPEND,
+				  message, sizeof(message));
+	hifi4dsp_clk_to_24M(dsp);
+
+	return 0;
+}
+
+static int hifi4dsp_driver_dsp_resume(struct hifi4dsp_dsp *dsp)
+{
+	char message[30];
+
+	/*switch dsp clk to normal*/
+	hifi4dsp_clk_to_normal(dsp);
+
+	strcpy(message, "SCPI_CMD_HIFI4RESUME");
+
+	if (!dsp->id)
+		scpi_send_data(message, sizeof(message),
+				  SCPI_DSPA, SCPI_CMD_HIFI4RESUME,
+				  message, sizeof(message));
+	else
+		scpi_send_data(message, sizeof(message),
+				  SCPI_DSPB, SCPI_CMD_HIFI4RESUME,
+				  message, sizeof(message));
+	return 0;
+}
+
+int of_read_dsp_cnt(struct platform_device *pdev)
+{
+	int ret;
+	int dsp_cnt;
+
+	ret = of_property_read_u32(pdev->dev.of_node, "dsp-cnt", &dsp_cnt);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Can't retrieve dsp-cnt\n");
+		return -EINVAL;
+	}
+	pr_debug("%s of read dsp-cnt=%d\n", __func__, dsp_cnt);
+
+	return dsp_cnt;
+}
+
+static int dsp_suspend(struct device *dev)
+{
+	int dsp_cnt, i;
+	struct hifi4dsp_dsp *dsp = NULL;
+	struct platform_device *pdev = to_platform_device(dev);
+
+	dsp_cnt = of_read_dsp_cnt(pdev);
+
+	if (dsp_cnt > 0) {
+		for (i = 0; i < dsp_cnt; i++) {
+			dsp = hifi4dsp_p[i]->dsp;
+			if (dsp->dspstarted == 1 && dsp->suspend_resume_support) {
+				pr_debug("AP send suspend cmd to dsp...\n");
+				hifi4dsp_driver_dsp_suspend(dsp);
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int dsp_resume(struct device *dev)
+{
+	int dsp_cnt, i;
+	struct hifi4dsp_dsp *dsp = NULL;
+	struct platform_device *pdev = to_platform_device(dev);
+
+	dsp_cnt = of_read_dsp_cnt(pdev);
+
+	if (dsp_cnt > 0) {
+		for (i = 0; i < dsp_cnt; i++) {
+			dsp = hifi4dsp_p[i]->dsp;
+			if (dsp->dspstarted == 1 && dsp->suspend_resume_support) {
+				pr_debug("AP send resume cmd to dsp...\n");
+				hifi4dsp_driver_dsp_resume(dsp);
+			}
+		}
+	}
+
+	return 0;
+}
+
+static ssize_t suspend_store(struct device *dev,
+			     struct device_attribute *attr,
+			     const char *buf, size_t size)
+{
+	char message[30];
+	struct hifi4dsp_dsp *dsp = NULL;
+	int dspid;
+
+	strcpy(message, "SCPI_CMD_HIFI4RESUME");
+
+	if (!strncmp(buf, "hifi4a", 6)) {
+		dspid = 0;
+	} else if (!strncmp(buf, "hifi4b", 6)) {
+		dspid = 1;
+	} else {
+		pr_err("please input the right args : hifi4a/hifi4b\n");
+		return 0;
+	}
+	dsp = hifi4dsp_p[dspid]->dsp;
+
+	if (!dsp || !dsp->suspend_resume_support)
+		return 0;
+
+	scpi_send_data(message, sizeof(message),
+				  dspid ? SCPI_DSPB : SCPI_DSPA, SCPI_CMD_HIFI4SUSPEND,
+				  message, sizeof(message));
+	hifi4dsp_clk_to_24M(dsp);
+
+	return size;
+}
+static DEVICE_ATTR_WO(suspend);
+
+static ssize_t resume_store(struct device *dev,
+			    struct device_attribute *attr,
+			    const char *buf, size_t size)
+{
+	char message[30];
+	struct hifi4dsp_dsp *dsp = NULL;
+	int dspid;
+
+	strcpy(message, "SCPI_CMD_HIFI4RESUME");
+
+	if (!strncmp(buf, "hifi4a", 6)) {
+		dspid = 0;
+	} else if (!strncmp(buf, "hifi4b", 6)) {
+		dspid = 1;
+	} else {
+		pr_err("please input the right args : hifi4a/hifi4b\n");
+		return 0;
+	}
+	dsp = hifi4dsp_p[dspid]->dsp;
+
+	if (!dsp || !dsp->suspend_resume_support)
+		return 0;
+
+	hifi4dsp_clk_to_normal(dsp);
+	scpi_send_data(message, sizeof(message),
+				  dspid ? SCPI_DSPB : SCPI_DSPA, SCPI_CMD_HIFI4RESUME,
+				  message, sizeof(message));
+
+	return size;
+}
+static DEVICE_ATTR_WO(resume);
+
 static int hifi4dsp_platform_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -797,6 +1130,10 @@ static int hifi4dsp_platform_probe(struct platform_device *pdev)
 	struct hifi4dsp_pdata *pdata;
 	struct hifi4dsp_miscdev_t *p_dsp_miscdev;
 	struct miscdevice *pmscdev;
+	enum dsp_start_mode startmode;
+	u32 optimize_longcall[2];
+	u32 sram_remap_addr[4];
+	u32 pm_support[2];
 
 	phys_addr_t hifi4base;
 	int hifi4size;
@@ -863,6 +1200,16 @@ static int hifi4dsp_platform_probe(struct platform_device *pdev)
 		g_regbases.sram_base = ioremap_nocache(boot_sram_addr,
 						       boot_sram_size);
 	}
+
+	ret = of_property_read_u32_array(np, "optimize_longcall", &optimize_longcall[0], 2);
+	if (ret)
+		pr_debug("can't get optimize_longcall\n");
+	ret = of_property_read_u32_array(np, "sram_remap_addr", &sram_remap_addr[0], 4);
+	if (ret)
+		pr_debug("can't get sram_remap_addr\n");
+	ret = of_property_read_u32_array(np, "suspend_resume_support", &pm_support[0], 2);
+	if (ret)
+		pr_debug("can't get suspend_resume_support\n");
 
 	/*init hifi4dsp_dsp*/
 	dsp = kcalloc(dsp_cnt, sizeof(*dsp), GFP_KERNEL);
@@ -1050,6 +1397,13 @@ static int hifi4dsp_platform_probe(struct platform_device *pdev)
 		dsp->info = hifi_info;
 		dsp->dsp_dev = priv->dsp_dev;
 		dsp->ops = priv->dsp_dev->ops;
+
+		dsp->start_mode = startmode;
+		dsp->dsphang = 0;
+		dsp->optimize_longcall = optimize_longcall[id];
+		dsp->sram_remap_addr[0] = sram_remap_addr[2 * id];
+		dsp->sram_remap_addr[1] = sram_remap_addr[2 * id + 1];
+		dsp->suspend_resume_support = pm_support[id];
 		priv->dsp = dsp;
 
 		hifi4dsp_p[i] = priv;
@@ -1060,6 +1414,9 @@ static int hifi4dsp_platform_probe(struct platform_device *pdev)
 		pm_runtime_put_sync_suspend(priv->dev);
 		pr_info("register dsp-%d done\n", id);
 	}
+	get_dsp_statusreg(pdev, dsp_cnt, hifi4dsp_p);
+	device_create_file(&pdev->dev, &dev_attr_suspend);
+	device_create_file(&pdev->dev, &dev_attr_resume);
 	pr_info("%s done\n", __func__);
 	return 0;
 
@@ -1093,6 +1450,8 @@ static const struct of_device_id hifi4dsp_device_id[] = {
 static const struct dev_pm_ops hifi4dsp_pm_ops = {
 	SET_RUNTIME_PM_OPS(hifi4dsp_runtime_suspend,
 			   hifi4dsp_runtime_resume, NULL)
+	.suspend = dsp_suspend,
+	.resume = dsp_resume,
 };
 
 MODULE_DEVICE_TABLE(of, hifi4dsp_device_id);
