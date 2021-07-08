@@ -1503,7 +1503,6 @@ static void meson_mmc_desc_chain_transfer(struct mmc_host *mmc, u32 cmd_cfg,
 	}
 
 	desc[data->sg_count + j - 1].cmd_cfg |= CMD_CFG_END_OF_CHAIN;
-
 	dma_wmb(); /* ensure descriptor is written before kicked */
 	start = host->descs_dma_addr | START_DESC_BUSY;
 	writel(start, host->regs + SD_EMMC_START);
@@ -1768,7 +1767,7 @@ static int aml_sd_emmc_cali_v3(struct mmc_host *mmc,
 	data.flags = MMC_DATA_READ;
 	data.sg = &sg;
 	data.sg_len = 1;
-	data.timeout_ns = 10000000;
+	data.timeout_ns = 2048000000;
 	memset(blk_test, 0, blksz * data.blocks);
 	sg_init_one(&sg, blk_test, blksz * data.blocks);
 	mrq.cmd = &cmd;
@@ -1893,7 +1892,7 @@ static int single_read_scan(struct mmc_host *mmc, u8 opcode,
 	data.flags = MMC_DATA_READ;
 	data.sg = &sg;
 	data.sg_len = 1;
-	data.timeout_ns = 4000000;
+	data.timeout_ns = 2048000000;
 	memset(blk_test, 0, blksz * data.blocks);
 	sg_init_one(&sg, blk_test, blksz * data.blocks);
 	mrq.cmd = &cmd;
@@ -1951,7 +1950,7 @@ static void emmc_show_cmd_window(char *str, int repeat_times)
 	pr_info("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n");
 }
 
-static u32 emmc_search_cmd_delay(char *str, int repeat_times)
+static u32 emmc_search_cmd_delay(char *str, int repeat_times, u32 *p_size)
 {
 	int best_start = -1, best_size = -1;
 	int cur_start = -1, cur_size = 0;
@@ -1973,12 +1972,15 @@ static u32 emmc_search_cmd_delay(char *str, int repeat_times)
 		}
 	}
 	cmd_delay =	 (best_start + best_size / 2) << 24;
+	if (p_size)
+		*p_size = best_size;
 	pr_info("best_start 0x%x, best_size %d\n",
 		best_start, best_size);
 	return cmd_delay;
 }
 
-static u32 scan_emmc_cmd_win(struct mmc_host *mmc, int send_status)
+static u32 scan_emmc_cmd_win(struct mmc_host *mmc,
+		int send_status, u32 *pcmd_size)
 {
 	struct meson_host *host = mmc_priv(mmc);
 	u32 delay2 = readl(host->regs + SD_EMMC_DELAY2);
@@ -2000,15 +2002,22 @@ static u32 scan_emmc_cmd_win(struct mmc_host *mmc, int send_status)
 		writel(delay2, host->regs + SD_EMMC_DELAY2);
 		offset = (u32)(get_random_long() % capacity);
 		for (j = 0; j < repeat_times; j++) {
-			if (send_status)
+			if (send_status) {
 				err = emmc_send_cmd(mmc, MMC_SEND_STATUS,
 						    1 << 16,
 						    MMC_RSP_R1 | MMC_CMD_AC);
-			else
+			} else {
 				err = single_read_scan(mmc,
 						       MMC_READ_SINGLE_BLOCK,
 						       host->blk_test, 512, 1,
-						       offset + (j * 512));
+						       offset);
+				emmc_send_cmd(mmc, MMC_STOP_TRANSMISSION,
+						    0,
+						    MMC_RSP_R1 | MMC_CMD_AC);
+				emmc_send_cmd(mmc, MMC_SEND_STATUS,
+						    1 << 16,
+						    MMC_RSP_R1 | MMC_CMD_AC);
+			}
 			if (!err)
 				str[i]++;
 			else
@@ -2023,7 +2032,7 @@ static u32 scan_emmc_cmd_win(struct mmc_host *mmc, int send_status)
 	host->cmd_retune = 1;
 	pr_info("scan time distance: %llu ns\n", after_time - before_time);
 	writel(delay2_bak, host->regs + SD_EMMC_DELAY2);
-	cmd_delay = emmc_search_cmd_delay(str, repeat_times);
+	cmd_delay = emmc_search_cmd_delay(str, repeat_times, pcmd_size);
 	if (!send_status)
 		emmc_show_cmd_window(str, repeat_times);
 	return cmd_delay;
@@ -2036,7 +2045,7 @@ ssize_t emmc_scan_cmd_win(struct device *dev,
 	struct mmc_host *mmc = host->mmc;
 
 	mmc_claim_host(mmc);
-	scan_emmc_cmd_win(mmc, 1);
+	scan_emmc_cmd_win(mmc, 1, NULL);
 	mmc_release_host(mmc);
 	return sprintf(buf, "%s\n", "Emmc scan command window.\n");
 }
@@ -2316,16 +2325,17 @@ static int emmc_data_alignment(struct mmc_host *mmc, int best_size)
 	return 0;
 }
 
-static void set_emmc_cmd_delay(struct mmc_host *mmc, int send_status)
+static u32 set_emmc_cmd_delay(struct mmc_host *mmc, int send_status)
 {
 	struct meson_host *host = mmc_priv(mmc);
 	u32 delay2 = readl(host->regs + SD_EMMC_DELAY2);
-	u32 cmd_delay = 0;
+	u32 cmd_delay = 0, cmd_size = 0;
 
 	delay2 &= ~(0xff << 24);
-	cmd_delay = scan_emmc_cmd_win(mmc, send_status);
+	cmd_delay = scan_emmc_cmd_win(mmc, send_status, &cmd_size);
 	delay2 |= cmd_delay;
 	writel(delay2, host->regs + SD_EMMC_DELAY2);
+	return cmd_size;
 }
 
 static void __attribute__((unused)) aml_emmc_hs400_revb(struct mmc_host *mmc)
@@ -2347,10 +2357,13 @@ static void __attribute__((unused)) aml_emmc_hs400_revb(struct mmc_host *mmc)
 
 static void aml_emmc_hs400_tl1(struct mmc_host *mmc)
 {
+	u32 cmd_size = 0;
+
 	tl1_emmc_line_timing(mmc);
-	set_emmc_cmd_delay(mmc, 1);
+	cmd_size = set_emmc_cmd_delay(mmc, 1);
 	emmc_ds_manual_sht(mmc);
-	set_emmc_cmd_delay(mmc, 0);
+	if (cmd_size >= EMMC_CMD_WIN_MAX_SIZE)
+		set_emmc_cmd_delay(mmc, 0);
 }
 
 static long long _para_checksum_calc(struct aml_tuning_para *para)
@@ -3426,10 +3439,10 @@ static void scan_emmc_tx_win(struct mmc_host *mmc)
 	host->is_tuning = 0;
 
 	writel(clk_bak, host->regs + SD_EMMC_CLOCK);
-	writel(dly1, host->regs + SD_EMMC_DELAY1);
-	writel(dly2, host->regs + SD_EMMC_DELAY2);
-	writel(intf3, host->regs + SD_EMMC_INTF3);
-	emmc_search_cmd_delay(str, repeat_times);
+	writel(dly1_bak, host->regs + SD_EMMC_DELAY1);
+	writel(dly2_bak, host->regs + SD_EMMC_DELAY2);
+	writel(intf3_bak, host->regs + SD_EMMC_INTF3);
+	emmc_search_cmd_delay(str, repeat_times, NULL);
 	pr_info(">>>>>>>>>>>>>>>>>>>>this is tx window>>>>>>>>>>>>>>>>>>>>>>\n");
 	emmc_show_cmd_window(str, repeat_times);
 }
@@ -3546,7 +3559,7 @@ static int mmc_cmd_rx_win_show(struct seq_file *s, void *data)
 	struct mmc_host	*host = s->private;
 
 	mmc_claim_host(host);
-	scan_emmc_cmd_win(host, 0);
+	scan_emmc_cmd_win(host, 0, NULL);
 	mmc_release_host(host);
 
 	seq_puts(s, "mmc cmd rx win done\n");
