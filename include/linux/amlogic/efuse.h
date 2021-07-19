@@ -41,4 +41,7 @@ ssize_t efuse_user_attr_read(char *name, char *buf);
 int meson_efuse_obj_read_sonos(u32 obj_id, u8 *buff, u32 *size);
 int meson_efuse_obj_write_sonos(u32 obj_id, u8 *buff, u32 *size);
 
+int efuse_amlogic_cali_item_read(unsigned int item);
+int efuse_amlogic_check_lockable_item(unsigned int item);
+
 #endif

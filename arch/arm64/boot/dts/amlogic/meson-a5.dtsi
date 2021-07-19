@@ -1453,6 +1453,10 @@
 		check = <&efusecheck>;
 		clock-names = "efuse_clk";
 		status = "disabled";
+		key = <&efusekey>;
+		check = <&efusecheck>;
+		clock-names = "efuse_clk";
+		status = "disabled";
 	};
 
 	efusekey:efusekey{
