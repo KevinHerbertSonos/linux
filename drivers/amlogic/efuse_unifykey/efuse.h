@@ -76,6 +76,13 @@ ssize_t efuse_read_usr(char *buf, size_t count, loff_t *ppos);
 ssize_t efuse_write_usr(char *buf, size_t count, loff_t *ppos);
 unsigned long efuse_amlogic_set(char *buf, size_t count);
 
+/*return: 0:is configurated, -1: don't cfg*/
+int efuse_burn_lockable_is_cfg(char *itemname);
+/*
+ * retrun: 1:burned(wrote), 0: not write, -1: fail
+ */
+int efuse_burn_check_burned(char *itemname);
+
 #ifdef CONFIG_AMLOGIC_EFUSE
 int __init aml_efuse_init(void);
 void aml_efuse_exit(void);

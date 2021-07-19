@@ -17,6 +17,7 @@
 #include <linux/kallsyms.h>
 #include "efuse.h"
 #include "unifykey.h"
+#include "efuse_burn.h"
 
 #ifdef MODULE
 int valid_phys_addr_range(phys_addr_t addr, size_t size)
