@@ -55,6 +55,26 @@ struct mmc_gpio {
 
 static struct mmc_host *sdio_host;
 
+static inline u32 aml_mv_dly1_nommc(u32 x)
+{
+	return (x) | ((x) << 6) | ((x) << 12) | ((x) << 18);
+}
+
+static inline u32 aml_mv_dly1(u32 x)
+{
+	return (x) | ((x) << 6) | ((x) << 12) | ((x) << 18) | ((x) << 24);
+}
+
+static inline u32 aml_mv_dly2(u32 x)
+{
+	return (x) | ((x) << 6) | ((x) << 12) | ((x) << 24);
+}
+
+static inline u32 aml_mv_dly2_nocmd(u32 x)
+{
+	return (x) | ((x) << 6) | ((x) << 12);
+}
+
 static unsigned int meson_mmc_get_timeout_msecs(struct mmc_data *data)
 {
 	unsigned int timeout = data->timeout_ns / NSEC_PER_MSEC;
@@ -927,15 +947,15 @@ static void set_fixed_adj_line_delay(u32 step,
 		struct meson_host *host, bool no_cmd)
 {
 	if (aml_card_type_mmc(host)) {
-		writel(AML_MV_DLY1(step), host->regs + SD_EMMC_DELAY1);
+		writel(aml_mv_dly1(step), host->regs + SD_EMMC_DELAY1);
 		if (no_cmd)
-			writel(AML_MV_DLY2_NOCMD(step),
+			writel(aml_mv_dly2_nocmd(step),
 					host->regs + SD_EMMC_DELAY2);
 		else
-			writel(AML_MV_DLY2(step),
+			writel(aml_mv_dly2(step),
 					host->regs + SD_EMMC_DELAY2);
 	} else {
-		writel(AML_MV_DLY1_NOMMC(step), host->regs + SD_EMMC_DELAY1);
+		writel(aml_mv_dly1_nommc(step), host->regs + SD_EMMC_DELAY1);
 		if (!no_cmd)
 			writel(AML_MV_DLY2_NOMMC_CMD(step),
 					host->regs + SD_EMMC_DELAY2);
