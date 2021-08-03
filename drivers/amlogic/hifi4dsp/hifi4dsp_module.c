@@ -56,9 +56,12 @@ static struct reserved_mem hifi4_rmem;
 
 struct hifi4dsp_priv *hifi4dsp_p[HIFI4DSP_MAX_CNT];
 struct delayed_work dsp_status_work;
+struct delayed_work dsp_logbuff_work;
 struct workqueue_struct *dsp_status_wq;
+struct workqueue_struct *dsp_logbuff_wq;
 static unsigned long dsp_online;
 static unsigned int dsp_monitor_period_ms = 2000;
+static unsigned int dsp_logbuff_polling_period_ms = 2000;
 #define		SUSPEND_CLK_FREQ	24000000
 
 #define MASK_BF(x, mask, shift)			((((x) & (mask)) << (shift)))
@@ -428,6 +431,171 @@ static int hifi4dsp_driver_dsp_boot(struct hifi4dsp_dsp *dsp)
 	return 0;
 }
 
+enum dsp_online_status {
+	DSP_NONE,
+	DSPA_ONLINE = 1,
+	DSPB_ONLINE,
+	DSPAB_ONLINE
+};
+
+enum dsp_health {
+	DSP_GOOD,
+	DSPA_HANG = 1,
+	DSPB_HANG,
+	DSPAB_HANG
+};
+
+enum dsp_index {
+	DSPA = 0,
+	DSPB
+};
+static enum dsp_health get_dsp_health_status(unsigned long online)
+{
+	enum dsp_health ret = DSP_GOOD;
+	static u32 last_cnt[HIFI4DSP_MAX_CNT] = {0};
+	u32 this_cnt[HIFI4DSP_MAX_CNT];
+
+	switch (online & 0x03) {
+	case DSP_NONE:
+		break;
+	case DSPA_ONLINE:
+		this_cnt[DSPA] = readl(hifi4dsp_p[DSPA]->dsp->status_reg);
+		pr_debug("[%s]dspa[%u %u]\n", __func__, last_cnt[DSPA], this_cnt[DSPA]);
+		if (this_cnt[DSPA] == last_cnt[DSPA])
+			ret = DSPA_HANG;
+		last_cnt[DSPA] = this_cnt[DSPA];
+		break;
+	case DSPB_ONLINE:
+		this_cnt[DSPB] = readl(hifi4dsp_p[DSPB]->dsp->status_reg);
+		pr_debug("[%s]dspb[%u %u]\n", __func__, last_cnt[DSPB], this_cnt[DSPB]);
+		if (this_cnt[DSPB] == last_cnt[DSPB])
+			ret = DSPB_HANG;
+		last_cnt[DSPB] = this_cnt[DSPB];
+		break;
+	case DSPAB_ONLINE:
+		this_cnt[DSPA] = readl(hifi4dsp_p[DSPA]->dsp->status_reg);
+		this_cnt[DSPB] = readl(hifi4dsp_p[DSPB]->dsp->status_reg);
+		pr_debug("[%s]dspa[%u %u]dspb[%u %u]\n", __func__,
+			last_cnt[DSPA], this_cnt[DSPA], last_cnt[DSPB], this_cnt[DSPB]);
+		if (this_cnt[DSPA] == last_cnt[DSPA] && this_cnt[DSPB] == last_cnt[DSPB])
+			ret = DSPAB_HANG;
+		else if (this_cnt[DSPA] == last_cnt[DSPA])
+			ret = DSPA_HANG;
+		else if (this_cnt[DSPB] == last_cnt[DSPB])
+			ret = DSPB_HANG;
+		last_cnt[DSPA] = this_cnt[DSPA];
+		last_cnt[DSPB] = this_cnt[DSPB];
+		break;
+	}
+	return ret;
+}
+
+static void dsp_health_monitor(struct work_struct *work)
+{
+	char data[20], *envp[] = { data, NULL };
+
+	switch (get_dsp_health_status(dsp_online)) {
+	case DSP_GOOD:
+		hifi4dsp_p[DSPA]->dsp->dsphang = 0;
+		hifi4dsp_p[DSPB]->dsp->dsphang = 0;
+		break;
+	case DSPA_HANG:
+		snprintf(data, sizeof(data), "ACTION=DSP_WTD_A");
+		hifi4dsp_p[DSPA]->dsp->dsphang = 1;
+		hifi4dsp_p[DSPB]->dsp->dsphang = 0;
+		kobject_uevent_env(&hifi4dsp_p[DSPA]->dsp->dev->kobj, KOBJ_CHANGE, envp);
+		pr_debug("[%s][DSPA_HANG]\n", __func__);
+		break;
+	case DSPB_HANG:
+		snprintf(data, sizeof(data), "ACTION=DSP_WTD_B");
+		hifi4dsp_p[DSPA]->dsp->dsphang = 0;
+		hifi4dsp_p[DSPB]->dsp->dsphang = 1;
+		kobject_uevent_env(&hifi4dsp_p[DSPB]->dsp->dev->kobj, KOBJ_CHANGE, envp);
+		pr_debug("[%s][DSPB_HANG]\n", __func__);
+		break;
+	case DSPAB_HANG:
+		snprintf(data, sizeof(data), "ACTION=DSP_WTD_WHOLE");
+		hifi4dsp_p[DSPA]->dsp->dsphang = 1;
+		hifi4dsp_p[DSPB]->dsp->dsphang = 1;
+		kobject_uevent_env(&hifi4dsp_p[DSPA]->dsp->dev->kobj, KOBJ_CHANGE, envp);
+		pr_debug("[%s][DSPAB_HANG]\n", __func__);
+		break;
+	}
+
+	queue_delayed_work(dsp_status_wq, &dsp_status_work,
+		msecs_to_jiffies(dsp_monitor_period_ms));
+}
+
+static unsigned int show_logbuff_log(struct dsp_ring_buffer *rb, int dspid,
+		unsigned int len)
+{
+	unsigned char *buffer;
+	unsigned int count = 0;
+
+	if (!rb || !len)
+		return 0;
+
+	buffer = kzalloc(len + 1, GFP_KERNEL);
+	if (!buffer)
+		return 0;
+
+	while (len--) {
+		buffer[count++] = rb->data[rb->head++];
+		rb->head %= rb->size;
+	}
+	pr_info("[%s]%s", dspid ? "DSPBB" : "DSPAA", buffer);
+	kfree(buffer);
+
+	return count;
+}
+
+static unsigned int get_logbuff_loglen(struct dsp_ring_buffer *rb)
+{
+	if (!rb)
+		return 0;
+	if (rb->tail < rb->head)
+		return rb->tail + rb->size - rb->head;
+	else
+		return rb->tail - rb->head;
+}
+
+static void dsp_logbuff_polling(struct work_struct *work)
+{
+	struct dsp_ring_buffer *logbuffa =
+		(dsp_online & 0x1) ? hifi4dsp_p[DSPA]->dsp->logbuff : NULL;
+	struct dsp_ring_buffer *logbuffb =
+		(dsp_online & 0x2) ? hifi4dsp_p[DSPB]->dsp->logbuff : NULL;
+	unsigned int len_a, len_b;
+
+	if (logbuffa)
+		pr_debug("[%s %d][0x%x 0x%x 0x%x %u %u]\n", __func__, __LINE__,
+			logbuffa->magic, logbuffa->basepaddr, logbuffa->size,
+			logbuffa->head, logbuffa->tail);
+
+	len_a = get_logbuff_loglen(logbuffa);
+	len_b = get_logbuff_loglen(logbuffb);
+	if (len_a)
+		show_logbuff_log(logbuffa, DSPA, len_a);
+	if (len_b)
+		show_logbuff_log(logbuffb, DSPB, len_b);
+
+	queue_delayed_work(dsp_logbuff_wq, &dsp_logbuff_work,
+		msecs_to_jiffies(dsp_logbuff_polling_period_ms));
+}
+
+static void init_and_start_dsp_log_polling(void)
+{
+	if (!work_busy(&dsp_logbuff_work.work)) {
+		dsp_logbuff_wq = create_freezable_workqueue("dsplogbuff_wq");
+		if (!dsp_logbuff_wq)
+			pr_err("create dsplogbuff_wq failed.\n");
+
+		INIT_DEFERRABLE_WORK(&dsp_logbuff_work, dsp_logbuff_polling);
+		queue_delayed_work(dsp_logbuff_wq, &dsp_logbuff_work,
+			msecs_to_jiffies(dsp_logbuff_polling_period_ms));
+	}
+}
+
 static int hifi4dsp_driver_dsp_start(struct hifi4dsp_dsp *dsp)
 {
 	struct  hifi4dsp_info_t *info;
@@ -454,6 +622,26 @@ static int hifi4dsp_driver_dsp_start(struct hifi4dsp_dsp *dsp)
 
 	dsp->info = NULL;
 	dsp->dspstarted = 1;
+	set_bit(dsp->id, &dsp_online);
+	pr_warn("[%s]dsp_online=0x%lx\n", __func__, dsp_online);
+	if (hifi4dsp_p[dsp->id]->dsp->status_reg && !work_busy(&dsp_status_work.work)) {
+		snprintf(wq_name, sizeof(wq_name), "dsp%u_wq", dsp->id);
+		dsp_status_wq = create_freezable_workqueue(wq_name);
+		if (!dsp_status_wq) {
+			pr_err("create %s failed.\n", wq_name);
+			return -EINVAL;
+		}
+		INIT_DEFERRABLE_WORK(&dsp_status_work, dsp_health_monitor);
+		queue_delayed_work(dsp_status_wq, &dsp_status_work,
+			msecs_to_jiffies(dsp_monitor_period_ms));
+	}
+	if (dsp->logbuff) {
+		msleep(100);
+		scpi_send_data(dsp->logbuff, sizeof(struct dsp_ring_buffer),
+			dsp->id ? SCPI_DSPB : SCPI_DSPA,
+			SCPI_CMD_HIFI5_SYSLOG_START, NULL, 0);
+		init_and_start_dsp_log_polling();
+	}
 
 	return 0;
 }
@@ -485,6 +673,18 @@ static int hifi4dsp_driver_dsp_stop(struct hifi4dsp_dsp *dsp)
 		hifi4dsp_driver_dsp_clk_off(dsp);
 		dsp->dspstarted = 0;
 		dsp->info = NULL;
+		clear_bit(dsp->id, &dsp_online);
+		pr_warn("[%s]dsp_online=0x%lx\n", __func__, dsp_online);
+		if (!dsp_online && work_busy(&dsp_status_work.work)) {
+			cancel_delayed_work(&dsp_status_work);
+			destroy_workqueue(dsp_status_wq);
+		}
+		if (!(hifi4dsp_p[dsp->id ? DSPA : DSPB]->dsp->dspstarted &&
+			hifi4dsp_p[dsp->id ? DSPA : DSPB]->dsp->logbuff &&
+			work_busy(&dsp_logbuff_work.work))) {
+			cancel_delayed_work(&dsp_logbuff_work);
+			destroy_workqueue(dsp_logbuff_wq);
+		}
 	}
 	return 0;
 }
@@ -1119,6 +1319,28 @@ static ssize_t resume_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(resume);
 
+static struct dsp_ring_buffer *dsp_init_ring_buffer(unsigned int buffer,
+	unsigned int size)
+{
+	struct dsp_ring_buffer *b = (struct dsp_ring_buffer *)mm_vmap(buffer,
+		size, pgprot_dmacoherent(PAGE_KERNEL));
+
+	if (!b || size < sizeof(struct dsp_ring_buffer))
+		return NULL;
+	if (b->magic == DSP_LOGBUFF_MAGIC) {
+		pr_err("rbuf:magic is ok\n");
+		return b;
+	}
+
+	b->magic = DSP_LOGBUFF_MAGIC;
+	b->basepaddr = buffer;
+	b->size = size - sizeof(struct dsp_ring_buffer) + 4;
+	b->head = 0;
+	b->tail = 0;
+
+	return b;
+}
+
 static int hifi4dsp_platform_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -1134,6 +1356,7 @@ static int hifi4dsp_platform_probe(struct platform_device *pdev)
 	u32 optimize_longcall[2];
 	u32 sram_remap_addr[4];
 	u32 pm_support[2];
+	u32 dsp_logbuff[4] = {0};
 
 	phys_addr_t hifi4base;
 	int hifi4size;
@@ -1210,6 +1433,18 @@ static int hifi4dsp_platform_probe(struct platform_device *pdev)
 	ret = of_property_read_u32_array(np, "suspend_resume_support", &pm_support[0], 2);
 	if (ret)
 		pr_debug("can't get suspend_resume_support\n");
+	ret = of_property_read_u32_array(np, "dsp_logbuff", &dsp_logbuff[0], 4);
+	if (ret)
+		pr_debug("didn't support dsp log buffer.\n");
+	else
+		pr_debug("[dsp_logbuff][0x%x 0x%x 0x%x 0x%x]\n",
+			dsp_logbuff[0], dsp_logbuff[1],
+			dsp_logbuff[2], dsp_logbuff[3]);
+
+	ret = of_property_read_u32(np, "logbuff-polling-period-ms",
+			&dsp_logbuff_polling_period_ms);
+	if (ret < 0)
+		dev_err(&pdev->dev, "Can't retrieve logbuff-polling-period-ms\n");
 
 	/*init hifi4dsp_dsp*/
 	dsp = kcalloc(dsp_cnt, sizeof(*dsp), GFP_KERNEL);
@@ -1404,6 +1639,11 @@ static int hifi4dsp_platform_probe(struct platform_device *pdev)
 		dsp->sram_remap_addr[0] = sram_remap_addr[2 * id];
 		dsp->sram_remap_addr[1] = sram_remap_addr[2 * id + 1];
 		dsp->suspend_resume_support = pm_support[id];
+		if (dsp_logbuff[2 * id])
+			dsp->logbuff = dsp_init_ring_buffer(dsp_logbuff[2 * id],
+			dsp_logbuff[2 * id + 1]);
+		else
+			dsp->logbuff = NULL;
 		priv->dsp = dsp;
 
 		hifi4dsp_p[i] = priv;
