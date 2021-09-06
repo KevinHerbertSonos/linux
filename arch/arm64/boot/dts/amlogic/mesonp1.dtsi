@@ -1705,6 +1705,9 @@
 			reg-names = "apb-base", "pcictrl-base", "axi-base",
 				    "ecam-base", "phy-base", "reset-base",
 				    "mem0";
+				0x0 0xfe002000 0x0 0x10>;
+			reg-names = "apb-base", "pcictrl-base", "axi-base",
+				    "ecam-base", "phy-base", "reset-base";
 			interrupts = <GIC_SPI 78 IRQ_TYPE_EDGE_RISING>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&pcieck_pins>;
@@ -1732,7 +1735,7 @@
 			pcie-a-rst-bit = <12>;
 			pcie-rst-bit = <12>;
 			pcie-rst-mask = <0xff>;
-			power-domains = <&pwrdm PDID_P1_PCIE>;
+			//power-domains = <&pwrdm PDID_T7_PCIE>;
 			status = "disabled";
 		};
 
