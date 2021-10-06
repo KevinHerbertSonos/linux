@@ -1,0 +1,23 @@
+config SONOS_DEVICE
+        tristate "Sonos class device"
+        default n
+        help
+          Support for Sonos class device
+
+config SONOS_DIAGS
+        bool "Sonos diags"
+        default n
+        help
+          Support for Sonos diagnostics
+
+config SONOS_CHK
+       tristate "Sonos check module"
+       default n
+       help
+         Support for Sonos check driver
+
+config SONOS_AUDIODEV
+       tristate "Sonos audiodev module"
+       default n
+       help
+         Support for Sonos audiodev driver (connectx)
