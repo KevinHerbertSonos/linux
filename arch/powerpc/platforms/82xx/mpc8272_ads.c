@@ -219,12 +219,15 @@ static struct platform_device mpc8272_nand_device = {
 			},
 };
 
+extern void early_read_mdp(void);
 static int __init mpc8272_init_nand(void)
 {
 	struct device_node *np;
 	const u32 *data;
 	int len;
 	struct gpio_nand_platdata *plat = &mpc8272_nand_platdata;
+
+	early_read_mdp();
 
 	np = of_find_compatible_node(NULL, NULL, "gpio-control-nand");
 	if ( !np ) {
