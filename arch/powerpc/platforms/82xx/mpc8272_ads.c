@@ -53,6 +53,12 @@ struct cpm_pin {
 
 static struct cpm_pin mpc8272_ads_pins[] = {
 #ifdef CONFIG_SONOS
+	/* LEDs */
+	{0, 10, CPM_PIN_OUTPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY}, /* Red or Green */
+	{0, 12, CPM_PIN_OUTPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY}, /* Green or Red */
+	{0, 13, CPM_PIN_OUTPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY}, /* Yellow */
+	{3, 30, CPM_PIN_OUTPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY}, /* White */
+
 	/* FCC1 */
 	{0, 14, CPM_PIN_INPUT | CPM_PIN_PRIMARY},
 	{0, 15, CPM_PIN_INPUT | CPM_PIN_PRIMARY},
