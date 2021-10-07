@@ -221,6 +221,56 @@ static void __iomem *request_and_remap(struct resource *res, size_t size,
 	return ptr;
 }
 
+#ifdef CONFIG_SONOS
+int nand_get_device_exp(struct nand_chip *chip,
+	struct mtd_info *mtd, int new_state);
+void nand_release_device_exp(struct mtd_info *mtd);
+
+static int gpio_nand_read_special(struct mtd_info *mtd, struct mtd_special_info *rsi, void *b)
+{
+	struct gpiomtd *gpiomtd = gpio_nand_getpriv(mtd);
+	struct nand_chip *this = mtd->priv;
+	int x;
+	unsigned char clear = 0;
+	unsigned char set = 0xff;
+
+	nand_get_device_exp(this, mtd, FL_READING);
+	this->select_chip(mtd, 0);
+	gpio_direction_output(gpiomtd->plat.gpio_cle, 1);
+	this->write_buf(mtd, rsi->preop_cmd, rsi->preop_cmdlen);
+	gpio_direction_output(gpiomtd->plat.gpio_cle, 0);
+	gpio_direction_output(gpiomtd->plat.gpio_cle, 1);
+	this->write_buf(mtd, &clear, 1);
+	gpio_direction_output(gpiomtd->plat.gpio_cle, 0);
+	gpio_direction_output(gpiomtd->plat.gpio_ale, 1);
+	this->write_buf(mtd, rsi->addr, rsi->addrlen);
+	gpio_direction_output(gpiomtd->plat.gpio_ale, 0);
+	udelay(1);
+	if (this->dev_ready) {
+		while (!this->dev_ready(mtd)) ;
+	} else {
+		udelay (this->chip_delay);
+	}
+	for (x = 0;x < rsi->datalen; x++) {
+		((unsigned char *)b)[x] = this->read_byte(mtd);
+	}
+	gpio_direction_output(gpiomtd->plat.gpio_cle, 1);
+	this->write_buf(mtd, &set, 1);
+	gpio_direction_output(gpiomtd->plat.gpio_cle, 0);
+	udelay(1);
+	if (this->dev_ready) {
+		while (!this->dev_ready(mtd)) ;
+	} else {
+		udelay (this->chip_delay);
+	}
+	nand_release_device_exp(mtd);
+	return 0;
+}
+
+int nand_rincon_scan(struct mtd_info *);
+void nand_rincon_adjust_parts(struct gpio_nand_platdata *, size_t);
+#endif
+
 static int __devinit gpio_nand_probe(struct platform_device *dev)
 {
 	struct gpiomtd *gpiomtd;
@@ -258,6 +308,9 @@ static int __devinit gpio_nand_probe(struct platform_device *dev)
 	}
 
 	memcpy(&gpiomtd->plat, dev->dev.platform_data, sizeof(gpiomtd->plat));
+#ifdef CONFIG_SONOS
+	gpiomtd->plat.adjust_parts = nand_rincon_adjust_parts;
+#endif
 
 	ret = gpio_request(gpiomtd->plat.gpio_nce, "NAND NCE");
 	if (ret)
@@ -305,12 +358,19 @@ static int __devinit gpio_nand_probe(struct platform_device *dev)
 	/* set the mtd private data for the nand driver */
 	gpiomtd->mtd_info.priv = this;
 	gpiomtd->mtd_info.owner = THIS_MODULE;
+#ifdef CONFIG_SONOS
+	gpiomtd->mtd_info.read_special = gpio_nand_read_special;
+#endif
 
 	if (nand_scan(&gpiomtd->mtd_info, 1)) {
 		dev_err(&dev->dev, "no nand chips found?\n");
 		ret = -ENXIO;
 		goto err_wp;
 	}
+
+#ifdef CONFIG_SONOS
+	nand_rincon_scan(&gpiomtd->mtd_info);
+#endif
 
 	if (gpiomtd->plat.adjust_parts)
 		gpiomtd->plat.adjust_parts(&gpiomtd->plat,

@@ -141,6 +141,11 @@ static int ngroups_max = NGROUPS_MAX;
 #include <asm/system.h>
 #endif
 
+#ifdef CONFIG_SONOS
+extern int bootsection;
+extern int bootgeneration;
+#endif
+
 #ifdef CONFIG_SPARC64
 extern int sysctl_tsb_ratio;
 #endif
@@ -965,6 +970,22 @@ static struct ctl_table kern_table[] = {
 		.data		= &blk_iopoll_enabled,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+#endif
+#ifdef CONFIG_SONOS
+	{
+		.procname	= "bootsection",
+		.data		= &bootsection,
+		.maxlen		= sizeof(int),
+		.mode		= 0444,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "bootgeneration",
+		.data		= &bootgeneration,
+		.maxlen		= sizeof(int),
+		.mode		= 0444,
 		.proc_handler	= proc_dointvec,
 	},
 #endif

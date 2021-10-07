@@ -264,6 +264,12 @@ struct mtd_info {
 	int (*block_isbad) (struct mtd_info *mtd, loff_t ofs);
 	int (*block_markbad) (struct mtd_info *mtd, loff_t ofs);
 
+#ifdef CONFIG_SONOS
+	/* SONOS special mtd support*/
+	int (*read_special) (struct mtd_info *mtd, struct mtd_special_info *rsi, void *buff);
+	int devid;
+#endif
+
 	struct notifier_block reboot_notifier;  /* default mode before reboot */
 
 	/* ECC status information */
