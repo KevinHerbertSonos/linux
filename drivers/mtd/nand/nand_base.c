@@ -1135,6 +1135,35 @@ static int nand_read_page_raw_syndrome(struct mtd_info *mtd,
  * @buf:	buffer to store read data
  * @page:	page number to read
  */
+extern int rmount_debug;
+void dump_buf(struct mtd_info *mtd, struct nand_chip *chip,
+                                uint8_t *buf)
+{
+	int i;
+	uint8_t *p;
+
+	i = mtd->writesize >> 4;
+	p = buf;
+
+	while (i--) {
+		printk("\t%02x %02x %02x %02x %02x %02x %02x %02x"
+			"  %02x %02x %02x %02x %02x %02x %02x %02x\n",
+			p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7],
+			p[8], p[9], p[10], p[11], p[12], p[13], p[14],
+			p[15]);
+			p += 16;
+	}
+
+        printk("OOB:\n");
+        i = mtd->oobsize >> 3;
+	p = chip->oob_poi;
+	while (i--) {
+		printk("\t%02x %02x %02x %02x %02x %02x %02x %02x\n",
+			p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+		p += 8;
+        }
+}
+
 static int nand_read_page_swecc(struct mtd_info *mtd, struct nand_chip *chip,
 				uint8_t *buf, int page)
 {
@@ -1146,6 +1175,8 @@ static int nand_read_page_swecc(struct mtd_info *mtd, struct nand_chip *chip,
 	uint8_t *ecc_code = chip->buffers->ecccode;
 	uint32_t *eccpos = chip->ecc.layout->eccpos;
 
+	if ( rmount_debug )
+		printk("DEBUG %s:%d page %d\n", __func__, __LINE__, page);
 	chip->ecc.read_page_raw(mtd, chip, buf, page);
 
 	for (i = 0; eccsteps; eccsteps--, i += eccbytes, p += eccsize)
@@ -1585,12 +1616,22 @@ static int nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 	if (oob)
 		ops->oobretlen = ops->ooblen - oobreadlen;
 
-	if (ret)
+	if (ret) {
+		printk("DEBUG %s:%d page %d ret %d\n", __func__, __LINE__, page, ret);
+		dump_buf(mtd, chip, ops->datbuf);
 		return ret;
+	}
 
-	if (mtd->ecc_stats.failed - stats.failed)
+	if (mtd->ecc_stats.failed - stats.failed) {
+		printk("DEBUG %s:%d page %d failed %d %d\n", __func__, __LINE__, page, mtd->ecc_stats.failed, stats.failed);
+		dump_buf(mtd, chip, ops->datbuf);
 		return -EBADMSG;
+	}
 
+	if ( mtd->ecc_stats.corrected - stats.corrected ) {
+		printk("DEBUG %s:%d page %d corrected %d %d\n", __func__, __LINE__, page, mtd->ecc_stats.corrected, stats.corrected);
+		dump_buf(mtd, chip, ops->datbuf);
+	}
 	return  mtd->ecc_stats.corrected - stats.corrected ? -EUCLEAN : 0;
 }
 

@@ -288,6 +288,7 @@ static void __init get_fs_names(char *page)
 	}
 	*s = '\0';
 }
+int rmount_debug = 1;
 
 static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 {
@@ -302,6 +303,7 @@ static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 	       current->fs->pwd.mnt->mnt_sb->s_type->name,
 	       current->fs->pwd.mnt->mnt_sb->s_flags & MS_RDONLY ?
 	       " readonly" : "", MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
+	rmount_debug = 0;
 	return 0;
 }
 

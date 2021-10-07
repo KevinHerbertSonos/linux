@@ -85,6 +85,7 @@ static struct buffer_head *get_block_length(struct super_block *sb,
  * is stored uncompressed in the filesystem (usually because compression
  * generated a larger block - this does occasionally happen with zlib).
  */
+extern int rmount_debug;
 int squashfs_read_data(struct super_block *sb, void **buffer, u64 index,
 			int length, u64 *next_index, int srclength, int pages)
 {
@@ -94,6 +95,12 @@ int squashfs_read_data(struct super_block *sb, void **buffer, u64 index,
 	u64 cur_index = index >> msblk->devblksize_log2;
 	int bytes, compressed, b = 0, k = 0, page = 0, avail;
 
+	if ( rmount_debug )
+		printk("DEBUG squashfs_read_data read block 0x%llx\n",
+					(unsigned long long) index);
+	if ( index == 0x643e36 ) {
+		dump_stack();
+	}
 	bh = kcalloc(((srclength + msblk->devblksize - 1)
 		>> msblk->devblksize_log2) + 1, sizeof(*bh), GFP_KERNEL);
 	if (bh == NULL)
