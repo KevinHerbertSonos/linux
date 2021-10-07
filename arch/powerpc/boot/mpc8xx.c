@@ -27,6 +27,8 @@ u32 mpc885_get_clock(u32 crystal)
 	int mfi, mfn, mfd, pdf, div;
 	u32 ret;
 
+	(void) div;
+
 	immr = fsl_get_immr();
 	if (!immr) {
 		printf("mpc885_get_clock: Couldn't get IMMR base.\r\n");

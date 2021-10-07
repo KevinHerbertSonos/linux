@@ -245,6 +245,8 @@ void cpm2_pic_init(struct device_node *node)
 {
 	int i;
 
+	(void) i;
+
 	cpm2_intctl = cpm2_map(im_intctl);
 
 	/* Clear the CPM IRQ controller, in case it has any bits set

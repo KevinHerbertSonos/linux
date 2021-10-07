@@ -1931,6 +1931,8 @@ int uart_suspend_port(struct uart_driver *drv, struct uart_port *uport)
 	struct uart_match match = {uport, drv};
 	struct tty_struct *tty;
 
+	(void) tty;
+
 	mutex_lock(&port->mutex);
 
 	/* Must be inside the mutex lock until we convert to tty_port */

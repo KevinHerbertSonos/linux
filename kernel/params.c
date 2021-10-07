@@ -829,6 +829,8 @@ static void __init version_sysfs_builtin(void)
 	struct module_kobject *mk;
 	int err;
 
+	(void) err;
+
 	for (vattr = __start___modver; vattr < __stop___modver; vattr++) {
 		mk = locate_module_kobject(vattr->module_name);
 		if (mk) {

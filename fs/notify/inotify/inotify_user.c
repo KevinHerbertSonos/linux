@@ -519,6 +519,8 @@ void inotify_ignored_and_remove_idr(struct fsnotify_mark *fsn_mark,
 	struct fsnotify_event_private_data *fsn_event_priv;
 	int ret;
 
+	(void) ret;
+
 	ignored_event = fsnotify_create_event(NULL, FS_IN_IGNORED, NULL,
 					      FSNOTIFY_EVENT_NONE, NULL, 0,
 					      GFP_NOFS);

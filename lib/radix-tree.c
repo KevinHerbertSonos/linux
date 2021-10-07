@@ -578,6 +578,8 @@ int radix_tree_tag_get(struct radix_tree_root *root,
 	struct radix_tree_node *node;
 	int saw_unset_tag = 0;
 
+	(void) saw_unset_tag;
+
 	/* check the root's tag bit */
 	if (!root_tag_get(root, tag))
 		return 0;

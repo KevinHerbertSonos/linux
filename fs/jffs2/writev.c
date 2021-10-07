@@ -67,6 +67,8 @@ int jffs2_flash_direct_write(struct jffs2_sb_info *c, loff_t ofs, size_t len,
 		struct kvec vecs[1];
 		int res;
 
+		(void) vecs;
+
 		vecs[0].iov_base = (unsigned char *) buf;
 		vecs[0].iov_len = len;
 

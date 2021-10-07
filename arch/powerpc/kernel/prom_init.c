@@ -585,6 +585,8 @@ static void __init early_cmdline_parse(void)
 	char *p;
 	int l = 0;
 
+	(void) l;
+
 	RELOC(prom_cmd_line[0]) = 0;
 	p = RELOC(prom_cmd_line);
 	if ((long)_prom->chosen > 0)
@@ -1132,6 +1134,8 @@ static void __init prom_init_mem(void)
 	cell_t *p, *endp;
 	struct prom_t *_prom = &RELOC(prom);
 	u32 rac, rsc;
+
+	(void) path;
 
 	/*
 	 * We iterate the memory nodes to find

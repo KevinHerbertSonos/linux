@@ -938,6 +938,8 @@ long sys_swapcontext(struct ucontext __user *old_ctx,
 	unsigned char tmp;
 	int ctx_has_vsx_region = 0;
 
+	(void) tmp;
+
 #ifdef CONFIG_PPC64
 	unsigned long new_msr = 0;
 
@@ -1081,6 +1083,8 @@ int sys_debug_setcontext(struct ucontext __user *ctx,
 #ifdef CONFIG_PPC_ADV_DEBUG_REGS
 	unsigned long new_dbcr0 = current->thread.dbcr0;
 #endif
+
+	(void) tmp;
 
 	for (i=0; i<ndbg; i++) {
 		if (copy_from_user(&op, dbg + i, sizeof(op)))

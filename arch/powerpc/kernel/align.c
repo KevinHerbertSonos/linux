@@ -721,6 +721,8 @@ int fix_alignment(struct pt_regs *regs)
 		} x16;
 	} data;
 
+	(void) instruction;
+
 	/*
 	 * We require a complete register set, if not, then our assembly
 	 * is broken

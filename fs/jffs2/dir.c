@@ -80,6 +80,8 @@ static struct dentry *jffs2_lookup(struct inode *dir_i, struct dentry *target,
 	uint32_t ino = 0;
 	struct inode *inode = NULL;
 
+	(void) c;
+
 	D1(printk(KERN_DEBUG "jffs2_lookup()\n"));
 
 	if (target->d_name.len > JFFS2_MAX_NAME_LEN)
@@ -123,6 +125,8 @@ static int jffs2_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	struct inode *inode = filp->f_path.dentry->d_inode;
 	struct jffs2_full_dirent *fd;
 	unsigned long offset, curofs;
+
+	(void) c;
 
 	D1(printk(KERN_DEBUG "jffs2_readdir() for dir_i #%lu\n", filp->f_path.dentry->d_inode->i_ino));
 

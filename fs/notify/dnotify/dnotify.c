@@ -94,6 +94,8 @@ static int dnotify_handle_event(struct fsnotify_group *group,
 	struct fown_struct *fown;
 	__u32 test_mask = event->mask & ~FS_EVENT_ON_CHILD;
 
+	(void) to_tell;
+
 	BUG_ON(vfsmount_mark);
 
 	to_tell = event->to_tell;

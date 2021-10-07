@@ -1686,6 +1686,8 @@ static int acct_stack_growth(struct vm_area_struct *vma, unsigned long size, uns
 	struct rlimit *rlim = current->signal->rlim;
 	unsigned long new_start;
 
+	(void) new_start;
+
 	/* address space limit tests */
 	if (!may_expand_vm(mm, grow))
 		return -ENOMEM;

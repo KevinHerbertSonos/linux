@@ -40,6 +40,7 @@ struct pci_range {
 struct cs_range cs_ranges_buf[MAX_PROP_LEN / sizeof(struct cs_range)];
 struct pci_range pci_ranges_buf[MAX_PROP_LEN / sizeof(struct pci_range)];
 
+#ifndef CONFIG_SONOS
 /* Different versions of u-boot put the BCSR in different places, and
  * some don't set up the PCI PIC at all, so we assume the device tree is
  * sane and update the BRx registers appropriately.
@@ -112,6 +113,7 @@ static void update_cs_ranges(void)
 err:
 	printf("Bad /localbus node\r\n");
 }
+#endif
 
 /* Older u-boots don't set PCI up properly.  Update the hardware to match
  * the device tree.  The prefetch mem region and non-prefetch mem region
@@ -247,7 +249,9 @@ static void pq2_platform_fixups(void)
 	void *node;
 
 	dt_fixup_memory(bd.bi_memstart, bd.bi_memsize);
+#ifndef CONFIG_SONOS
 	dt_fixup_mac_addresses(bd.bi_enetaddr, bd.bi_enet1addr);
+#endif
 	dt_fixup_cpu_clocks(bd.bi_intfreq, bd.bi_busfreq / 4, bd.bi_busfreq);
 
 	node = finddevice("/soc/cpm");
@@ -258,7 +262,9 @@ static void pq2_platform_fixups(void)
 	if (node)
 		setprop(node, "clock-frequency",  &bd.bi_brgfreq, 4);
 
+#ifndef CONFIG_SONOS
 	update_cs_ranges();
+#endif
 	fixup_pci();
 }
 
