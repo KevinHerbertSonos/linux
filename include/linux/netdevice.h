@@ -167,6 +167,7 @@ static inline bool dev_xmit_complete(int rc)
 #else
 #define MAX_HEADER (LL_MAX_HEADER + 48)
 #endif
+#endif  /*  __KERNEL__  */
 
 /*
  *	Old network device statistics. Fields are native words
@@ -199,7 +200,6 @@ struct net_device_stats {
 	unsigned long	tx_compressed;
 };
 
-#endif  /*  __KERNEL__  */
 
 
 /* Media selection options. */

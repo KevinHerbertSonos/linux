@@ -5045,6 +5045,26 @@ int dev_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 	case SIOCSIFLINK:
 		return -ENOTTY;
 
+#ifdef CONFIG_SONOS
+	case SIOCGIFSTATS:
+	{
+		struct net_device_stats *stats;
+		struct net_device *dev;
+		rtnl_lock();
+		dev = __dev_get_by_name(net, ifr.ifr_name);
+		if ( dev->netdev_ops || dev->netdev_ops->ndo_get_stats ) {
+			stats = dev->netdev_ops->ndo_get_stats(dev);
+		} else {
+			stats = NULL;
+		}
+		rtnl_unlock();
+		if (stats)
+			ret = copy_to_user(ifr.ifr_data, (void *)stats, sizeof(struct net_device_stats));
+		else
+			ret = -ENODEV;
+		return ret;
+	}
+#endif
 	/*
 	 *	Unknown or private ioctl.
 	 */
