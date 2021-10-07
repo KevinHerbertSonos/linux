@@ -71,15 +71,33 @@ static void gpio_nand_cmd_ctrl(struct mtd_info *mtd, int cmd, unsigned int ctrl)
 	gpio_nand_dosync(gpiomtd);
 
 	if (ctrl & NAND_CTRL_CHANGE) {
+#ifdef CONFIG_SONOS
+		udelay(1);
+#endif
 		gpio_set_value(gpiomtd->plat.gpio_nce, !(ctrl & NAND_NCE));
+#ifdef CONFIG_SONOS
+		udelay(1);
+#endif
 		gpio_set_value(gpiomtd->plat.gpio_cle, !!(ctrl & NAND_CLE));
+#ifdef CONFIG_SONOS
+		udelay(1);
+#endif
 		gpio_set_value(gpiomtd->plat.gpio_ale, !!(ctrl & NAND_ALE));
+#ifdef CONFIG_SONOS
+		udelay(1);
+#endif
 		gpio_nand_dosync(gpiomtd);
 	}
 	if (cmd == NAND_CMD_NONE)
 		return;
 
+#ifdef CONFIG_SONOS
+	__delay(50);
+#endif
 	writeb(cmd, gpiomtd->nand_chip.IO_ADDR_W);
+#ifdef CONFIG_SONOS
+	eieio();
+#endif
 	gpio_nand_dosync(gpiomtd);
 }
 
