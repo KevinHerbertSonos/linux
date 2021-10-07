@@ -182,6 +182,9 @@ cuboot*)
     *-pq2fads|*-ep8248e|*-mpc8272*|*-storcenter)
         platformo=$object/cuboot-pq2.o
         ;;
+    *-connectx)
+        platformo="$object/fixed-head.o $object/cuboot-pq2.o"
+        ;;
     *-mpc824*)
         platformo=$object/cuboot-824x.o
         ;;

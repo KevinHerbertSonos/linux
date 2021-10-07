@@ -180,6 +180,7 @@ static unsigned char cpm_serial_tstc(void)
 	return !(rbdf->sc & 0x8000);
 }
 
+#ifndef CONFIG_SONOS
 static unsigned char cpm_serial_getc(void)
 {
 	unsigned char c;
@@ -194,6 +195,7 @@ static unsigned char cpm_serial_getc(void)
 
 	return c;
 }
+#endif
 
 int cpm_console_init(void *devp, struct serial_console_data *scdp)
 {
@@ -203,6 +205,8 @@ int cpm_console_init(void *devp, struct serial_console_data *scdp)
 	void *parent, *muram;
 	void *muram_addr;
 	unsigned long muram_offset, muram_size;
+
+	(void) muram_size;
 
 	if (dt_is_compatible(devp, "fsl,cpm1-smc-uart")) {
 		is_smc = 1;
@@ -269,7 +273,11 @@ int cpm_console_init(void *devp, struct serial_console_data *scdp)
 	 * just before the buffer descriptors.
 	 */
 
+#ifndef CONFIG_SONOS
 	cbd_offset = muram_offset + muram_size - 2 * sizeof(struct cpm_bd);
+#else
+	cbd_offset = muram_offset;
+#endif
 
 	if (is_cpm2 && is_smc) {
 		u16 *smc_base = (u16 *)param;
@@ -287,7 +295,9 @@ int cpm_console_init(void *devp, struct serial_console_data *scdp)
 
 	scdp->open = cpm_serial_open;
 	scdp->putc = cpm_serial_putc;
+#ifndef CONFIG_SONOS
 	scdp->getc = cpm_serial_getc;
+#endif
 	scdp->tstc = cpm_serial_tstc;
 
 	return 0;

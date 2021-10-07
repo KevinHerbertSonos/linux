@@ -1,6 +1,8 @@
 #ifndef __LINUX_COMPILER_H
 #define __LINUX_COMPILER_H
 
+#ifdef __KERNEL__
+
 #ifndef __ASSEMBLY__
 
 #ifdef __CHECKER__
@@ -308,4 +310,5 @@ void ftrace_likely_update(struct ftrace_branch_data *f, int val, int expect);
  */
 #define ACCESS_ONCE(x) (*(volatile typeof(x) *)&(x))
 
+#endif
 #endif /* __LINUX_COMPILER_H */

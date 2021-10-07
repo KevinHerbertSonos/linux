@@ -313,7 +313,11 @@ void __init setup_arch(char **cmdline_p)
 		ucache_bsize = icache_bsize = dcache_bsize;
 
 	/* reboot on panic */
+#ifdef CONFIG_SONOS
+	panic_timeout = 5;
+#else
 	panic_timeout = 180;
+#endif
 
 	if (ppc_md.panic)
 		setup_panic();

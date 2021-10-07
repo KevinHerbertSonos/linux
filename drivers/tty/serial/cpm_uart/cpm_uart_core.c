@@ -1131,7 +1131,9 @@ static int cpm_uart_init_port(struct device_node *np,
 	void __iomem *mem, *pram;
 	int len;
 	int ret;
+#ifndef CONFIG_SONOS
 	int i;
+#endif
 
 	data = of_get_property(np, "clock", NULL);
 	if (data) {
@@ -1199,8 +1201,10 @@ static int cpm_uart_init_port(struct device_node *np,
 		goto out_pram;
 	}
 
+#ifndef CONFIG_SONOS
 	for (i = 0; i < NUM_GPIOS; i++)
 		pinfo->gpios[i] = of_get_gpio(np, i);
+#endif
 
 #ifdef CONFIG_PPC_EARLY_DEBUG_CPM
 	udbg_putc = NULL;
