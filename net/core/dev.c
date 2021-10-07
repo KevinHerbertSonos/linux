@@ -135,6 +135,7 @@
 #include <linux/cpu_rmap.h>
 
 #include "net-sysfs.h"
+#include "../bridge/br_private.h"
 
 /* Instead of increasing this, you should create a hash table. */
 #define MAX_GRO_SKBS 8
@@ -2959,12 +2960,69 @@ static void net_tx_action(struct softirq_action *h)
 	}
 }
 
-#if (defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)) && \
-    (defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE))
+#if defined(CONFIG_BRIDGE) || defined (CONFIG_BRIDGE_MODULE)
+
+#if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
 /* This hook is defined here for ATM LANE */
 int (*br_fdb_test_addr_hook)(struct net_device *dev,
 			     unsigned char *addr) __read_mostly;
 EXPORT_SYMBOL_GPL(br_fdb_test_addr_hook);
+#endif
+
+/*
+ * If bridge module is loaded call bridging hook.
+ *  returns NULL if packet was consumed.
+ */
+#ifdef CONFIG_SONOS
+struct sk_buff *(*br_handle_frame_hook)(struct net_bridge_port_list_node *pl,
+					struct sk_buff *skb) __read_mostly;
+#else
+struct sk_buff *(*br_handle_frame_hook)(struct net_bridge_port *p,
+					struct sk_buff *skb) __read_mostly;
+#endif
+
+EXPORT_SYMBOL_GPL(br_handle_frame_hook);
+
+static inline struct sk_buff *handle_bridge(struct sk_buff *skb,
+					    struct packet_type **pt_prev, int *ret,
+					    struct net_device *orig_dev)
+{
+#ifdef CONFIG_SONOS
+	struct net_bridge_port_list_node *port_list;
+
+	if (skb->pkt_type == PACKET_LOOPBACK ||
+	    (port_list = rcu_dereference(skb->dev->br_port_list)) == NULL) {
+#if 0
+		printk("br: not bridged: %s (%d)\n",
+		       &(skb->dev->name[0]),
+		       skb->pkt_type == PACKET_LOOPBACK);
+#endif
+		return skb;
+	}
+        if (*pt_prev) {
+		*ret = deliver_skb(skb, *pt_prev, orig_dev);
+		*pt_prev = NULL;
+	}
+	return br_handle_frame_hook(port_list, skb);
+#else
+        struct net_bridge_port *port;
+
+	if (skb->pkt_type == PACKET_LOOPBACK ||
+	    (port = rcu_dereference(skb->dev->br_port)) == NULL) {
+		return skb;
+	}
+
+	if (*pt_prev) {
+		*ret = deliver_skb(skb, *pt_prev, orig_dev);
+		*pt_prev = NULL;
+	}
+
+	return br_handle_frame_hook(port, skb);
+#endif
+
+}
+#else
+#define handle_bridge(skb, pt_prev, ret, orig_dev)	(skb)
 #endif
 
 #ifdef CONFIG_NET_CLS_ACT
@@ -3153,6 +3211,10 @@ another_round:
 		goto out;
 ncls:
 #endif
+
+	skb = handle_bridge(skb, &pt_prev, &ret, orig_dev);
+	if (!skb)
+		goto out;
 
 	rx_handler = rcu_dereference(skb->dev->rx_handler);
 	if (rx_handler) {

@@ -1307,6 +1307,14 @@ struct net_device {
 		struct pcpu_tstats __percpu	*tstats; /* tunnel stats */
 		struct pcpu_dstats __percpu	*dstats; /* dummy stats */
 	};
+
+	/* bridge stuff */
+#if defined(CONFIG_SONOS) || defined(__SONOS_LINUX__)
+	struct net_bridge_port_list_node *br_port_list;
+#else
+	struct net_bridge_port	*br_port;
+#endif
+
 	/* GARP */
 	struct garp_port __rcu	*garp_port;
 

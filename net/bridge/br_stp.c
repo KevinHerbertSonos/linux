@@ -153,6 +153,10 @@ void br_transmit_config(struct net_bridge_port *p)
 
 	br = p->br;
 
+	if (!br->stp_enabled)  {
+		return;
+	}
+
 	bpdu.topology_change = br->topology_change;
 	bpdu.topology_change_ack = p->topology_change_ack;
 	bpdu.root = br->designated_root;
@@ -166,6 +170,29 @@ void br_transmit_config(struct net_bridge_port *p)
 			= br_get_port(br, br->root_port);
 		bpdu.message_age = (jiffies - root->designated_age)
 			+ MESSAGE_AGE_INCR;
+
+		/* Yes, this does happen.  message_age_timer.expires is
+		 * generally set a little further in the future than we'd like
+		 * (it rounds to 4 jiffies), so it is possible for the above
+		 * calculation to go negative.  That makes something that
+		 * arrived really early appear to have arrived really late,
+		 * which eventually ends up causing the interface to flap.
+		 */
+		if (bpdu.message_age <= 0) {
+
+			//printk("br: %d, expired (root=%d)?\n",
+			//p->port_no, root->port_no);
+
+			if (timer_pending(&root->message_age_timer)) {
+				//printk("br: %d, fixed\n", p->port_no);
+				bpdu.message_age = MESSAGE_AGE_INCR;
+			} else {
+				bpdu.message_age = br->max_age;
+			}
+		}
+
+		//printk("br: %d, age: %d, %d\n",
+		//p->port_no, bpdu.message_age, br->max_age);
 	}
 	bpdu.max_age = br->max_age;
 	bpdu.hello_time = br->hello_time;
@@ -181,6 +208,14 @@ void br_transmit_config(struct net_bridge_port *p)
 }
 
 /* called under bridge lock */
+static inline void br_adjust_message_age_timer(struct net_bridge_port *p,
+					       const struct br_config_bpdu *bpdu)
+{
+	mod_timer(&p->message_age_timer, jiffies
+		  + (p->br->max_age - bpdu->message_age));
+}
+
+/* called under bridge lock */
 static inline void br_record_config_information(struct net_bridge_port *p,
 						const struct br_config_bpdu *bpdu)
 {
@@ -190,8 +225,7 @@ static inline void br_record_config_information(struct net_bridge_port *p,
 	p->designated_port = bpdu->port_id;
 	p->designated_age = jiffies + bpdu->message_age;
 
-	mod_timer(&p->message_age_timer, jiffies
-		  + (p->br->max_age - bpdu->message_age));
+	br_adjust_message_age_timer(p, bpdu);
 }
 
 /* called under bridge lock */
@@ -296,9 +330,6 @@ void br_topology_change_detection(struct net_bridge *br)
 {
 	int isroot = br_is_root_bridge(br);
 
-	if (br->stp_enabled != BR_KERNEL_STP)
-		return;
-
 	br_info(br, "topology change detected, %s\n",
 		isroot ? "propagating" : "sending tcn bpdu");
 
@@ -335,6 +366,9 @@ static inline void br_reply(struct net_bridge_port *p)
 /* called under bridge lock */
 void br_configuration_update(struct net_bridge *br)
 {
+	if (!br->stp_enabled)
+		return;
+
 	br_root_selection(br);
 	br_designated_port_selection(br);
 }
@@ -375,17 +409,15 @@ static void br_make_forwarding(struct net_bridge_port *p)
 	if (p->state != BR_STATE_BLOCKING)
 		return;
 
-	if (br->stp_enabled == BR_NO_STP || br->forward_delay == 0) {
+	if (br->forward_delay == 0) {
 		p->state = BR_STATE_FORWARDING;
 		br_topology_change_detection(br);
 		del_timer(&p->forward_delay_timer);
 	}
-	else if (br->stp_enabled == BR_KERNEL_STP)
+	else if (p->br->stp_enabled)
 		p->state = BR_STATE_LISTENING;
 	else
 		p->state = BR_STATE_LEARNING;
-
-	br_multicast_enable_port(p);
 
 	br_log_state(p);
 
@@ -397,37 +429,27 @@ static void br_make_forwarding(struct net_bridge_port *p)
 void br_port_state_selection(struct net_bridge *br)
 {
 	struct net_bridge_port *p;
-	unsigned int liveports = 0;
 
 	/* Don't change port states if userspace is handling STP */
-	if (br->stp_enabled == BR_USER_STP)
+	if (!br->stp_enabled)
 		return;
 
 	list_for_each_entry(p, &br->port_list, list) {
-		if (p->state == BR_STATE_DISABLED)
-			continue;
-
-		if (p->port_no == br->root_port) {
-			p->config_pending = 0;
-			p->topology_change_ack = 0;
-			br_make_forwarding(p);
-		} else if (br_is_designated_port(p)) {
-			del_timer(&p->message_age_timer);
-			br_make_forwarding(p);
-		} else {
-			p->config_pending = 0;
-			p->topology_change_ack = 0;
-			br_make_blocking(p);
+		if (p->state != BR_STATE_DISABLED) {
+			if (p->port_no == br->root_port) {
+				p->config_pending = 0;
+				p->topology_change_ack = 0;
+				br_make_forwarding(p);
+			} else if (br_is_designated_port(p)) {
+				del_timer(&p->message_age_timer);
+				br_make_forwarding(p);
+			} else {
+				p->config_pending = 0;
+				p->topology_change_ack = 0;
+				br_make_blocking(p);
+			}
 		}
-
-		if (p->state == BR_STATE_FORWARDING)
-			++liveports;
 	}
-
-	if (liveports == 0)
-		netif_carrier_off(br->dev);
-	else
-		netif_carrier_on(br->dev);
 }
 
 /* called under bridge lock */
@@ -463,7 +485,20 @@ void br_received_config_bpdu(struct net_bridge_port *p, struct br_config_bpdu *b
 		}
 
 		if (p->port_no == br->root_port) {
+
+			unsigned long old_max_age = br->max_age;
+
 			br_record_config_timeout_values(br, bpdu);
+
+			/* SONOS: If max_age changed we need to bump up the
+			 *        timer again.
+			 */
+			if (br->max_age != old_max_age) {
+				printk("br: max age %ld -> %ld\n",
+				       old_max_age, br->max_age);
+				br_adjust_message_age_timer(p, bpdu);;
+			}
+
 			br_config_bpdu_generation(br);
 			if (bpdu->topology_change_ack)
 				br_topology_change_acknowledged(br);
