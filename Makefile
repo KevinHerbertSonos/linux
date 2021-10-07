@@ -346,10 +346,14 @@ CFLAGS_KERNEL	=
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
+UPTO_ROOT	:= $(srctree)/../..
+include $(UPTO_ROOT)/sonos_common.mk
+
 
 # Use LINUXINCLUDE when you must reference the include/ directory.
 # Needed to be compatible with the O= option
 LINUXINCLUDE    := -I$(srctree)/arch/$(hdr-arch)/include -Iinclude \
+                   $(SONOS_PLATFORMS_INCLUDES) \
                    $(if $(KBUILD_SRC), -I$(srctree)/include) \
                    -include include/generated/autoconf.h
 
@@ -358,7 +362,8 @@ KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
-		   -Wno-format-security \
+		   -Werror \
+		   -Wformat-security \
 		   -fno-delete-null-pointer-checks
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
@@ -623,7 +628,7 @@ warn-assign = \
 $(warning "WARNING: Appending $$K$(1) ($(K$(1))) from $(origin K$(1)) to kernel $$$(1)")
 
 ifneq ($(KCPPFLAGS),)
-        $(call warn-assign,CPPFLAGS)
+#        $(call warn-assign,CPPFLAGS)
         KBUILD_CPPFLAGS += $(KCPPFLAGS)
 endif
 ifneq ($(KAFLAGS),)
