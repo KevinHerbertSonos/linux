@@ -48,7 +48,9 @@ static void __init mpc8272_ads_pic_init(void)
 	of_node_put(np);
 
 	/* Initialize stuff for the 82xx CPLD IC and install demux  */
+#ifndef CONFIG_SONOS
 	pq2ads_pci_init_irq();
+#endif
 }
 
 struct cpm_pin {
@@ -348,6 +350,9 @@ define_machine(mpc8272_ads)
 	.setup_arch = mpc8272_ads_setup_arch,
 	.init_IRQ = mpc8272_ads_pic_init,
 	.get_irq = cpm2_get_irq,
+#ifdef CONFIG_SONOS
+	.pci_irq_fixup = mpc8272_pci_irq_fixup,
+#endif
 	.calibrate_decr = generic_calibrate_decr,
 	.restart = pq2_restart,
 	.progress = udbg_progress,

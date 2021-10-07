@@ -6,6 +6,9 @@ void pq2_restart(char *cmd);
 #ifdef CONFIG_PCI
 int pq2ads_pci_init_irq(void);
 void pq2_init_pci(void);
+#ifdef CONFIG_SONOS
+extern void mpc8272_pci_irq_fixup(struct pci_dev *dev);
+#endif
 #else
 static inline int pq2ads_pci_init_irq(void)
 {
@@ -15,6 +18,12 @@ static inline int pq2ads_pci_init_irq(void)
 static inline void pq2_init_pci(void)
 {
 }
+
+#ifdef CONFIG_SONOS
+static inline void mpc8272_pci_irq_fixup(struct pci_dev *dev)
+{
+}
+#endif
 #endif
 
 #endif
