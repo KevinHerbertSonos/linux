@@ -9,6 +9,11 @@ SECTIONS
     *(.text)
     *(.fixup)
   }
+  . = ALIGN(32);
+  .text_aligned	:
+  {
+    *(.text_fixup_pci_aligned)
+  }
   _etext = .;
   . = ALIGN(4096);
   .data    :

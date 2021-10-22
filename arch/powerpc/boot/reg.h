@@ -19,6 +19,10 @@ static inline u32 mfpvr(void)
 #define __stringify_1(x)	#x
 #define __stringify(x)		__stringify_1(x)
 
+#define mfmsr()		({unsigned long rval; \
+			asm volatile("mfmsr %0" : "=r" (rval)); rval;})
+#define mtmsr(v)	asm volatile("mtmsr %0" : : "r" (v) : "memory")
+
 #define mfspr(rn)	({unsigned long rval; \
 			asm volatile("mfspr %0," __stringify(rn) \
 				: "=r" (rval)); rval; })

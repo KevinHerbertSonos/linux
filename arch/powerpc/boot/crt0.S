@@ -11,6 +11,14 @@
 
 #include "ppc_asm.h"
 
+#define HID0 0x3f0
+#define HID0_ICE (1<<15)
+#define HID0_DCE (1<<14)
+#define HID0_ILOCK (1<<13)
+#define HID0_DLOCK (1<<12)
+#define HID0_ICFI (1<<11)		/* Instr. Cache Flash Invalidate */
+#define HID0_DCI (1<<10)
+
 	.text
 	/* a procedure descriptor used when booting this as a COFF file */
 	.globl	_zimage_start_opd
@@ -22,6 +30,18 @@ _zimage_start_opd:
 _zimage_start:
 	.globl	_zimage_start_lib
 _zimage_start_lib:
+#if 0
+	mfspr	r8, HID0
+	ori	r8, r8, HID0_ICE
+	lis	r9, 0
+	ori	r9, r9, HID0_ILOCK
+	andc	r8, r8, r9
+	ori	r9, r8, HID0_ICFI
+	isync
+	mtspr	HID0, r9	/* sets enable and invalidate, clears lock */
+	isync
+	mtspr	HID0, r8	/* clears invalidate */
+#endif	
 	/* Work out the offset between the address we were linked at
 	   and the address where we're running. */
 	bl	1f
