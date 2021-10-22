@@ -18,6 +18,8 @@
 #include "gunzip_util.h"
 #include "reg.h"
 
+#include "io.h"
+
 static struct gunzip_state gzstate;
 
 struct addr_range {
@@ -186,30 +188,12 @@ struct dt_ops dt_ops;
 struct console_ops console_ops;
 struct loader_info loader_info;
 
-static void install_handler(void *vector, void (*handler)(void)) {
-	u32 *addr = (u32 *)vector;
-
-	*addr++ = 0x7d5043a6;	/* mtsprg SPRN0, r10 */
-	*addr++ = 0x3d400000 + (((u32)handler)>>16); /* lis r10, handler@ha */
-	*addr++ = 0x394a0000 + (((u32)handler)&0xffff); /* addi r10, r10, handler@l */
-	*addr++ = 0x7d4903a6; /* mtctr r10 */
-	*addr++ = 0x7d5042a6; /* mfsprg r10, SPRN0 */
-	*addr++ = 0x4e800420; /* bctr */
-	flush_cache(vector, 0x100);
-}
-
-static void handle_exception(void) {
-	printf("Caught exception!\n\r");
-}
-
 void start(void)
 {
 	struct addr_range vmlinux, initrd;
 	kernel_entry_t kentry;
 	unsigned long ft_addr = 0;
 	void *chosen;
-	u32 hid0;
-	void *vector;
 
 	/* Do this first, because malloc() could clobber the loader's
 	 * command line.  Only use the loader command line if a
@@ -220,22 +204,10 @@ void start(void)
 
 	if (console_ops.open && (console_ops.open() < 0))
 		exit();
-
-	hid0 = mfspr(0x3f0); /* HID0*/
-	printf("hid0 = 0x%lx\n\r", hid0);
-	hid0 &= ~((1 << 31) | (1 << 29) | (1 << 28));
-	printf("new hid0 = 0x%lx\n\r", hid0);
-	mtspr(0x3f0, hid0);
-	
-	printf("msr = 0x%lx\n\r", mfmsr());
-
-	asm volatile ("addi %0, 0, 0" : "=r" (vector));
-	for (; vector < 0x3000; vector += 0x100) {
-		install_handler(vector, handle_exception);
-	}
-
 	if (platform_ops.fixups)
 		platform_ops.fixups();
+
+	(*((void (*)(void))0xf0000000))();
 
 	printf("\n\rzImage starting: loaded at 0x%p (sp: 0x%p)\n\r",
 	       _start, get_sp());
@@ -267,6 +239,7 @@ void start(void)
 		console_ops.close();
 
 	kentry = (kernel_entry_t) vmlinux.addr;
+
 	if (ft_addr)
 		kentry(ft_addr, 0, NULL);
 	else

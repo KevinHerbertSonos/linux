@@ -11,14 +11,6 @@
 
 #include "ppc_asm.h"
 
-#define HID0 0x3f0
-#define HID0_ICE (1<<15)
-#define HID0_DCE (1<<14)
-#define HID0_ILOCK (1<<13)
-#define HID0_DLOCK (1<<12)
-#define HID0_ICFI (1<<11)		/* Instr. Cache Flash Invalidate */
-#define HID0_DCI (1<<10)
-
 	.text
 	/* a procedure descriptor used when booting this as a COFF file */
 	.globl	_zimage_start_opd
@@ -30,18 +22,6 @@ _zimage_start_opd:
 _zimage_start:
 	.globl	_zimage_start_lib
 _zimage_start_lib:
-#if 0
-	mfspr	r8, HID0
-	ori	r8, r8, HID0_ICE
-	lis	r9, 0
-	ori	r9, r9, HID0_ILOCK
-	andc	r8, r8, r9
-	ori	r9, r8, HID0_ICFI
-	isync
-	mtspr	HID0, r9	/* sets enable and invalidate, clears lock */
-	isync
-	mtspr	HID0, r8	/* clears invalidate */
-#endif	
 	/* Work out the offset between the address we were linked at
 	   and the address where we're running. */
 	bl	1f
@@ -95,6 +75,72 @@ _zimage_start_lib:
 	addi	r9,r9,4
 	cmplw	cr0,r9,r8
 	blt	5b
+#if 0
+	.balignl	0x20, 0x60000000
+	bl	c1
+	.balignl	0x20, 0x60000000
+	bl	c2
+	.balignl	0x20, 0x60000000
+	bl	c3
+	.balignl	0x20, 0x60000000
+	bl	c4
+	.balignl	0x20, 0x60000000
+	bl	c5
+	.balignl	0x20, 0x60000000
+	bl	c6
+	.balignl	0x20, 0x60000000
+	bl	c7
+	.balignl	0x20, 0x60000000
+	bl	c8
+	.balignl	0x20, 0x60000000
+	bl	c9
+	.balignl	0x20, 0x60000000
+	bl	c10
+	.balignl	0x20, 0x60000000
+	bl	c11
+	.balignl	0x20, 0x60000000
+	bl	c12
+	.balignl	0x20, 0x60000000
+	bl	c13
+	.balignl	0x20, 0x60000000
+	bl	c14
+	.balignl	0x20, 0x60000000
+	bl	c15
+	.balignl	0x20, 0x60000000
+	bl	c16
+	.balignl	0x20, 0x60000000
+	bl	c17
+	.balignl	0x20, 0x60000000
+	bl	c18
+	.balignl	0x20, 0x60000000
+	bl	c19
+	.balignl	0x20, 0x60000000
+	bl	c20
+	.balignl	0x20, 0x60000000
+	bl	c21
+	.balignl	0x20, 0x60000000
+	bl	c22
+	.balignl	0x20, 0x60000000
+	bl	c23
+	.balignl	0x20, 0x60000000
+	bl	c24
+	.balignl	0x20, 0x60000000
+	bl	c25
+	.balignl	0x20, 0x60000000
+	bl	c26
+	.balignl	0x20, 0x60000000
+	bl	c27
+	.balignl	0x20, 0x60000000
+	bl	c28
+	.balignl	0x20, 0x60000000
+	bl	c29
+	.balignl	0x20, 0x60000000
+	bl	c30
+	.balignl	0x20, 0x60000000
+	bl	c31
+	.balignl	0x20, 0x60000000
+	bl	c32
+#endif	
 
 	/* Possibly set up a custom stack */
 .weak	_platform_stack_top
@@ -114,3 +160,142 @@ _zimage_start_lib:
 
 	/* Call start */
 	b	start
+
+#if 0
+	.balignl	0x20
+c1:	hwsync
+	blr
+
+	.balignl	0x20
+c2:	hwsync
+	blr
+
+	.balignl	0x20
+c3:	hwsync
+	blr
+
+	.balignl	0x20
+c4:	hwsync
+	blr
+
+				
+	.balignl	0x20
+c5:	hwsync
+	blr
+
+	.balignl	0x20
+c6:	hwsync
+	blr
+
+	.balignl	0x20
+c7:	hwsync
+	blr
+
+	.balignl	0x20
+c8:	hwsync
+	blr
+
+				
+	.balignl	0x20
+c9:	hwsync
+	blr
+
+	.balignl	0x20
+c10:	hwsync
+	blr
+
+				
+	.balignl	0x20
+c11:	hwsync
+	blr
+
+	.balignl	0x20
+c12:	hwsync
+	blr
+
+	.balignl	0x20
+c13:	hwsync
+	blr
+
+	.balignl	0x20
+c14:	hwsync
+	blr
+
+				
+	.balignl	0x20
+c15:	hwsync
+	blr
+
+	.balignl	0x20
+c16:	hwsync
+	blr
+
+	.balignl	0x20
+c17:	hwsync
+	blr
+
+	.balignl	0x20
+c18:	hwsync
+	blr
+
+				
+	.balignl	0x20
+c19:	hwsync
+	blr
+
+	.balignl	0x20
+c20:	hwsync
+	blr
+
+	.balignl	0x20
+c21:	hwsync
+	blr
+
+	.balignl	0x20
+c22:	hwsync
+	blr
+
+	.balignl	0x20
+c23:	hwsync
+	blr
+
+	.balignl	0x20
+c24:	hwsync
+	blr
+
+				
+	.balignl	0x20
+c25:	hwsync
+	blr
+
+	.balignl	0x20
+c26:	hwsync
+	blr
+
+	.balignl	0x20
+c27:	hwsync
+	blr
+
+	.balignl	0x20
+c28:	hwsync
+	blr
+
+				
+	.balignl	0x20
+c29:	hwsync
+	blr
+
+	.balignl	0x20
+c30:	hwsync
+	blr
+
+	.balignl	0x20
+c31:	hwsync
+	blr
+
+	.balignl	0x20
+c32:	hwsync
+	blr
+
+#endif
+	

@@ -3,8 +3,8 @@
 
 #include "types.h"
 
-#define PADDING ".balignl 0x20, 0x60000000;nop;nop;"
-
+//#define PADDING ".balignl 0x20, 0x60000000;hwsync;hwsync;nop;"
+#define PADDING ""
 /*
  * Low-level I/O routines.
  *

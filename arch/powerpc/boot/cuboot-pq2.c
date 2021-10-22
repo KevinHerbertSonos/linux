@@ -115,73 +115,6 @@ err:
 }
 #endif
 
-//#define FIXUP_PCI_ALIGNED
-#ifdef FIXUP_PCI_ALIGNED
-static void
-__attribute__ ((section (".text_fixup_pci_aligned")))
-__attribute__ ((noinline))
-fixup_pci_aligned(struct pci_range *mem, struct pci_range *mmio,
-		       struct pci_range *io, struct pci_range *mem_base,
-		       u32 **pci_regs, u8 *soc_regs)
-{
-	u32 mem_pow2, mem_mask;
-
-	out_be32((u32 *)&soc_regs[0x10884], 0x00001fff);
-	out_be32((u32 *)&soc_regs[0x10888], 0x00000ff7);
-	out_be32((u32 *)&soc_regs[0x10880], 0x00000001);
-	udelay(100*1000);
-	out_be32((u32 *)&soc_regs[0x10880], 0x00000000);
-	udelay(100*1000);
-	
-	out_be32(&pci_regs[1][0], mem_base->phys_addr | 1);
-	out_be32(&pci_regs[2][0], ~(mem->size[1] + mmio->size[1] - 1));
-
-	out_be32(&pci_regs[1][1], io->phys_addr | 1);
-	out_be32(&pci_regs[2][1], ~(io->size[1] - 1));
-
-	out_le32(&pci_regs[0][0], mem->pci_addr[1] >> 12);
-	out_le32(&pci_regs[0][2], mem->phys_addr >> 12);
-	out_le32(&pci_regs[0][4], (~(mem->size[1] - 1) >> 12) | 0xa0000000);
-
-	out_le32(&pci_regs[0][6], mmio->pci_addr[1] >> 12);
-	out_le32(&pci_regs[0][8], mmio->phys_addr >> 12);
-	out_le32(&pci_regs[0][10], (~(mmio->size[1] - 1) >> 12) | 0x80000000);
-
-	out_le32(&pci_regs[0][12], io->pci_addr[1] >> 12);
-	out_le32(&pci_regs[0][14], io->phys_addr >> 12);
-	out_le32(&pci_regs[0][16], (~(io->size[1] - 1) >> 12) | 0xc0000000);
-
-	/* Inbound translation */
-	out_le32(&pci_regs[0][58], 0);
-	out_le32(&pci_regs[0][60], 0);
-
-	mem_pow2 = 1 << (__ilog2_u32(bd.bi_memsize - 1) + 1);
-	mem_mask = ~(mem_pow2 - 1) >> 12;
-	out_le32(&pci_regs[0][62], 0xa0000000 | mem_mask);
-
-	/* If PCI is disabled, drive RST high to enable. */
-	if (!(in_le32(&pci_regs[0][32]) & 1)) {
-		 /* Tpvrh (Power valid to RST# high) 100 ms */
-		udelay(100000);
-
-		out_le32(&pci_regs[0][32], 1);
-
-		/* Trhfa (RST# high to first cfg access) 2^25 clocks */
-		udelay(1020000);
-	}
-
-	/* Enable bus master and memory access */
-	out_le32(&pci_regs[0][64], 0x80000004);
-	out_le32(&pci_regs[0][65], in_le32(&pci_regs[0][65]) | 6);
-
-	/* Park the bus on PCI, and elevate PCI's arbitration priority,
-	 * as required by section 9.6 of the user's manual.
-	 */
-	out_8(&soc_regs[0x10028], 3);
-	out_be32((u32 *)&soc_regs[0x1002c], 0x01236745);
-}
-#endif /* FIXUP_PCI_ALIGNED */
-
 /* Older u-boots don't set PCI up properly.  Update the hardware to match
  * the device tree.  The prefetch mem region and non-prefetch mem region
  * must be contiguous in the host bus.  As required by the PCI binding,
@@ -189,6 +122,7 @@ fixup_pci_aligned(struct pci_range *mem, struct pci_range *mmio,
  * 32-bit PCI is supported.  All three region types (prefetchable mem,
  * non-prefetchable mem, and I/O) must be present.
  */
+
 static void fixup_pci(void)
 {
 	struct pci_range *mem = NULL, *mmio = NULL,
@@ -197,12 +131,10 @@ static void fixup_pci(void)
 	u8 *soc_regs;
 	int i, len;
 	void *node, *parent_node;
-	u32 naddr, nsize;
-#ifndef FIXUP_PCI_ALIGNED
-	u32 mem_pow2, mem_mask;
-#endif	
+	u32 naddr, nsize, mem_pow2, mem_mask;
+#ifdef RMR	
 	u32 rmr;
-	
+#endif	
 	node = finddevice("/pci");
 	if (!node || !dt_is_compatible(node, "fsl,pq2-pci"))
 		return;
@@ -216,11 +148,19 @@ static void fixup_pci(void)
 	if (!soc_regs)
 		goto unhandled;
 
+#ifdef RMR	
 	rmr = in_be32((u32 *)&soc_regs[0x10c94]);
+#ifdef RMR_PRINTF
 	printf("RMR = %08x\n\r", rmr);
-#if 0
+#else
+	(void)rmr;
+#endif /* RMR_PRINTF */
+#ifdef RMR_ZERO
 	out_be32((u32 *)&soc_regs[0x10c94], 0x0);
-#endif	
+	printf("RMR zeroed\n\r");
+#endif /* RMR_ZERO */
+#endif /* RMR */
+	
 	dt_get_reg_format(node, &naddr, &nsize);
 	if (naddr != 3 || nsize != 2)
 		goto err;
@@ -263,20 +203,24 @@ static void fixup_pci(void)
 	else
 		goto unhandled;
 
-#ifdef FIXUP_PCI_ALIGNED
-	fixup_pci_aligned(mem, mmio, io, mem_base, pci_regs, soc_regs);
-#else /* FIXUP_PCI_ALIGNED */
-
-	out_be32((u32 *)&soc_regs[0x10900], 0x0);
-	out_be32((u32 *)&soc_regs[0x10908], 0x0);
-
-	out_be32((u32 *)&soc_regs[0x10884], 0x00001fff);
-	out_be32((u32 *)&soc_regs[0x10888], 0x00000ff7);
-	out_be32((u32 *)&soc_regs[0x10880], 0x00000001);
-	udelay(100*1000);
-	out_be32((u32 *)&soc_regs[0x10880], 0x00000000);
-	udelay(100*1000);
+#if 0
+	printf("Workaround\n\r");
+#endif
 	
+#if 0
+	out_be32((u32 *)&soc_regs[0x10900], 0x0); /* PCI CFG_ADDR RM pp 3-8 */
+	out_be32((u32 *)&soc_regs[0x10908], 0x0); /* PCI INT_ADDR RM pp 3-8 */
+#endif
+	asm volatile("nop;nop;nop;nop;nop;nop;nop;nop;nop");
+	out_be32((u32 *)&soc_regs[0x10884], 0x00001fff); /* PCI ESR RM pp 3-7 */
+	out_be32((u32 *)&soc_regs[0x10888], 0x00000ff7); /* PCI EMR RM pp 3-8 */
+#if 0
+	out_be32((u32 *)&soc_regs[0x10880], 0x00000001); /* PCI GCR RM pp 3-7 */
+	udelay(100*1000);
+	out_be32((u32 *)&soc_regs[0x10880], 0x00000000); /* Clear GCR (reset) */
+	udelay(100*1000);
+#endif
+
 	out_be32(&pci_regs[1][0], mem_base->phys_addr | 1);
 	out_be32(&pci_regs[2][0], ~(mem->size[1] + mmio->size[1] - 1));
 
@@ -323,8 +267,7 @@ static void fixup_pci(void)
 	 */
 	out_8(&soc_regs[0x10028], 3);
 	out_be32((u32 *)&soc_regs[0x1002c], 0x01236745);
-#endif /* FIXUP_PCI_ALIGNED */
-	
+
 	return;
 
 err:
@@ -338,8 +281,9 @@ unhandled:
 static void pq2_platform_fixups(void)
 {
 	void *node;
-
+	
 	dt_fixup_memory(bd.bi_memstart, bd.bi_memsize);
+
 #ifndef CONFIG_SONOS
 	dt_fixup_mac_addresses(bd.bi_enetaddr, bd.bi_enet1addr);
 #endif
