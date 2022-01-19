@@ -201,39 +201,12 @@ struct meson_host {
 	int run_pxp_flag;
 	int nwr_cnt;
 	bool ignore_desc_busy;
-	bool ignore_clk_warn;
 	bool use_intf3_tuning;
 	bool enable_hwcq;
 	int flags;
 	spinlock_t lock; /* lock for claim and bus ops */
 	bool src_clk_cfg_done;
 	bool ctrl_pwr_flag;
-	struct dentry *debugfs_root;
-	struct clk *src_clk;
-	char cmd_retune;
-	unsigned int win_start;
-	u8 *blk_test;
-	u8 *adj_win;
-	unsigned int cmd_c;
-	int cd_irq;
-	irqreturn_t (*cd_gpio_isr)(int irq, void *dev_id);
-	int is_uart;
-	int sd_uart_init;
-	int first_temp_index;
-	int cur_temp_index;
-	int compute_cmd_delay;
-	int compute_coef;
-	unsigned int save_para;
-	unsigned int src_clk_rate;
-	struct aml_tuning_para para;
-	int run_pxp_flag;
-	int nwr_cnt;
-	bool ignore_desc_busy;
-	bool use_intf3_tuning;
-	bool enable_hwcq;
-	int flags;
-	spinlock_t lock; /* lock for claim and bus ops */
-	bool src_clk_cfg_done;
 	struct dentry *debugfs_root;
 };
 
