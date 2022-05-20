@@ -21,6 +21,7 @@
 #include <linux/usbdevice_fs.h>
 #include <linux/usb/hcd.h>
 #include <linux/usb/otg.h>
+#include <linux/usb/otg-fsm.h>
 #include <linux/usb/quirks.h>
 #include <linux/kthread.h>
 #include <linux/mutex.h>
@@ -32,6 +33,7 @@
 #include <asm/byteorder.h>
 
 #include "hub.h"
+#include "otg_whitelist.h"
 
 /* if we are in debug mode, always announce new devices */
 #ifdef DEBUG
@@ -833,8 +835,12 @@ static unsigned hub_power_on(struct usb_hub *hub, bool do_delay)
 			usb_clear_port_feature(hub->hdev, port1,
 						USB_PORT_FEAT_POWER);
 
-	/* Wait at least 100 msec for power to become stable */
-	delay = max(pgood_delay, (unsigned) 100);
+	if (hub->hdev->bus->is_b_host)
+		/* Wait 50ms for root hub of b host is enough */
+		delay = max(pgood_delay, (unsigned) 50);
+	else
+		/* Wait at least 100 msec for power to become stable */
+		delay = max(pgood_delay, (unsigned) 100);
 	if (do_delay)
 		msleep(delay);
 	return delay;
@@ -1137,6 +1143,10 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 			need_debounce_delay = true;
 			usb_clear_port_feature(hub->hdev, port1,
 					USB_PORT_FEAT_C_CONNECTION);
+#ifdef CONFIG_USB_OTG
+			if (hdev->bus->is_b_host)
+				usb_bus_start_enum(hdev->bus, port1);
+#endif
 		}
 		if (portchange & USB_PORT_STAT_C_ENABLE) {
 			need_debounce_delay = true;
@@ -2151,9 +2161,6 @@ static void announce_device(struct usb_device *udev)
 static inline void announce_device(struct usb_device *udev) { }
 #endif
 
-#ifdef	CONFIG_USB_OTG
-#include "otg_whitelist.h"
-#endif
 
 /**
  * usb_enumerate_device_otg - FIXME (usbcore-internal)
@@ -2163,9 +2170,9 @@ static inline void announce_device(struct usb_device *udev) { }
  */
 static int usb_enumerate_device_otg(struct usb_device *udev)
 {
+#ifdef	CONFIG_USB_OTG
 	int err = 0;
 
-#ifdef	CONFIG_USB_OTG
 	/*
 	 * OTG-aware devices on OTG-capable root hubs may be able to use SRP,
 	 * to wake us after we've powered off VBUS; and HNP, switching roles
@@ -2176,6 +2183,15 @@ static int usb_enumerate_device_otg(struct usb_device *udev)
 			&& udev->parent == udev->bus->root_hub) {
 		struct usb_otg_descriptor	*desc = NULL;
 		struct usb_bus			*bus = udev->bus;
+		struct usb_hcd			*hcd = bus_to_hcd(bus);
+		struct otg_fsm			*fsm = NULL;
+
+		/* Clear otg fsm hnp flags firstly */
+		if (hcd->phy->otg && hcd->phy->otg->fsm) {
+			fsm = hcd->phy->otg->fsm;
+			fsm->b_hnp_enable = 0;
+			fsm->a_set_b_hnp_en = 0;
+		}
 
 		/* descriptor may appear anywhere in config */
 		if (__usb_get_extra_descriptor (udev->rawdescriptors[0],
@@ -2208,26 +2224,33 @@ static int usb_enumerate_device_otg(struct usb_device *udev)
 						err);
 					bus->b_hnp_enable = 0;
 				}
+
+				if (fsm) {
+					if (port1 == bus->otg_port)
+						fsm->b_hnp_enable = 1;
+					if (bus->b_hnp_enable)
+						fsm->a_set_b_hnp_en = 1;
+				}
+
+				/* For OTG supplement version 1.3 or earlier */
+				if ((desc->bLength < 5) &&
+						(port1 == bus->otg_port)) {
+					err = usb_control_msg(udev,
+						usb_sndctrlpipe(udev, 0),
+						USB_REQ_SET_FEATURE, 0,
+						USB_DEVICE_A_HNP_SUPPORT,
+						0, NULL, 0,
+						USB_CTRL_SET_TIMEOUT);
+					if (err < 0)
+						dev_info(&udev->dev,
+						"can't set A_HNP_SUPPORT:%d\n",
+									err);
+				}
 			}
 		}
 	}
-
-	if (!is_targeted(udev)) {
-
-		/* Maybe it can talk to us, though we can't talk to it.
-		 * (Includes HNP test device.)
-		 */
-		if (udev->bus->b_hnp_enable || udev->bus->is_b_host) {
-			err = usb_port_suspend(udev, PMSG_SUSPEND);
-			if (err < 0)
-				dev_dbg(&udev->dev, "HNP fail, %d\n", err);
-		}
-		err = -ENOTSUPP;
-		goto fail;
-	}
-fail:
 #endif
-	return err;
+	return 0;
 }
 
 
@@ -2246,6 +2269,7 @@ fail:
 static int usb_enumerate_device(struct usb_device *udev)
 {
 	int err;
+	struct usb_hcd *hcd = bus_to_hcd(udev->bus);
 
 	if (udev->config == NULL) {
 		err = usb_get_configuration(udev);
@@ -2266,6 +2290,24 @@ static int usb_enumerate_device(struct usb_device *udev)
 	err = usb_enumerate_device_otg(udev);
 	if (err < 0)
 		return err;
+
+	if (IS_ENABLED(CONFIG_USB_OTG_WHITELIST) && hcd->tpl_support &&
+		!is_targeted(udev)) {
+		/* Maybe it can talk to us, though we can't talk to it.
+		 * (Includes HNP test device.)
+		 */
+		if (IS_ENABLED(CONFIG_USB_OTG) && (udev->bus->b_hnp_enable
+			|| udev->bus->is_b_host)) {
+			err = usb_port_suspend(udev, PMSG_AUTO_SUSPEND);
+			if (err < 0)
+				dev_dbg(&udev->dev, "HNP fail, %d\n", err);
+			return -ENOTSUPP;
+		} else if (!hcd->phy->otg || !hcd->phy->otg->fsm ||
+				!hcd->phy->otg->fsm->b_hnp_enable ||
+					!hcd->phy->otg->fsm->hnp_polling) {
+			return -ENOTSUPP;
+		}
+	}
 
 	usb_detect_interface_quirks(udev);
 
@@ -4131,8 +4173,8 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 			}
 			if (r) {
 				if (r != -ENODEV)
-					dev_err(&udev->dev, "device descriptor read/64, error %d\n",
-							r);
+					dev_err(&udev->dev, "device no response, \
+						device descriptor read/64, error %d\n", r);
 				retval = -EMSGSIZE;
 				continue;
 			}
@@ -4189,9 +4231,6 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 	}
 	if (retval)
 		goto fail;
-
-	if (hcd->phy && !hdev->parent)
-		usb_phy_notify_connect(hcd->phy, udev->speed);
 
 	/*
 	 * Some superspeed devices have finished the link training process
@@ -4397,8 +4436,7 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 
 	/* Disconnect any existing devices under this port */
 	if (udev) {
-		if (hcd->phy && !hdev->parent &&
-				!(portstatus & USB_PORT_STAT_CONNECTION))
+		if (hcd->phy && !hdev->parent)
 			usb_phy_notify_disconnect(hcd->phy, udev->speed);
 		usb_disconnect(&hub->ports[port1 - 1]->child);
 	}
@@ -4545,6 +4583,10 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 				spin_lock_irq(&device_state_lock);
 				hub->ports[port1 - 1]->child = NULL;
 				spin_unlock_irq(&device_state_lock);
+			} else {
+				if (hcd->phy && !hdev->parent)
+					usb_phy_notify_connect(hcd->phy,
+							udev->speed);
 			}
 		}
 

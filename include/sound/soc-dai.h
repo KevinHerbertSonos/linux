@@ -210,6 +210,8 @@ struct snd_soc_dai_driver {
 	struct snd_soc_pcm_stream capture;
 	struct snd_soc_pcm_stream playback;
 	unsigned int symmetric_rates:1;
+	unsigned int symmetric_channels:1;
+	unsigned int symmetric_samplebits:1;
 
 	/* probe ordering - for components with runtime dependencies */
 	int probe_order;
@@ -234,6 +236,8 @@ struct snd_soc_dai {
 	unsigned int capture_active:1;		/* stream is in use */
 	unsigned int playback_active:1;		/* stream is in use */
 	unsigned int symmetric_rates:1;
+	unsigned int symmetric_channels:1;
+	unsigned int symmetric_samplebits:1;
 	struct snd_pcm_runtime *runtime;
 	unsigned int active;
 	unsigned char probed:1;
@@ -248,6 +252,8 @@ struct snd_soc_dai {
 
 	/* Symmetry data - only valid if symmetry is being enforced */
 	unsigned int rate;
+	unsigned int channels;
+	unsigned int sample_bits;
 
 	/* parent platform/codec */
 	struct snd_soc_platform *platform;
@@ -274,6 +280,13 @@ static inline void snd_soc_dai_set_dma_data(struct snd_soc_dai *dai,
 		dai->playback_dma_data = data;
 	else
 		dai->capture_dma_data = data;
+}
+
+static inline void snd_soc_dai_init_dma_data(struct snd_soc_dai *dai,
+					     void *playback, void *capture)
+{
+	dai->playback_dma_data = playback;
+	dai->capture_dma_data = capture;
 }
 
 static inline void snd_soc_dai_set_drvdata(struct snd_soc_dai *dai,

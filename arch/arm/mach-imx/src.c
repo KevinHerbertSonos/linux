@@ -1,5 +1,5 @@
 /*
- * Copyright 2011 Freescale Semiconductor, Inc.
+ * Copyright 2011, 2013-2014 Freescale Semiconductor, Inc.
  * Copyright 2011 Linaro Ltd.
  *
  * The code contained herein is licensed under the GNU General Public
@@ -18,8 +18,10 @@
 #include <linux/smp.h>
 #include <asm/smp_plat.h>
 #include "common.h"
+#include "hardware.h"
 
 #define SRC_SCR				0x000
+#define SRC_SMBR1			0x004
 #define SRC_GPR1			0x020
 #define BP_SRC_SCR_WARM_RESET_ENABLE	0
 #define BP_SRC_SCR_SW_GPU_RST		1
@@ -32,6 +34,7 @@
 
 static void __iomem *src_base;
 static DEFINE_SPINLOCK(scr_lock);
+static bool m4_is_enabled;
 
 static const int sw_reset_bits[5] = {
 	BP_SRC_SCR_SW_GPU_RST,
@@ -91,6 +94,7 @@ void imx_enable_cpu(int cpu, bool enable)
 	spin_lock(&scr_lock);
 	val = readl_relaxed(src_base + SRC_SCR);
 	val = enable ? val | mask : val & ~mask;
+	val |= 1 << (BP_SRC_SCR_CORE1_RST + cpu - 1);
 	writel_relaxed(val, src_base + SRC_SCR);
 	spin_unlock(&scr_lock);
 }
@@ -108,25 +112,20 @@ u32 imx_get_cpu_arg(int cpu)
 	return readl_relaxed(src_base + SRC_GPR1 + cpu * 8 + 4);
 }
 
+u32 imx_get_smbr1(void)
+{
+	return readl_relaxed(src_base + SRC_SMBR1);
+}
+
 void imx_set_cpu_arg(int cpu, u32 arg)
 {
 	cpu = cpu_logical_map(cpu);
 	writel_relaxed(arg, src_base + SRC_GPR1 + cpu * 8 + 4);
 }
 
-void imx_src_prepare_restart(void)
+bool imx_src_is_m4_enabled(void)
 {
-	u32 val;
-
-	/* clear enable bits of secondary cores */
-	spin_lock(&scr_lock);
-	val = readl_relaxed(src_base + SRC_SCR);
-	val &= ~(0x7 << BP_SRC_SCR_CORE1_ENABLE);
-	writel_relaxed(val, src_base + SRC_SCR);
-	spin_unlock(&scr_lock);
-
-	/* clear persistent entry register of primary core */
-	writel_relaxed(0, src_base + SRC_GPR1);
+	return m4_is_enabled;
 }
 
 void __init imx_src_init(void)
@@ -150,6 +149,12 @@ void __init imx_src_init(void)
 	 */
 	spin_lock(&scr_lock);
 	val = readl_relaxed(src_base + SRC_SCR);
+	/* bit 4 is m4c_non_sclr_rst on i.MX6SX */
+	if (cpu_is_imx6sx() && ((val &
+		(1 << BP_SRC_SCR_SW_OPEN_VG_RST)) == 0))
+		m4_is_enabled = true;
+	else
+		m4_is_enabled = false;
 	val &= ~(1 << BP_SRC_SCR_WARM_RESET_ENABLE);
 	writel_relaxed(val, src_base + SRC_SCR);
 	spin_unlock(&scr_lock);

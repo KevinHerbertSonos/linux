@@ -182,6 +182,7 @@ static struct usb_otg_descriptor otg_descriptor = {
 	 * it would not be called "OTG" ...
 	 */
 	.bmAttributes =		USB_OTG_SRP | USB_OTG_HNP,
+	.bcdOTG =		cpu_to_le16(0x0200),
 };
 
 static const struct usb_descriptor_header *otg_desc[] = {
@@ -365,7 +366,7 @@ static int __init init(void)
 {
 	return usb_composite_probe(&eth_driver);
 }
-module_init(init);
+late_initcall(init);
 
 static void __exit cleanup(void)
 {
