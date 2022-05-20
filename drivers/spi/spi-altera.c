@@ -13,7 +13,6 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/errno.h>
 #include <linux/module.h>
@@ -101,16 +100,6 @@ static void altera_spi_chipsel(struct spi_device *spi, int value)
 			break;
 		}
 	}
-}
-
-static int altera_spi_setupxfer(struct spi_device *spi, struct spi_transfer *t)
-{
-	return 0;
-}
-
-static int altera_spi_setup(struct spi_device *spi)
-{
-	return 0;
 }
 
 static inline unsigned int hw_txbyte(struct altera_spi *hw, int count)
@@ -231,16 +220,14 @@ static int altera_spi_probe(struct platform_device *pdev)
 	master->bus_num = pdev->id;
 	master->num_chipselect = 16;
 	master->mode_bits = SPI_CS_HIGH;
-	master->setup = altera_spi_setup;
 
 	hw = spi_master_get_devdata(master);
 	platform_set_drvdata(pdev, hw);
 
 	/* setup the state for the bitbang driver */
-	hw->bitbang.master = spi_master_get(master);
+	hw->bitbang.master = master;
 	if (!hw->bitbang.master)
 		return err;
-	hw->bitbang.setup_transfer = altera_spi_setupxfer;
 	hw->bitbang.chipselect = altera_spi_chipsel;
 	hw->bitbang.txrx_bufs = altera_spi_txrx;
 
@@ -285,7 +272,6 @@ static int altera_spi_probe(struct platform_device *pdev)
 exit_busy:
 	err = -EBUSY;
 exit:
-	platform_set_drvdata(pdev, NULL);
 	spi_master_put(master);
 	return err;
 }
@@ -296,7 +282,6 @@ static int altera_spi_remove(struct platform_device *dev)
 	struct spi_master *master = hw->bitbang.master;
 
 	spi_bitbang_stop(&hw->bitbang);
-	platform_set_drvdata(dev, NULL);
 	spi_master_put(master);
 	return 0;
 }

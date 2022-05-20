@@ -15,7 +15,6 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/errno.h>
 #include <linux/module.h>
@@ -306,7 +305,7 @@ static int tiny_spi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, hw);
 
 	/* setup the state for the bitbang driver */
-	hw->bitbang.master = spi_master_get(master);
+	hw->bitbang.master = master;
 	if (!hw->bitbang.master)
 		return err;
 	hw->bitbang.setup_transfer = tiny_spi_setup_transfer;
@@ -368,7 +367,6 @@ exit_gpio:
 exit_busy:
 	err = -EBUSY;
 exit:
-	platform_set_drvdata(pdev, NULL);
 	spi_master_put(master);
 	return err;
 }
@@ -382,7 +380,6 @@ static int tiny_spi_remove(struct platform_device *pdev)
 	spi_bitbang_stop(&hw->bitbang);
 	for (i = 0; i < hw->gpio_cs_count; i++)
 		gpio_free(hw->gpio_cs[i]);
-	platform_set_drvdata(pdev, NULL);
 	spi_master_put(master);
 	return 0;
 }

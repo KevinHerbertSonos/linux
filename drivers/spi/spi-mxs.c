@@ -29,7 +29,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/init.h>
 #include <linux/ioport.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
@@ -74,12 +73,6 @@ static int mxs_spi_setup_transfer(struct spi_device *dev,
 	bits_per_word = dev->bits_per_word;
 	if (t && t->bits_per_word)
 		bits_per_word = t->bits_per_word;
-
-	if (bits_per_word != 8) {
-		dev_err(&dev->dev, "%s, unsupported bits_per_word=%d\n",
-					__func__, bits_per_word);
-		return -EINVAL;
-	}
 
 	hz = dev->max_speed_hz;
 	if (t && t->speed_hz)
@@ -548,6 +541,7 @@ static int mxs_spi_probe(struct platform_device *pdev)
 
 	master->transfer_one_message = mxs_spi_transfer_one;
 	master->setup = mxs_spi_setup;
+	master->bits_per_word_mask = SPI_BPW_MASK(8);
 	master->mode_bits = SPI_CPOL | SPI_CPHA;
 	master->num_chipselect = 3;
 	master->dev.of_node = np;

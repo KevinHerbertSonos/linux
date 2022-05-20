@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2013 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright 2004-2014 Freescale Semiconductor, Inc. All Rights Reserved.
  */
 
 /*
@@ -14,6 +14,8 @@
 struct platform_device;
 struct pt_regs;
 struct clk;
+struct clk_hw;
+struct irq_data;
 enum mxc_cpu_pwr_mode;
 
 extern void mx1_map_io(void);
@@ -68,17 +70,27 @@ extern int mx27_clocks_init_dt(void);
 extern int mx31_clocks_init_dt(void);
 extern int mx51_clocks_init_dt(void);
 extern int mx53_clocks_init_dt(void);
-extern int mx6q_clocks_init(void);
 extern struct platform_device *mxc_register_gpio(char *name, int id,
 	resource_size_t iobase, resource_size_t iosize, int irq, int irq_high);
 extern void mxc_set_cpu_type(unsigned int type);
 extern void mxc_restart(char, const char *);
 extern void mxc_arch_reset_init(void __iomem *);
+extern void mxc_arch_reset_init_dt(void);
 extern int mx53_revision(void);
-extern int imx6q_revision(void);
 extern int mx53_display_revision(void);
 extern void imx_set_aips(void __iomem *);
 extern int mxc_device_init(void);
+extern void imx_set_soc_revision(unsigned int rev);
+extern unsigned int imx_get_soc_revision(void);
+extern void imx_init_revision_from_anatop(void);
+extern struct device *imx_soc_device_init(void);
+extern void imx6sx_low_power_idle(void);
+extern void imx6_enable_rbc(bool enable);
+extern unsigned int imx_gpc_is_mf_mix_off(void);
+extern int imx_update_shared_mem(struct clk_hw *hw, bool enable);
+extern bool imx_src_is_m4_enabled(void);
+extern void mcc_receive_from_mu_buffer(unsigned int index, unsigned int *data);
+extern void mcc_send_via_mu_buffer(unsigned int index, unsigned int data);
 
 enum mxc_cpu_pwr_mode {
 	WAIT_CLOCKED,		/* wfi only */
@@ -113,6 +125,7 @@ void tzic_handle_irq(struct pt_regs *);
 extern void imx_enable_cpu(int cpu, bool enable);
 extern void imx_set_cpu_jump(int cpu, void *jump_addr);
 extern u32 imx_get_cpu_arg(int cpu);
+extern u32 imx_get_smbr1(void);
 extern void imx_set_cpu_arg(int cpu, u32 arg);
 extern void v7_cpu_resume(void);
 #ifdef CONFIG_SMP
@@ -125,30 +138,48 @@ static inline void imx_scu_map_io(void) {}
 static inline void imx_smp_prepare(void) {}
 static inline void imx_scu_standby_enable(void) {}
 #endif
+extern void imx6_pm_map_io(void);
+extern void imx6_busfreq_map_io(void);
+extern void imx6_suspend(void);
 extern void imx_src_init(void);
+#ifdef CONFIG_HAVE_IMX_SRC
 extern void imx_src_prepare_restart(void);
+#else
+static inline void imx_src_prepare_restart(void) {}
+#endif
 extern void imx_gpc_init(void);
-extern void imx_gpc_pre_suspend(void);
+extern void imx_gpc_pre_suspend(bool arm_power_off);
 extern void imx_gpc_post_resume(void);
 extern void imx_gpc_mask_all(void);
+extern void imx_gpc_irq_mask(struct irq_data *d);
+extern void imx_gpc_irq_unmask(struct irq_data *d);
 extern void imx_gpc_restore_all(void);
 extern void imx_anatop_init(void);
 extern void imx_anatop_pre_suspend(void);
 extern void imx_anatop_post_resume(void);
-extern void imx_anatop_usb_chrg_detect_disable(void);
-extern u32 imx_anatop_get_digprog(void);
-extern int imx6q_set_lpm(enum mxc_cpu_pwr_mode mode);
-extern void imx6q_set_chicken_bit(void);
-
+extern void imx_anatop_pu_enable(bool enable);
+extern int imx6_set_lpm(enum mxc_cpu_pwr_mode mode);
+extern void imx6_set_cache_lpm_in_wait(bool enable);
+extern void imx6sl_set_wait_clk(bool enter);
+extern void imx6_enet_mac_init(const char *compatible);
+extern int imx_mmdc_get_ddr_type(void);
+extern unsigned int imx_gpc_is_m4_sleeping(void);
+extern void imx_gpc_hold_m4_in_sleep(void);
+extern void imx_gpc_release_m4_in_sleep(void);
+extern void imx_gpc_add_m4_wake_up_irq(u32 irq, bool enable);
+extern void mcc_enable_m4_irqs_in_gic(bool enable);
+extern void imx6sx_set_m4_highfreq(bool high_freq);
 extern void imx_cpu_die(unsigned int cpu);
 extern int imx_cpu_kill(unsigned int cpu);
 
 #ifdef CONFIG_PM
-extern void imx6q_pm_init(void);
+extern void imx6_pm_init(void);
+extern void imx6_pm_set_ccm_base(void __iomem *base);
 extern void imx51_pm_init(void);
 extern void imx53_pm_init(void);
 #else
-static inline void imx6q_pm_init(void) {}
+static inline void imx6_pm_init(void) {}
+static inline void imx6_pm_set_ccm_base(void __iomem *base) {}
 static inline void imx51_pm_init(void) {}
 static inline void imx53_pm_init(void) {}
 #endif
@@ -157,6 +188,12 @@ static inline void imx53_pm_init(void) {}
 extern int mx51_neon_fixup(void);
 #else
 static inline int mx51_neon_fixup(void) { return 0; }
+#endif
+
+#ifdef CONFIG_CACHE_L2X0
+extern void imx_init_l2cache(void);
+#else
+static inline void imx_init_l2cache(void) {}
 #endif
 
 extern struct smp_operations imx_smp_ops;
