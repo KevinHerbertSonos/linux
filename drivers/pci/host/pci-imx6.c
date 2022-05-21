@@ -38,6 +38,10 @@
 
 #include "pcie-designware.h"
 
+#ifdef CONFIG_SONOS
+#include <linux/sonos_kernel.h>
+#endif
+
 #define to_imx_pcie(x)	container_of(x, struct imx_pcie, pp)
 
 enum imx_pcie_variants {
@@ -71,6 +75,13 @@ struct imx_pcie {
 	int			dis_gpio;
 	int			power_on_gpio;
 	int			reset_gpio;
+#ifdef CONFIG_SONOS
+	int			plx_ds_reset_gpio;
+	int			clk_buf_pd_gpio;
+	int			rst_2g_gpio;
+	int			rst_5g_gpio;
+	int			clk_req_gpio;
+#endif
 	bool			gpio_active_high;
 	struct clk		*pcie_bus;
 	struct clk		*pcie_inbound_axi;
@@ -428,6 +439,19 @@ static void imx_pcie_assert_core_reset(struct imx_pcie *imx_pcie)
 	struct pcie_port *pp = &imx_pcie->pp;
 	u32 val, gpr1, gpr12;
 	int i;
+
+#ifdef CONFIG_SONOS
+	if (gpio_is_valid(imx_pcie->rst_2g_gpio)) {
+		gpio_set_value(imx_pcie->rst_2g_gpio, 0);
+	}
+
+	if (gpio_is_valid(imx_pcie->rst_5g_gpio)) {
+		gpio_set_value(imx_pcie->rst_5g_gpio, 0);
+	}
+
+	if (gpio_is_valid(imx_pcie->plx_ds_reset_gpio))
+		gpio_set_value_cansleep(imx_pcie->plx_ds_reset_gpio, 0);
+#endif
 
 	switch (imx_pcie->variant) {
 	case IMX6SX:
@@ -837,11 +861,33 @@ static int imx_pcie_deassert_core_reset(struct imx_pcie *imx_pcie)
 	if (gpio_is_valid(imx_pcie->reset_gpio)) {
 		gpio_set_value_cansleep(imx_pcie->reset_gpio,
 					imx_pcie->gpio_active_high);
+#ifdef CONFIG_SONOS
+		if (gpio_is_valid(imx_pcie->clk_buf_pd_gpio))
+			gpio_set_value_cansleep(imx_pcie->clk_buf_pd_gpio, 1);
+		mdelay(1);
+		if (gpio_is_valid(imx_pcie->clk_buf_pd_gpio))
+			gpio_set_value_cansleep(imx_pcie->clk_buf_pd_gpio, 0);
+		mdelay(1);
+#else
 		mdelay(20);
+#endif
 		gpio_set_value_cansleep(imx_pcie->reset_gpio,
 					!imx_pcie->gpio_active_high);
 		mdelay(20);
 	}
+
+#ifdef CONFIG_SONOS
+	mdelay(1);
+	if (gpio_is_valid(imx_pcie->rst_2g_gpio)) {
+		gpio_set_value(imx_pcie->rst_2g_gpio, 1);
+	}
+	if (gpio_is_valid(imx_pcie->rst_5g_gpio)) {
+		gpio_set_value(imx_pcie->rst_5g_gpio, 1);
+	}
+
+	if ( !product_is_bootleg() )
+		mdelay(1);
+#endif
 
 	if (ret == 0)
 		return ret;
@@ -1080,6 +1126,7 @@ static void imx_pcie_init_phy(struct imx_pcie *imx_pcie)
 		regmap_update_bits(imx_pcie->iomuxc_gpr, IOMUXC_GPR12,
 				BIT(5), 0);
 	} else if (imx_pcie->variant == IMX6SX) {
+#ifndef CONFIG_SONOS
 		/* Force PCIe PHY reset */
 		regmap_update_bits(imx_pcie->iomuxc_gpr, IOMUXC_GPR5,
 				IMX6SX_GPR5_PCIE_BTNRST_RESET,
@@ -1094,6 +1141,7 @@ static void imx_pcie_init_phy(struct imx_pcie *imx_pcie)
 		regmap_update_bits(imx_pcie->iomuxc_gpr, IOMUXC_GPR12,
 				   IMX6SX_GPR12_PCIE_RX_EQ_MASK,
 				   IMX6SX_GPR12_PCIE_RX_EQ_2);
+#endif
 	}
 
 	if (imx_pcie->pcie_bus_regulator != NULL) {
@@ -1104,13 +1152,46 @@ static void imx_pcie_init_phy(struct imx_pcie *imx_pcie)
 
 	if ((imx_pcie->variant == IMX6Q) || (imx_pcie->variant == IMX6QP)
 					  || (imx_pcie->variant == IMX6SX)) {
+#ifdef CONFIG_SONOS
+		if ( product_is_bootleg() ) {
+		/*
+		 * If the bootloader already enabled the link we need some special
+		 * handling to get the core back into a state where it is safe to
+		 * touch it for configuration. As there is no dedicated reset signal
+		 * wired up for MX6QDL, we need to manually force LTSSM into "detect"
+		 * state before completely disabling LTSSM, which is a prerequisite
+		 * for core configuration.
+		 * If both LTSSM_ENABLE and REF_SSP_ENABLE are active we have a strong
+		 * indication that the bootloader activated the link.
+		 */
+			u32 val, gpr1, gpr12;
+			struct pcie_port *pp = &imx_pcie->pp;
+
+			regmap_read(imx_pcie->iomuxc_gpr, IOMUXC_GPR1, &gpr1);
+			regmap_read(imx_pcie->iomuxc_gpr, IOMUXC_GPR12, &gpr12);
+
+			if ((gpr1 & IMX6Q_GPR1_PCIE_REF_CLK_EN) &&
+		    		(gpr12 & IMX6Q_GPR12_PCIE_CTL_2)) {
+			/* Out of order for the driver, a bit, but if the axi
+			 * clock isn't enabled, the following accesses will hang.
+			 */
+				clk_prepare_enable(imx_pcie->pcie_bus);
+
+				val = readl(pp->dbi_base + PCIE_PL_PFLR);
+				val &= ~PCIE_PL_PFLR_LINK_STATE_MASK;
+				val |= PCIE_PL_PFLR_FORCE_LINK;
+				writel(val, pp->dbi_base + PCIE_PL_PFLR);
+				regmap_update_bits(imx_pcie->iomuxc_gpr, IOMUXC_GPR12,
+					IMX6Q_GPR12_PCIE_CTL_2, 0 << 10);
+			}
+		} else
+#endif
 		regmap_update_bits(imx_pcie->iomuxc_gpr, IOMUXC_GPR12,
 				IMX6Q_GPR12_PCIE_CTL_2, 0 << 10);
 
 		/* configure constant input signal to the pcie ctrl and phy */
 		regmap_update_bits(imx_pcie->iomuxc_gpr, IOMUXC_GPR12,
 				IMX6Q_GPR12_LOS_LEVEL, IMX6Q_GPR12_LOS_LEVEL_9);
-
 
 		regmap_update_bits(imx_pcie->iomuxc_gpr, IOMUXC_GPR8,
 				   IMX6Q_GPR8_TX_DEEMPH_GEN1,
@@ -1198,6 +1279,7 @@ static int imx_pcie_wait_for_link(struct imx_pcie *imx_pcie)
 	return 0;
 }
 
+#ifndef CONFIG_SONOS
 static int imx_pcie_wait_for_speed_change(struct imx_pcie *imx_pcie)
 {
 	struct pcie_port *pp = &imx_pcie->pp;
@@ -1216,6 +1298,7 @@ static int imx_pcie_wait_for_speed_change(struct imx_pcie *imx_pcie)
 	dev_err(dev, "Speed change timeout\n");
 	return -EINVAL;
 }
+#endif
 
 static irqreturn_t imx_pcie_msi_handler(int irq, void *arg)
 {
@@ -1309,7 +1392,7 @@ static int imx_pcie_establish_link(struct imx_pcie *imx_pcie)
 {
 	struct pcie_port *pp = &imx_pcie->pp;
 	struct device *dev = pp->dev;
-	u32 tmp;
+	u32 tmp = 0;
 	int ret;
 
 	/*
@@ -1344,6 +1427,7 @@ static int imx_pcie_establish_link(struct imx_pcie *imx_pcie)
 		goto out;
 	}
 
+#ifndef CONFIG_SONOS
 	/*
 	 * Start Directed Speed Change so the best possible speed both link
 	 * partners support can be negotiated.
@@ -1363,9 +1447,17 @@ static int imx_pcie_establish_link(struct imx_pcie *imx_pcie)
 		dev_err(dev, "Failed to bring link up!\n");
 		goto err_reset_phy;
 	}
+#endif
 
 out:
+#ifdef CONFIG_SONOS
+	if (gpio_is_valid(imx_pcie->plx_ds_reset_gpio)) {
+		gpio_set_value_cansleep(imx_pcie->plx_ds_reset_gpio, 1);
+		msleep(100);
+	}
+#else
 	tmp = dw_pcie_readl_rc(pp, PCIE_RC_LCSR);
+#endif
 	dev_info(dev, "Link up, Gen%i\n", (tmp >> 16) & 0xf);
 	return 0;
 
@@ -2135,6 +2227,60 @@ static int imx_pcie_probe(struct platform_device *pdev)
 		if (ret)
 			dev_err(dev, "failed to enable the epdev_on regulator\n");
 	}
+
+#ifdef CONFIG_SONOS
+	/* PLX DS reset*/
+	imx_pcie->plx_ds_reset_gpio = of_get_named_gpio(node, "plx-reset-gpio", 0);
+	if (gpio_is_valid(imx_pcie->plx_ds_reset_gpio)) {
+		ret = devm_gpio_request_one(dev,
+					imx_pcie->plx_ds_reset_gpio,
+					GPIOF_OUT_INIT_LOW,
+					"PCIe reset");
+		if (ret) {
+			dev_err(dev, "unable to get reset gpio\n");
+			return ret;
+		}
+	}
+
+	/* PCI switch clk buffer power down 0 up 1 down */
+	imx_pcie->clk_buf_pd_gpio = of_get_named_gpio(node, "clk-buf-pd-gpio", 0);
+	if (gpio_is_valid(imx_pcie->clk_buf_pd_gpio)) {
+		ret = devm_gpio_request_one(dev,
+					imx_pcie->clk_buf_pd_gpio,
+					GPIOF_OUT_INIT_LOW,
+					"PCIe clock buffer pd");
+		if (ret) {
+			dev_err(dev, "unable to get clock buffer pd\n");
+			return ret;
+		}
+	}
+
+	/* 2G reset line down 0 up 1*/
+	imx_pcie->rst_2g_gpio = of_get_named_gpio(node, "rst-2g-gpio", 0);
+	if (gpio_is_valid(imx_pcie->rst_2g_gpio)) {
+		ret = devm_gpio_request_one(dev,
+					imx_pcie->rst_2g_gpio,
+					GPIOF_OUT_INIT_LOW,
+					"reset 2G");
+		if (ret) {
+			dev_err(dev, "unable to get reset 2G gpio\n");
+			return ret;
+		}
+	}
+
+	/* 5G reset line down 0 up 1*/
+	imx_pcie->rst_5g_gpio = of_get_named_gpio(node, "rst-5g-gpio", 0);
+	if (gpio_is_valid(imx_pcie->rst_5g_gpio)) {
+		ret = devm_gpio_request_one(dev,
+					imx_pcie->rst_5g_gpio,
+					GPIOF_OUT_INIT_LOW,
+					"reset 5G");
+		if (ret) {
+			dev_err(dev, "unable to get reset 5G gpio\n");
+			return ret;
+		}
+	}
+#endif
 
 	/* Fetch clocks */
 	imx_pcie->pcie_phy = devm_clk_get(dev, "pcie_phy");
