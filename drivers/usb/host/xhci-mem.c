@@ -586,7 +586,7 @@ static void xhci_free_stream_ctx(struct xhci_hcd *xhci,
 		unsigned int num_stream_ctxs,
 		struct xhci_stream_ctx *stream_ctx, dma_addr_t dma)
 {
-	struct device *dev = xhci_to_hcd(xhci)->self.controller;
+	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
 	size_t size = sizeof(struct xhci_stream_ctx) * num_stream_ctxs;
 
 	if (size > MEDIUM_STREAM_ARRAY_SIZE)
@@ -614,7 +614,7 @@ static struct xhci_stream_ctx *xhci_alloc_stream_ctx(struct xhci_hcd *xhci,
 		unsigned int num_stream_ctxs, dma_addr_t *dma,
 		gfp_t mem_flags)
 {
-	struct device *dev = xhci_to_hcd(xhci)->self.controller;
+	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
 	size_t size = sizeof(struct xhci_stream_ctx) * num_stream_ctxs;
 
 	if (size > MEDIUM_STREAM_ARRAY_SIZE)
@@ -1704,7 +1704,7 @@ void xhci_slot_copy(struct xhci_hcd *xhci,
 static int scratchpad_alloc(struct xhci_hcd *xhci, gfp_t flags)
 {
 	int i;
-	struct device *dev = xhci_to_hcd(xhci)->self.controller;
+	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
 	int num_sp = HCS_MAX_SCRATCHPAD(xhci->hcs_params2);
 
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init,
@@ -1727,36 +1727,27 @@ static int scratchpad_alloc(struct xhci_hcd *xhci, gfp_t flags)
 	if (!xhci->scratchpad->sp_buffers)
 		goto fail_sp3;
 
-	xhci->scratchpad->sp_dma_buffers =
-		kzalloc(sizeof(dma_addr_t) * num_sp, flags);
-
-	if (!xhci->scratchpad->sp_dma_buffers)
-		goto fail_sp4;
-
 	xhci->dcbaa->dev_context_ptrs[0] = cpu_to_le64(xhci->scratchpad->sp_dma);
 	for (i = 0; i < num_sp; i++) {
 		dma_addr_t dma;
 		void *buf = dma_zalloc_coherent(dev, xhci->page_size, &dma,
 				flags);
 		if (!buf)
-			goto fail_sp5;
+			goto fail_sp4;
 
 		xhci->scratchpad->sp_array[i] = dma;
 		xhci->scratchpad->sp_buffers[i] = buf;
-		xhci->scratchpad->sp_dma_buffers[i] = dma;
 	}
 
 	return 0;
 
- fail_sp5:
+ fail_sp4:
 	for (i = i - 1; i >= 0; i--) {
 		dma_free_coherent(dev, xhci->page_size,
 				    xhci->scratchpad->sp_buffers[i],
-				    xhci->scratchpad->sp_dma_buffers[i]);
+				    xhci->scratchpad->sp_array[i]);
 	}
-	kfree(xhci->scratchpad->sp_dma_buffers);
 
- fail_sp4:
 	kfree(xhci->scratchpad->sp_buffers);
 
  fail_sp3:
@@ -1776,7 +1767,7 @@ static void scratchpad_free(struct xhci_hcd *xhci)
 {
 	int num_sp;
 	int i;
-	struct device *dev = xhci_to_hcd(xhci)->self.controller;
+	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
 
 	if (!xhci->scratchpad)
 		return;
@@ -1786,9 +1777,8 @@ static void scratchpad_free(struct xhci_hcd *xhci)
 	for (i = 0; i < num_sp; i++) {
 		dma_free_coherent(dev, xhci->page_size,
 				    xhci->scratchpad->sp_buffers[i],
-				    xhci->scratchpad->sp_dma_buffers[i]);
+				    xhci->scratchpad->sp_array[i]);
 	}
-	kfree(xhci->scratchpad->sp_dma_buffers);
 	kfree(xhci->scratchpad->sp_buffers);
 	dma_free_coherent(dev, num_sp * sizeof(u64),
 			    xhci->scratchpad->sp_array,
@@ -1852,7 +1842,7 @@ void xhci_free_command(struct xhci_hcd *xhci,
 
 void xhci_mem_cleanup(struct xhci_hcd *xhci)
 {
-	struct device	*dev = xhci_to_hcd(xhci)->self.controller;
+	struct device	*dev = xhci_to_hcd(xhci)->self.sysdev;
 	int size;
 	int i, j, num_ports;
 
@@ -2216,11 +2206,7 @@ static void xhci_add_in_port(struct xhci_hcd *xhci, unsigned int num_ports,
 	if ((xhci->hci_version >= 0x100) && (major_revision != 0x03)) {
 		xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 				"xHCI 1.0: support USB2 software lpm");
-#ifdef CONFIG_AMLOGIC_USB
-		xhci->sw_lpm_support = 0;
-#else
 		xhci->sw_lpm_support = 1;
-#endif
 		if (temp & XHCI_HLC) {
 			xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 					"xHCI 1.0: support USB2 hardware lpm");
@@ -2253,14 +2239,7 @@ static void xhci_add_in_port(struct xhci_hcd *xhci, unsigned int num_ports,
 		}
 		xhci->port_array[i] = major_revision;
 		if (major_revision == 0x03)
-#ifdef CONFIG_AMLOGIC_USB
-			if (xhci->quirks & XHCI_AML_SUPER_SPEED_SUPPORT)
-				xhci->num_usb3_ports++;
-			else
-				xhci->num_usb3_ports = 0;
-#else
 			xhci->num_usb3_ports++;
-#endif
 		else
 			xhci->num_usb2_ports++;
 	}
@@ -2408,7 +2387,7 @@ static int xhci_setup_port_arrays(struct xhci_hcd *xhci, gfp_t flags)
 int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 {
 	dma_addr_t	dma;
-	struct device	*dev = xhci_to_hcd(xhci)->self.controller;
+	struct device	*dev = xhci_to_hcd(xhci)->self.sysdev;
 	unsigned int	val, val2;
 	u64		val_64;
 	struct xhci_segment	*seg;
@@ -2454,7 +2433,7 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	writel(val, &xhci->op_regs->config_reg);
 
 	/*
-	 * Section 5.4.8 - doorbell array must be
+	 * xHCI section 5.4.6 - doorbell array must be
 	 * "physically contiguous and 64-byte (cache line) aligned".
 	 */
 	xhci->dcbaa = dma_alloc_coherent(dev, sizeof(*xhci->dcbaa), &dma,
