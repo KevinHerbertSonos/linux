@@ -675,7 +675,6 @@ static void sii902x_bridge_enable(struct drm_bridge *bridge)
 {
 	struct sii902x *sii902x = bridge_to_sii902x(bridge);
 	int ret = 0;
-	int i = 0;
 
 	mutex_lock(&sii902x->mutex);
 	regmap_update_bits(sii902x->regmap, SII902X_PWR_STATE_CTRL,
@@ -683,8 +682,7 @@ static void sii902x_bridge_enable(struct drm_bridge *bridge)
 			   SII902X_AVI_POWER_STATE_D(0));
 	regmap_update_bits(sii902x->regmap, SII902X_SYS_CTRL_DATA,
 		SII902X_SYS_CTRL_PWR_DWN, 0);
-	for (i = 0; i < 2; i++)
-		ret = regmap_write(sii902x->regmap, 0x19, 0);
+	ret = regmap_write(sii902x->regmap, 0x19, 0);
 	mutex_unlock(&sii902x->mutex);
 }
 
@@ -698,7 +696,6 @@ static void sii902x_bridge_mode_set(struct drm_bridge *bridge,
 	struct hdmi_avi_infoframe frame;
 	u16 pixel_clock_10kHz = adj->clock / 10;
 	int ret;
-	int i = 0;
 
 	buf[0] = pixel_clock_10kHz & 0xff;
 	buf[1] = pixel_clock_10kHz >> 8;
@@ -714,9 +711,8 @@ static void sii902x_bridge_mode_set(struct drm_bridge *bridge,
 		SII902X_TPI_AVI_INPUT_COLORSPACE_RGB;
 
 	mutex_lock(&sii902x->mutex);
-	for (i = 0; i < 2; i++)
-		ret = regmap_bulk_write(regmap,
-			SII902X_TPI_VIDEO_DATA, buf, 10);
+	ret = regmap_bulk_write(regmap,
+		SII902X_TPI_VIDEO_DATA, buf, 10);
 	if (ret) {
 		mutex_unlock(&sii902x->mutex);
 		return;
@@ -739,10 +735,9 @@ static void sii902x_bridge_mode_set(struct drm_bridge *bridge,
 	}
 
 	/* Do not send the infoframe header, but keep the CRC field. */
-	for (i = 0; i < 2; i++)
-		ret = regmap_bulk_write(regmap, SII902X_TPI_AVI_INFOFRAME,
-					buf + HDMI_INFOFRAME_HEADER_SIZE - 1,
-					HDMI_AVI_INFOFRAME_SIZE + 1);
+	ret = regmap_bulk_write(regmap, SII902X_TPI_AVI_INFOFRAME,
+				buf + HDMI_INFOFRAME_HEADER_SIZE - 1,
+				HDMI_AVI_INFOFRAME_SIZE + 1);
 	mutex_unlock(&sii902x->mutex);
 
 	siHdmiTx_AudioSet();
