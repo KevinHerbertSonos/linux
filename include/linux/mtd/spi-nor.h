@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Freescale Semiconductor, Inc.
+ * Copyright (C) 2014-2016 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 #define SNOR_MFR_GIGADEVICE	0xc8
 #define SNOR_MFR_INTEL		CFI_MFR_INTEL
 #define SNOR_MFR_MICRON		CFI_MFR_ST /* ST Micro <--> Micron */
+#define SNOR_MFR_MICRONO	CFI_MFR_MICRON /* Original Micron */
 #define SNOR_MFR_MACRONIX	CFI_MFR_MACRONIX
 #define SNOR_MFR_SPANSION	CFI_MFR_AMD
 #define SNOR_MFR_SST		CFI_MFR_SST
@@ -31,10 +32,11 @@
 
 /*
  * Note on opcode nomenclature: some opcodes have a format like
- * SPINOR_OP_FUNCTION{4,}_x_y_z. The numbers x, y, and z stand for the number
+ * SPINOR_OP_FUNCTION{4,}_x_y_z{_D}. The numbers x, y, and z stand for the number
  * of I/O lines used for the opcode, address, and data (respectively). The
  * FUNCTION has an optional suffix of '4', to represent an opcode which
- * requires a 4-byte (32-bit) address.
+ * requires a 4-byte (32-bit) address. The suffix of 'D' stands for the
+ * DDR mode.
  */
 
 /* Flash opcodes. */
@@ -45,6 +47,9 @@
 #define SPINOR_OP_READ_FAST	0x0b	/* Read data bytes (high frequency) */
 #define SPINOR_OP_READ_1_1_2	0x3b	/* Read data bytes (Dual SPI) */
 #define SPINOR_OP_READ_1_1_4	0x6b	/* Read data bytes (Quad SPI) */
+#define SPINOR_OP_READ_1_1_4_D  0x6d    /* Read data bytes (DDR Quad SPI) */
+#define SPINOR_OP_READ_1_4_4_D  0xed    /* Read data bytes (DDR Quad SPI) */
+#define SPINOR_OP_READ_1_1_8_D	0x9d	/* Read data bytes (Octal Output SPI) */
 #define SPINOR_OP_PP		0x02	/* Page program (up to 256 bytes) */
 #define SPINOR_OP_BE_4K		0x20	/* Erase 4KiB block */
 #define SPINOR_OP_BE_4K_PMC	0xd7	/* Erase 4KiB block on PMC chips */
@@ -60,6 +65,7 @@
 #define SPINOR_OP_READ4_FAST	0x0c	/* Read data bytes (high frequency) */
 #define SPINOR_OP_READ4_1_1_2	0x3c	/* Read data bytes (Dual SPI) */
 #define SPINOR_OP_READ4_1_1_4	0x6c	/* Read data bytes (Quad SPI) */
+#define SPINOR_OP_READ4_1_4_4_D 0xee    /* Read data bytes (DDR Quad SPI) */
 #define SPINOR_OP_PP_4B		0x12	/* Page program (up to 256 bytes) */
 #define SPINOR_OP_SE_4B		0xdc	/* Sector erase (usually 64KiB) */
 
@@ -78,6 +84,8 @@
 /* Used for Micron flashes only. */
 #define SPINOR_OP_RD_EVCR      0x65    /* Read EVCR register */
 #define SPINOR_OP_WD_EVCR      0x61    /* Write EVCR register */
+#define SPINOR_OP_RD_VCR	0x85    /* Read VCR register */
+#define SPINOR_OP_WR_VCR	0x81    /* Write VCR register */
 
 /* Status Register bits. */
 #define SR_WIP			BIT(0)	/* Write in progress */
@@ -105,6 +113,9 @@ enum read_mode {
 	SPI_NOR_FAST,
 	SPI_NOR_DUAL,
 	SPI_NOR_QUAD,
+	SPI_NOR_DDR_QUAD,
+	SPI_NOR_OCTAL,
+	SPI_NOR_DDR_OCTAL,
 };
 
 #define SPI_NOR_MAX_CMD_SIZE	8
