@@ -982,7 +982,7 @@ static int mtk_dpi_probe(struct platform_device *pdev)
 		dpi->panel = of_drm_find_panel(remote_node);
 		of_node_put(remote_node);
 		if (!dpi->encoder.bridge && !dpi->panel) {
-			DRM_ERROR("Waiting for bridge or panel driver\n");
+			DRM_INFO("Waiting for bridge or panel driver\n");
 		return -EPROBE_DEFER;
 		}
 	}
