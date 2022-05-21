@@ -169,6 +169,11 @@
 #define UBI_IOCRSVOL _IOW(UBI_IOC_MAGIC, 2, struct ubi_rsvol_req)
 /* Re-name volumes */
 #define UBI_IOCRNVOL _IOW(UBI_IOC_MAGIC, 3, struct ubi_rnvol_req)
+#if defined(CONFIG_SONOS)
+/* Get volume info */
+#define UBI_IOCGETVOLINFO _IOWR(UBI_IOC_MAGIC, 4, struct ubi_get_vol_info_req)
+#endif
+
 
 /* ioctl commands of the UBI control character device */
 
@@ -441,5 +446,22 @@ struct ubi_set_vol_prop_req {
 struct ubi_blkcreate_req {
 	__s8  padding[128];
 }  __packed;
+
+#if defined(CONFIG_SONOS)
+/**
+ * struct ubi_get_vol_info_req - a data structure used to get UBI volume
+ *				information
+ * @property: property to set (%UBI_VOL_PROP_DIRECT_WRITE)
+ * @padding: reserved for future, not used, has to be zeroed
+ * @value: value to set
+ */
+struct ubi_get_vol_info_req {
+	__s32 vol_id;
+	__u32 device_available_pebs;
+	__u32 volume_reserved_pebs;
+	__u32 peb_usable_bytes;
+	__u64 volume_used_bytes;
+}  __packed;
+#endif
 
 #endif /* __UBI_USER_H__ */

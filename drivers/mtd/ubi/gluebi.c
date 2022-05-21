@@ -66,6 +66,57 @@ struct gluebi_device {
 static LIST_HEAD(gluebi_devices);
 static DEFINE_MUTEX(devices_mutex);
 
+#ifdef CONFIG_SONOS
+int ath_nand_local_read(u_char *cal_part, loff_t from, size_t len,
+	size_t *retlen, u_char *buf)
+{
+	extern struct mtd_info *__mtd_next_device(int i);
+	int i, err = 0;
+	struct mtd_info * mtd;
+	struct ubi_volume_desc *desc;
+	struct gluebi_device *gluebi;
+	int lnum, offs, bytes_left;
+
+	for ( i = 0; i < 10; i++ ) {
+		mtd = __mtd_next_device(i);
+		if ( mtd == NULL )
+			return -1;
+		if ( memcmp(mtd->name, cal_part, 3) == 0 )
+			break;
+	}
+	if ( i == 10 ) {
+		printk("ath_nand_local_read %s not found use art\n", cal_part);
+		return -1;
+	}
+
+	gluebi = container_of(mtd, struct gluebi_device, mtd);
+	desc = ubi_open_volume(gluebi->ubi_num, gluebi->vol_id, UBI_READONLY);
+	lnum = div_u64_rem(from, mtd->erasesize, &offs);
+	bytes_left = len;
+	while (bytes_left) {
+		size_t to_read = mtd->erasesize - offs;
+
+		if (to_read > bytes_left)
+			to_read = bytes_left;
+
+		err = ubi_read(desc, lnum, buf, offs, to_read);
+		if (err) {
+			break;
+		}
+
+		lnum += 1;
+		offs = 0;
+		bytes_left -= to_read;
+		buf += to_read;
+	}
+
+	ubi_close_volume(desc);
+
+	*retlen = len - bytes_left;
+	return err;
+}
+#endif
+
 /**
  * find_gluebi_nolock - find a gluebi device.
  * @ubi_num: UBI device number
