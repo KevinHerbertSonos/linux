@@ -25,7 +25,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/debugfs.h>
 
-
 #include "gpmi-nand.h"
 #include "gpmi-regs.h"
 #include "bch-regs.h"
@@ -202,8 +201,10 @@ int gpmi_init(struct gpmi_nand_data *this)
 	writel(BM_GPMI_CTRL1_DECOUPLE_CS, r->gpmi_regs + HW_GPMI_CTRL1_SET);
 
 err_out:
+#ifndef CONFIG_SONOS
 	pm_runtime_mark_last_busy(this->dev);
 	pm_runtime_put_autosuspend(this->dev);
+#endif
 
 	return ret;
 }
@@ -296,6 +297,9 @@ int bch_set_geometry(struct gpmi_nand_data *this)
 	unsigned int ecc_strength;
 	unsigned int page_size;
 	unsigned int gf_len;
+#if defined(CONFIG_SONOS)
+	unsigned int erase_threshold;
+#endif
 	int ret;
 
 	if (common_nfc_set_geometry(this))
@@ -309,11 +313,15 @@ int bch_set_geometry(struct gpmi_nand_data *this)
 	page_size     = bch_geo->page_size;
 	gf_len        = bch_geo->gf_len;
 
+#ifdef CONFIG_SONOS
+	ret = 0;
+#else
 	ret = pm_runtime_get_sync(this->dev);
 	if (ret < 0) {
 		dev_err(this->dev, "Failed to enable clock\n");
 		return ret;
 	}
+#endif
 
 	/*
 	* Due to erratum #2847 of the MX23, the BCH cannot be soft reset on this
@@ -346,6 +354,16 @@ int bch_set_geometry(struct gpmi_nand_data *this)
 		writel(BF_BCH_MODE_ERASE_THRESHOLD(ecc_strength),
 			r->bch_regs + HW_BCH_MODE);
 
+#if defined(CONFIG_SONOS)
+	/* Set the tolerance for bitflips when reading erased blocks. */
+	erase_threshold = gf_len / 2;
+	if (erase_threshold > bch_geo->ecc_strength)
+		erase_threshold = bch_geo->ecc_strength;
+
+	writel(erase_threshold & BM_BCH_MODE_ERASE_THRESHOLD_MASK,
+		r->bch_regs + HW_BCH_MODE);
+#endif
+
 	/* Set *all* chip selects to use layout 0. */
 	writel(0, r->bch_regs + HW_BCH_LAYOUTSELECT);
 
@@ -354,8 +372,10 @@ int bch_set_geometry(struct gpmi_nand_data *this)
 				r->bch_regs + HW_BCH_CTRL_SET);
 
 err_out:
+#ifndef CONFIG_SONOS
 	pm_runtime_mark_last_busy(this->dev);
 	pm_runtime_put_autosuspend(this->dev);
+#endif
 
 	return ret;
 }
@@ -809,8 +829,13 @@ static int gpmi_nfc_compute_hardware_timing(struct gpmi_nand_data *this,
 
 	/* Control arrives here when we're ready to return our results. */
 return_results:
+#ifdef CONFIG_SONOS
+	hw->data_setup_in_cycles    = 2;
+	hw->data_hold_in_cycles     = 2;
+#else
 	hw->data_setup_in_cycles    = data_setup_in_cycles;
 	hw->data_hold_in_cycles     = data_hold_in_cycles;
+#endif
 	hw->address_setup_in_cycles = address_setup_in_cycles;
 	hw->use_half_periods        = dll_use_half_periods;
 	hw->sample_delay_factor     = sample_delay_factor;
@@ -925,8 +950,13 @@ static void gpmi_compute_edo_timing(struct gpmi_nand_data *this,
 	 *     get the 40MHz or 50MHz, we have to set DS=1, DH=1.
 	 *     Set the ADDRESS_SETUP to 0 in mode 4.
 	 */
+#ifdef CONFIG_SONOS
+	hw->data_setup_in_cycles    = 2;
+	hw->data_hold_in_cycles     = 2;
+#else
 	hw->data_setup_in_cycles = 1;
 	hw->data_hold_in_cycles = 1;
+#endif
 	hw->address_setup_in_cycles = ((mode == 5) ? 1 : 0);
 
 	/* [2] for GPMI_HW_GPMI_TIMING1 */
@@ -977,6 +1007,15 @@ static int enable_edo_mode(struct gpmi_nand_data *this, int mode)
 	if (!feature)
 		return -ENOMEM;
 
+#ifdef CONFIG_SONOS
+	if ( (((mtd->devid & 0xff00 ) >> 8) == NAND_MFR_AMD ) ||
+		(((mtd->devid & 0xff00) >> 8) == NAND_MFR_WINBOND) ||
+		(((mtd->devid & 0xff00) >> 8) == NAND_MFR_MACRONIX)) {
+		dev_info(this->dev, "ONFI get/set features intentionally omitted for devid 0x%x\n",mtd->devid);
+		goto skip_spansion;
+	}
+#endif
+
 	nand->select_chip(mtd, 0);
 
 	/* [1] send SET FEATURE commond to NAND */
@@ -995,15 +1034,22 @@ static int enable_edo_mode(struct gpmi_nand_data *this, int mode)
 
 	nand->select_chip(mtd, -1);
 
+#ifndef CONFIG_SONOS
 	pm_runtime_get_sync(this->dev);
 	clk_disable_unprepare(r->clock[0]);
+#endif
 	/* [3] set the main IO clock, 100MHz for mode 5, 80MHz for mode 4. */
 	rate = (mode == 5) ? 100000000 : 80000000;
 	clk_set_rate(r->clock[0], rate);
+#ifndef CONFIG_SONOS
 	clk_prepare_enable(r->clock[0]);
 	pm_runtime_mark_last_busy(this->dev);
         pm_runtime_put_autosuspend(this->dev);	
+#endif
 
+#ifdef CONFIG_SONOS
+skip_spansion:
+#endif
 	/* Let the gpmi_begin() re-compute the timing again. */
 	this->flags &= ~GPMI_TIMING_INIT_OK;
 
@@ -1037,6 +1083,10 @@ int gpmi_extra_init(struct gpmi_nand_data *this)
 		else
 			return 0;
 
+#ifdef CONFIG_SONOS
+		mode = 4;
+#endif
+
 		return enable_edo_mode(this, mode);
 	}
 	return 0;
@@ -1051,6 +1101,7 @@ void gpmi_begin(struct gpmi_nand_data *this)
 	uint32_t       reg;
 	unsigned int   dll_wait_time_in_us;
 	struct gpmi_nfc_hardware_timing  hw;
+#ifndef CONFIG_SONOS
 	int ret;
 
 	/* Enable the clock. */
@@ -1059,6 +1110,7 @@ void gpmi_begin(struct gpmi_nand_data *this)
 		dev_err(this->dev, "Failed to enable clock\n");
 		goto err_out;
 	}
+#endif
 
 	/* Only initialize the timing once */
 	if (this->flags & GPMI_TIMING_INIT_OK)
@@ -1122,14 +1174,18 @@ void gpmi_begin(struct gpmi_nand_data *this)
 	/* Wait for the DLL to settle. */
 	udelay(dll_wait_time_in_us);
 
+#ifndef CONFIG_SONOS
 err_out:
+#endif
 	return;
 }
 
 void gpmi_end(struct gpmi_nand_data *this)
 {
+#ifndef CONFIG_SONOS
 	pm_runtime_mark_last_busy(this->dev);
 	pm_runtime_put_autosuspend(this->dev);
+#endif
 }
 
 /* Clears a BCH interrupt. */

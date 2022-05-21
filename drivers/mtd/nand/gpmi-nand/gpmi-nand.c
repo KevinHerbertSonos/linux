@@ -597,6 +597,11 @@ int common_nfc_set_geometry(struct gpmi_nand_data *this)
 		return -EINVAL;
 	}
 
+#ifdef CONFIG_SONOS
+	if ( legacy_set_geometry(this) == 0 )
+		return 0;
+#endif
+
 	if ((!(chip->ecc_strength_ds > 0 && chip->ecc_step_ds > 0) &&
 			(mtd->oobsize < 1024)) || this->legacy_bch_geometry) {
 		dev_warn(this->dev, "use legacy bch geometry\n");
@@ -866,7 +871,11 @@ static int gpmi_get_clks(struct gpmi_nand_data *this)
 		 * If you want to use the ONFI nand which is in the
 		 * Synchronous Mode, you should change the clock as you need.
 		 */
+#ifdef CONFIG_SONOS
+		clk_set_rate(r->clock[0], 99000000);
+#else
 		clk_set_rate(r->clock[0], 22000000);
+#endif
 
 	return 0;
 
@@ -1251,6 +1260,32 @@ static void block_mark_swapping(struct gpmi_nand_data *this,
 	p[1] = (p[1] & mask) | (from_oob >> (8 - bit));
 }
 
+#if defined(CONFIG_SONOS)
+/*
+ * Count the number of 0 bits in a supposed to be
+ * erased region and correct them. Return the number
+ * of bitflips or zero when the region was correct.
+ */
+static unsigned int erased_sector_bitflips(unsigned char *data,
+					unsigned int chunk,
+					struct bch_geometry *geo)
+{
+	unsigned int flip_bits = 0;
+	int i;
+	int base = geo->ecc_chunk0_size * chunk;
+
+	/* Count bitflips */
+	for (i = 0; i < geo->ecc_chunk0_size; i++)
+		flip_bits += hweight8(~data[base + i]);
+
+	/* Correct bitflips by 0xFF'ing this chunk. */
+	if (flip_bits)
+		memset(&data[base], 0xFF, geo->ecc_chunk0_size);
+
+	return flip_bits;
+}
+#endif
+
 static int gpmi_ecc_read_page(struct mtd_info *mtd, struct nand_chip *chip,
 				uint8_t *buf, int oob_required, int page)
 {
@@ -1263,6 +1298,9 @@ static int gpmi_ecc_read_page(struct mtd_info *mtd, struct nand_chip *chip,
 	dma_addr_t    auxiliary_phys;
 	unsigned int  i;
 	unsigned char *status;
+#if defined(CONFIG_SONOS)
+	unsigned int  flips;
+#endif
 	unsigned int  max_bitflips = 0;
 	int           ret;
 	int flag = 0;
@@ -1383,8 +1421,24 @@ static int gpmi_ecc_read_page(struct mtd_info *mtd, struct nand_chip *chip,
 			continue;
 		}
 
+#if defined(CONFIG_SONOS)
+		/*
+		 * The number of bitflips are either counted in software
+		 * in case of an erased chunk or otherwise reported by
+		 * the BCH block.
+		 */
+		if (*status == STATUS_ERASED)
+			flips = erased_sector_bitflips(payload_virt, i,
+							       nfc_geo);
+		else
+			flips = *status;
+
+		mtd->ecc_stats.corrected += flips;
+		max_bitflips = max_t(unsigned int, max_bitflips, flips);
+#else
 		mtd->ecc_stats.corrected += *status;
 		max_bitflips = max_t(unsigned int, max_bitflips, *status);
+#endif
 	}
 
 	/* handle the block mark swapping */
