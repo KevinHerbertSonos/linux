@@ -18,6 +18,13 @@
 
 #include "common.h"
 #include "cpuidle.h"
+
+#ifdef CONFIG_MV88E6020_PHY
+#include <asm/gpio.h>
+#include "hardware.h"
+#endif
+
+#ifndef CONFIG_SONOS
 static void mmd_write_reg(struct phy_device *dev, int device, int reg, int val)
 {
 	phy_write(dev, 0x0d, device);
@@ -74,6 +81,7 @@ static void __init imx6sx_enet_phy_init(void)
 					   ar8031_phy_fixup);
 	}
 }
+#endif
 
 static void __init imx6sx_enet_clk_sel(void)
 {
@@ -81,8 +89,14 @@ static void __init imx6sx_enet_clk_sel(void)
 
 	gpr = syscon_regmap_lookup_by_compatible("fsl,imx6sx-iomuxc-gpr");
 	if (!IS_ERR(gpr)) {
+#ifdef CONFIG_SONOS
+		/* Encore need to set ENET1 TX_CLK from external */
+		regmap_update_bits(gpr, IOMUXC_GPR1,
+				   IMX6SX_GPR1_FEC_CLOCK_MUX_SEL_MASK, 1<<13);
+#else
 		regmap_update_bits(gpr, IOMUXC_GPR1,
 				   IMX6SX_GPR1_FEC_CLOCK_MUX_SEL_MASK, 0);
+#endif
 		regmap_update_bits(gpr, IOMUXC_GPR1,
 				   IMX6SX_GPR1_FEC_CLOCK_PAD_DIR_MASK, 0);
 	} else {
@@ -92,9 +106,20 @@ static void __init imx6sx_enet_clk_sel(void)
 
 static inline void imx6sx_enet_init(void)
 {
+/* FIXME CONFIG_MV88E6020_PHY */
+#ifdef CONFIG_MV88E6020_PHY
+	int mv88e6020_reset = IMX_GPIO_NR(5, 18);
+	__gpio_set_value(mv88e6020_reset, 0);
+#endif
+#ifndef CONFIG_SONOS
 	imx6_enet_mac_init("fsl,imx6sx-fec", "fsl,imx6sx-ocotp");
 	imx6sx_enet_phy_init();
+#endif
 	imx6sx_enet_clk_sel();
+#ifdef CONFIG_MV88E6020_PHY
+	mdelay(10);
+	__gpio_set_value(mv88e6020_reset, 1);
+#endif
 }
 
 static void __init imx6sx_init_machine(void)
