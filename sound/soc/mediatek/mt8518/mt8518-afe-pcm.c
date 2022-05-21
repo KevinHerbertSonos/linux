@@ -48,6 +48,7 @@
 
 #define WAIT_OUTPUT_ACTIVE_DELAY_NS (USEC_PER_MSEC * 20)
 #define MAX_MPHONE_MULTI_PERIOD_BYTES (1024)
+#define MAX_SPDIF_OUT_PERIOD_BYTES (0x3fff << 2)
 
 #define PCM_STREAM_STR(x) \
 	(((x) == SNDRV_PCM_STREAM_CAPTURE) ? "Capture" : "Playback")
@@ -2962,6 +2963,17 @@ int mt8518_afe_fe_startup(struct snd_pcm_substream *substream,
 	else
 		snd_pcm_hw_constraint_step(substream->runtime, 0,
 				   SNDRV_PCM_HW_PARAM_BUFFER_BYTES, 16);
+
+	if (id == MT8518_AFE_MEMIF_DL7) {
+		ret = snd_pcm_hw_constraint_minmax(runtime,
+				SNDRV_PCM_HW_PARAM_PERIOD_BYTES,
+				mtk_afe_hardware->period_bytes_min,
+				MAX_SPDIF_OUT_PERIOD_BYTES);
+		if (ret < 0) {
+			dev_err(afe->dev, "hw_constraint_minmax failed\n");
+			return ret;
+		}
+	}
 
 	/* enable agent */
 	regmap_update_bits(afe->regmap, data->agent_disable_reg,
