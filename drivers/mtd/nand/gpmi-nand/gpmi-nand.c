@@ -1808,12 +1808,14 @@ static int gpmi_ecc_read_page_raw(struct mtd_info *mtd,
 	 * See the layout description for a detailed explanation on why this
 	 * is needed.
 	 */
+#if !defined(SONOS_ARCH_ATTR_SOC_IS_IMX6)
 	if (this->swap_block_mark) {
 		u8 swap = tmp_buf[0];
 
 		tmp_buf[0] = tmp_buf[mtd->writesize];
 		tmp_buf[mtd->writesize] = swap;
 	}
+#endif
 
 	/*
 	 * Copy the metadata section into the oob buffer (this section is
@@ -1822,8 +1824,12 @@ static int gpmi_ecc_read_page_raw(struct mtd_info *mtd,
 	if (oob_required)
 		memcpy(oob, tmp_buf, nfc_geo->metadata_size);
 
+#if defined(SONOS_ARCH_ATTR_SOC_IS_IMX6)
+	oob_bit_off = src_bit_off = 0;
+#else
 	oob_bit_off = nfc_geo->metadata_size * 8;
 	src_bit_off = oob_bit_off;
+#endif
 	ecc_chunk_count = nfc_geo->ecc_chunk_count;
 
 	/* if bch requires dedicate ecc for meta */
@@ -1855,8 +1861,10 @@ static int gpmi_ecc_read_page_raw(struct mtd_info *mtd,
 				       tmp_buf, src_bit_off,
 				       eccbits);
 
+#if !defined(SONOS_ARCH_ATTR_SOC_IS_IMX6)
 		src_bit_off += eccbits;
 		oob_bit_off += eccbits;
+#endif
 	}
 
 	if (oob_required) {
@@ -1913,8 +1921,12 @@ static int gpmi_ecc_write_page_raw(struct mtd_info *mtd,
 	 * beginning of the page, as imposed by the GPMI layout.
 	 */
 	memcpy(tmp_buf, oob, nfc_geo->metadata_size);
+#if defined(SONOS_ARCH_ATTR_SOC_IS_IMX6)
+	oob_bit_off = dst_bit_off = 0;
+#else
 	oob_bit_off = nfc_geo->metadata_size * 8;
 	dst_bit_off = oob_bit_off;
+#endif
 	ecc_chunk_count = nfc_geo->ecc_chunk_count;
 
 	/* if bch requires dedicate ecc for meta */
@@ -1944,8 +1956,10 @@ static int gpmi_ecc_write_page_raw(struct mtd_info *mtd,
 			gpmi_copy_bits(tmp_buf, dst_bit_off,
 				       oob, oob_bit_off, eccbits);
 
+#if !defined(SONOS_ARCH_ATTR_SOC_IS_IMX6)
 		dst_bit_off += eccbits;
 		oob_bit_off += eccbits;
+#endif
 	}
 
 	oob_byte_off = oob_bit_off / 8;
@@ -1961,12 +1975,14 @@ static int gpmi_ecc_write_page_raw(struct mtd_info *mtd,
 	 * See the layout description for a detailed explanation on why this
 	 * is needed.
 	 */
+#if !defined(SONOS_ARCH_ATTR_SOC_IS_IMX6)
 	if (this->swap_block_mark) {
 		u8 swap = tmp_buf[0];
 
 		tmp_buf[0] = tmp_buf[mtd->writesize];
 		tmp_buf[mtd->writesize] = swap;
 	}
+#endif
 
 	chip->write_buf(mtd, tmp_buf, mtd->writesize + mtd->oobsize);
 
