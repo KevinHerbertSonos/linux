@@ -1296,91 +1296,6 @@ static int mtk_pcie_register_host(struct pci_host_bridge *host)
 	return 0;
 }
 
-static void mtk_pcie_change_speed(struct pci_host_bridge *host,
-				struct mtk_pcie *pcie)
-{
-	struct pci_bus *bus = host->bus;
-	struct pci_bus *swirch_bus;
-	struct pci_dev *dev;
-	struct mtk_pcie_port *port;
-	u16 linksta = 0, plinkctl = 0, plinkctl2 = 0;
-	unsigned int pos, devfn, speed;
-
-	if (list_empty(&pcie->ports)) {
-		pr_info("PCIe link up fail, can't change speed!\n");
-		return;
-	}
-
-	port = list_first_entry(&pcie->ports, typeof(*port), list);
-	speed = port->speed;
-	pr_info("Speed is GEN%d\n", speed);
-	/* Change RC link speed */
-	devfn = PCI_DEVFN(0, 0);
-	dev = pci_get_slot(bus, devfn);
-	pos = pci_find_capability(dev, PCI_CAP_ID_EXP);
-
-	/* Set target link speed */
-	pci_read_config_word(dev, pos + PCI_EXP_LNKCTL2, &plinkctl2);
-	plinkctl2 &= ~0x3;
-	plinkctl2 |= speed;
-	pci_write_config_word(dev, pos + PCI_EXP_LNKCTL2, plinkctl2);
-
-	/* retrain link to tagert speed */
-	pci_read_config_word(dev, pos + PCI_EXP_LNKCTL, &plinkctl);
-	plinkctl |= PCI_EXP_LNKCTL_RL;
-	pci_write_config_word(dev, pos + PCI_EXP_LNKCTL, plinkctl);
-	msleep(20);
-	/* check link speed */
-	pci_read_config_word(dev, pos + PCI_EXP_LNKSTA, &linksta);
-	if ((linksta & 0x3) == speed)
-		pr_info("RC Change speed Success\n");
-	else
-		pr_info("RC Change speed fail\n");
-
-	/* Change EP1 link speed */
-	swirch_bus = pci_find_bus(bus->domain_nr, 2);
-	devfn = PCI_DEVFN(3, 0);
-	dev = pci_get_slot(swirch_bus, devfn);
-	pos = pci_find_capability(dev, PCI_CAP_ID_EXP);
-
-	pci_read_config_word(dev, pos + PCI_EXP_LNKCTL2, &plinkctl2);
-	plinkctl2 &= ~0x3;
-	plinkctl2 |= speed;
-	pci_write_config_word(dev, pos + PCI_EXP_LNKCTL2, plinkctl2);
-
-	pci_read_config_word(dev, pos + PCI_EXP_LNKCTL, &plinkctl);
-	plinkctl |= PCI_EXP_LNKCTL_RL;
-	pci_write_config_word(dev, pos + PCI_EXP_LNKCTL, plinkctl);
-
-	msleep(20);
-	pci_read_config_word(dev, pos + PCI_EXP_LNKSTA, &linksta);
-	if ((linksta & 0x3) == speed)
-		pr_info("EP1 Change speed Success\n");
-	else
-		pr_info("EP1 Change speed fail\n");
-
-	/* Change EP2 link speed */
-	devfn = PCI_DEVFN(7, 0);
-	dev = pci_get_slot(swirch_bus, devfn);
-	pos = pci_find_capability(dev, PCI_CAP_ID_EXP);
-
-	pci_read_config_word(dev, pos + PCI_EXP_LNKCTL2, &plinkctl2);
-	plinkctl2 &= ~0x3;
-	plinkctl2 |= speed;
-	pci_write_config_word(dev, pos + PCI_EXP_LNKCTL2, plinkctl2);
-
-	pci_read_config_word(dev, pos + PCI_EXP_LNKCTL, &plinkctl);
-	plinkctl |= PCI_EXP_LNKCTL_RL;
-	pci_write_config_word(dev, pos + PCI_EXP_LNKCTL, plinkctl);
-
-	msleep(20);
-	pci_read_config_word(dev, pos + PCI_EXP_LNKSTA, &linksta);
-	if ((linksta & 0x3) == speed)
-		pr_info("EP2 Change speed Success\n");
-	else
-		pr_info("EP2 Change speed fail\n");
-}
-
 static int mtk_pcie_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1410,8 +1325,6 @@ static int mtk_pcie_probe(struct platform_device *pdev)
 	err = mtk_pcie_register_host(host);
 	if (err)
 		goto put_resources;
-
-	mtk_pcie_change_speed(host, pcie);
 
 	return 0;
 
