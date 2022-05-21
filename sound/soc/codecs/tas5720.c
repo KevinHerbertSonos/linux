@@ -18,6 +18,8 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/device.h>
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
 #include <linux/i2c.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
@@ -50,6 +52,7 @@ struct tas5720_data {
 	struct regulator_bulk_data supplies[TAS5720_NUM_SUPPLIES];
 	struct delayed_work fault_check_work;
 	unsigned int last_fault;
+	int sdz_pin;
 };
 
 static int tas5720_hw_params(struct snd_pcm_substream *substream,
@@ -567,6 +570,13 @@ static int tas5720_probe(struct i2c_client *client,
 	if (ret != 0) {
 		dev_err(dev, "failed to request supplies: %d\n", ret);
 		return ret;
+	}
+
+	data->sdz_pin = of_get_named_gpio(dev->of_node,
+		"ti,tas5720-sdz-gpio", 0);
+	if (gpio_is_valid(data->sdz_pin)) {
+		devm_gpio_request_one(dev, data->sdz_pin,
+			GPIOF_OUT_INIT_HIGH, "TAS5720 SDZ");
 	}
 
 	dev_set_drvdata(dev, data);

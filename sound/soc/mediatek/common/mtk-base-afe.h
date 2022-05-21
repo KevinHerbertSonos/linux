@@ -33,8 +33,18 @@ struct mtk_base_memif_data {
 	int hd_shift;
 	int msb_reg;
 	int msb_shift;
+	int msb2_reg;
+	int msb2_shift;
 	int agent_disable_reg;
 	int agent_disable_shift;
+	int ch_config_reg;
+	int ch_config_shift;
+	int hd_align_reg;
+	int hd_align_shfit;
+	int int_odd_reg;
+	int int_odd_shift;
+	int buffer_bytes_align;
+	int buffer_end_shift;
 };
 
 struct mtk_base_irq_data {
@@ -49,6 +59,8 @@ struct mtk_base_irq_data {
 	int irq_en_shift;
 	int irq_clr_reg;
 	int irq_clr_shift;
+	int irq_status_shift;
+	int (*custom_handler)(int, void *);
 };
 
 struct device;
@@ -82,6 +94,11 @@ struct mtk_base_afe {
 			unsigned int rate);
 	int (*irq_fs)(struct snd_pcm_substream *substream,
 		      unsigned int rate);
+	int (*alloc_dmabuf)(struct snd_pcm_substream *substream,
+			    struct snd_pcm_hw_params *params,
+			    struct snd_soc_dai *dai);
+	int (*free_dmabuf)(struct snd_pcm_substream *substream,
+			   struct snd_soc_dai *dai);
 
 	void *platform_priv;
 };
@@ -93,6 +110,17 @@ struct mtk_base_afe_memif {
 	const struct mtk_base_memif_data *data;
 	int irq_usage;
 	int const_irq;
+	const struct mtk_base_memif_data *aux_data;
+	unsigned int aux_channels;
+	unsigned int aux_phys_addr;
+	int aux_buffer_size;
+	bool use_sw_irq;
+	struct hrtimer dma_hrt;
+	unsigned int byte_rate;
+	u64 period_time_ns;
+	unsigned int period_bytes;
+	unsigned int prev_hw_cur;
+	void *afe;
 };
 
 struct mtk_base_afe_irq {

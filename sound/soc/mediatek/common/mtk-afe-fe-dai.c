@@ -52,8 +52,14 @@ int mtk_afe_fe_startup(struct snd_pcm_substream *substream,
 
 	memif->substream = substream;
 
-	snd_pcm_hw_constraint_step(substream->runtime, 0,
+	if (memif->data->buffer_bytes_align > 0)
+		snd_pcm_hw_constraint_step(substream->runtime, 0,
+				   SNDRV_PCM_HW_PARAM_BUFFER_BYTES,
+				   memif->data->buffer_bytes_align);
+	else
+		snd_pcm_hw_constraint_step(substream->runtime, 0,
 				   SNDRV_PCM_HW_PARAM_BUFFER_BYTES, 16);
+
 	/* enable agent */
 	mtk_regmap_update_bits(afe->regmap, memif->data->agent_disable_reg,
 			       1 << memif->data->agent_disable_shift,
@@ -107,13 +113,18 @@ void mtk_afe_fe_shutdown(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(rtd->platform);
 	struct mtk_base_afe_memif *memif = &afe->memif[rtd->cpu_dai->id];
+	const struct mtk_base_memif_data *data = memif->data;
 	int irq_id;
+
+	if (memif->use_sw_irq)
+		hrtimer_cancel(&memif->dma_hrt);
 
 	irq_id = memif->irq_usage;
 
-	mtk_regmap_update_bits(afe->regmap, memif->data->agent_disable_reg,
-			       1 << memif->data->agent_disable_shift,
-			       1 << memif->data->agent_disable_shift);
+	mtk_regmap_update_bits(afe->regmap,
+		data->agent_disable_reg,
+		1 << data->agent_disable_shift,
+		1 << data->agent_disable_shift);
 
 	if (!memif->const_irq) {
 		mtk_dynamic_irq_release(afe, irq_id);
@@ -123,6 +134,60 @@ void mtk_afe_fe_shutdown(struct snd_pcm_substream *substream,
 }
 EXPORT_SYMBOL_GPL(mtk_afe_fe_shutdown);
 
+int mtk_afe_configure_dma(struct mtk_base_afe *afe,
+	const struct mtk_base_memif_data *data,
+	dma_addr_t dma_addr,
+	size_t dma_size,
+	unsigned int fs,
+	unsigned int channels)
+{
+	int msb_at_bit33 = 0;
+	int msb2_at_bit33 = 0;
+	unsigned int phys_addr;
+
+	msb_at_bit33 = upper_32_bits(dma_addr) ? 1 : 0;
+	msb2_at_bit33 = upper_32_bits(dma_addr + dma_size - 1) ? 1 : 0;
+
+	phys_addr = lower_32_bits(dma_addr);
+
+	/* start */
+	mtk_regmap_write(afe->regmap, data->reg_ofs_base, phys_addr);
+
+	/* end */
+	mtk_regmap_write(afe->regmap,
+			 data->reg_ofs_base + AFE_BASE_END_OFFSET,
+			 phys_addr + dma_size - 1 + data->buffer_end_shift);
+
+	/* set MSB to 33-bit */
+	mtk_regmap_update_bits(afe->regmap, data->msb_reg,
+			       1 << data->msb_shift,
+			       msb_at_bit33 << data->msb_shift);
+
+	/* set buf end MSB to 33-bit */
+	mtk_regmap_update_bits(afe->regmap, data->msb2_reg,
+			       1 << data->msb2_shift,
+			       msb2_at_bit33 << data->msb2_shift);
+
+	/* set channel */
+	if (data->mono_shift >= 0) {
+		unsigned int mono = (channels == 1) ? 1 : 0;
+
+		mtk_regmap_update_bits(afe->regmap, data->mono_reg,
+				       1 << data->mono_shift,
+				       mono << data->mono_shift);
+	}
+
+	/* set rate */
+	if (data->fs_shift >= 0) {
+		mtk_regmap_update_bits(afe->regmap, data->fs_reg,
+				       data->fs_maskbit << data->fs_shift,
+				       fs << data->fs_shift);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mtk_afe_configure_dma);
+
 int mtk_afe_fe_hw_params(struct snd_pcm_substream *substream,
 			 struct snd_pcm_hw_params *params,
 			 struct snd_soc_dai *dai)
@@ -130,51 +195,31 @@ int mtk_afe_fe_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(rtd->platform);
 	struct mtk_base_afe_memif *memif = &afe->memif[rtd->cpu_dai->id];
-	int msb_at_bit33 = 0;
+	const struct mtk_base_memif_data *data = memif->data;
+	unsigned int rate = params_rate(params);
+	unsigned int channels = params_channels(params);
 	int ret, fs = 0;
 
-	ret = snd_pcm_lib_malloc_pages(substream, params_buffer_bytes(params));
+	if (afe->alloc_dmabuf)
+		ret = afe->alloc_dmabuf(substream, params, dai);
+	else
+		ret = snd_pcm_lib_malloc_pages(substream,
+					       params_buffer_bytes(params));
+
 	if (ret < 0)
 		return ret;
 
-	msb_at_bit33 = upper_32_bits(substream->runtime->dma_addr) ? 1 : 0;
 	memif->phys_buf_addr = lower_32_bits(substream->runtime->dma_addr);
 	memif->buffer_size = substream->runtime->dma_bytes;
 
-	/* start */
-	mtk_regmap_write(afe->regmap, memif->data->reg_ofs_base,
-			 memif->phys_buf_addr);
-	/* end */
-	mtk_regmap_write(afe->regmap,
-			 memif->data->reg_ofs_base + AFE_BASE_END_OFFSET,
-			 memif->phys_buf_addr + memif->buffer_size - 1);
-
-	/* set MSB to 33-bit */
-	mtk_regmap_update_bits(afe->regmap, memif->data->msb_reg,
-			       1 << memif->data->msb_shift,
-			       msb_at_bit33 << memif->data->msb_shift);
-
-	/* set channel */
-	if (memif->data->mono_shift >= 0) {
-		unsigned int mono = (params_channels(params) == 1) ? 1 : 0;
-
-		mtk_regmap_update_bits(afe->regmap, memif->data->mono_reg,
-				       1 << memif->data->mono_shift,
-				       mono << memif->data->mono_shift);
-	}
-
-	/* set rate */
-	if (memif->data->fs_shift < 0)
-		return 0;
-
-	fs = afe->memif_fs(substream, params_rate(params));
-
+	fs = afe->memif_fs(substream, rate);
 	if (fs < 0)
 		return -EINVAL;
 
-	mtk_regmap_update_bits(afe->regmap, memif->data->fs_reg,
-			       memif->data->fs_maskbit << memif->data->fs_shift,
-			       fs << memif->data->fs_shift);
+	ret = mtk_afe_configure_dma(afe, data,
+		substream->runtime->dma_addr,
+		substream->runtime->dma_bytes,
+		fs, channels);
 
 	return 0;
 }
@@ -183,7 +228,13 @@ EXPORT_SYMBOL_GPL(mtk_afe_fe_hw_params);
 int mtk_afe_fe_hw_free(struct snd_pcm_substream *substream,
 		       struct snd_soc_dai *dai)
 {
-	return snd_pcm_lib_free_pages(substream);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(rtd->platform);
+
+	if (afe->free_dmabuf)
+		return afe->free_dmabuf(substream, dai);
+	else
+		return snd_pcm_lib_free_pages(substream);
 }
 EXPORT_SYMBOL_GPL(mtk_afe_fe_hw_free);
 
@@ -194,27 +245,30 @@ int mtk_afe_fe_trigger(struct snd_pcm_substream *substream, int cmd,
 	struct snd_pcm_runtime * const runtime = substream->runtime;
 	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(rtd->platform);
 	struct mtk_base_afe_memif *memif = &afe->memif[rtd->cpu_dai->id];
+	const struct mtk_base_memif_data *data = memif->data;
 	struct mtk_base_afe_irq *irqs = &afe->irqs[memif->irq_usage];
 	const struct mtk_base_irq_data *irq_data = irqs->irq_data;
 	unsigned int counter = runtime->period_size;
 	int fs;
 
-	dev_dbg(afe->dev, "%s %s cmd=%d\n", __func__, memif->data->name, cmd);
+	dev_dbg(afe->dev, "%s %s cmd=%d\n", __func__, data->name, cmd);
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
-		if (memif->data->enable_shift >= 0)
+		if (data->enable_shift >= 0)
 			mtk_regmap_update_bits(afe->regmap,
-					       memif->data->enable_reg,
-					       1 << memif->data->enable_shift,
-					       1 << memif->data->enable_shift);
+					       data->enable_reg,
+					       1 << data->enable_shift,
+					       1 << data->enable_shift);
 
 		/* set irq counter */
-		mtk_regmap_update_bits(afe->regmap, irq_data->irq_cnt_reg,
-				       irq_data->irq_cnt_maskbit
-				       << irq_data->irq_cnt_shift,
-				       counter << irq_data->irq_cnt_shift);
+		if (irq_data->irq_cnt_reg >= 0)
+			mtk_regmap_update_bits(afe->regmap,
+				irq_data->irq_cnt_reg,
+				irq_data->irq_cnt_maskbit
+				<< irq_data->irq_cnt_shift,
+				counter << irq_data->irq_cnt_shift);
 
 		/* set irq fs */
 		fs = afe->irq_fs(substream, runtime->rate);
@@ -222,21 +276,29 @@ int mtk_afe_fe_trigger(struct snd_pcm_substream *substream, int cmd,
 		if (fs < 0)
 			return -EINVAL;
 
-		mtk_regmap_update_bits(afe->regmap, irq_data->irq_fs_reg,
-				       irq_data->irq_fs_maskbit
-				       << irq_data->irq_fs_shift,
-				       fs << irq_data->irq_fs_shift);
+		if (irq_data->irq_fs_reg >= 0)
+			mtk_regmap_update_bits(afe->regmap,
+				irq_data->irq_fs_reg,
+				irq_data->irq_fs_maskbit
+				<< irq_data->irq_fs_shift,
+				fs << irq_data->irq_fs_shift);
 
-		/* enable interrupt */
-		mtk_regmap_update_bits(afe->regmap, irq_data->irq_en_reg,
-				       1 << irq_data->irq_en_shift,
-				       1 << irq_data->irq_en_shift);
-
+		if (!memif->use_sw_irq) {
+			/* enable interrupt */
+			mtk_regmap_update_bits(afe->regmap,
+				irq_data->irq_en_reg,
+				1 << irq_data->irq_en_shift,
+				1 << irq_data->irq_en_shift);
+		} else {
+			hrtimer_start(&memif->dma_hrt,
+				ns_to_ktime(memif->period_time_ns),
+				HRTIMER_MODE_REL);
+		}
 		return 0;
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
-		mtk_regmap_update_bits(afe->regmap, memif->data->enable_reg,
-				       1 << memif->data->enable_shift, 0);
+		mtk_regmap_update_bits(afe->regmap, data->enable_reg,
+				       1 << data->enable_shift, 0);
 		/* disable interrupt */
 		mtk_regmap_update_bits(afe->regmap, irq_data->irq_en_reg,
 				       1 << irq_data->irq_en_shift,
@@ -257,6 +319,7 @@ int mtk_afe_fe_prepare(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd  = substream->private_data;
 	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(rtd->platform);
 	struct mtk_base_afe_memif *memif = &afe->memif[rtd->cpu_dai->id];
+	const struct mtk_base_memif_data *data = memif->data;
 	int hd_audio = 0;
 
 	/* set hd mode */
@@ -270,15 +333,24 @@ int mtk_afe_fe_prepare(struct snd_pcm_substream *substream,
 	case SNDRV_PCM_FORMAT_S24_LE:
 		hd_audio = 1;
 		break;
+	case SNDRV_PCM_FORMAT_S24_3LE:
+		hd_audio = 1;
+		break;
 	default:
 		dev_err(afe->dev, "%s() error: unsupported format %d\n",
 			__func__, substream->runtime->format);
 		break;
 	}
 
-	mtk_regmap_update_bits(afe->regmap, memif->data->hd_reg,
-			       1 << memif->data->hd_shift,
-			       hd_audio << memif->data->hd_shift);
+	if (data->hd_reg >= 0)
+		mtk_regmap_update_bits(afe->regmap, data->hd_reg,
+				       1 << data->hd_shift,
+				       hd_audio << data->hd_shift);
+
+	if (memif->use_sw_irq) {
+		memif->prev_hw_cur = 0;
+		hrtimer_cancel(&memif->dma_hrt);
+	}
 
 	return 0;
 }
@@ -362,12 +434,13 @@ int mtk_afe_dai_resume(struct snd_soc_dai *dai)
 
 	afe->runtime_resume(dev);
 
-	if (!afe->reg_back_up)
+	if (afe->reg_back_up) {
+		for (i = 0; i < afe->reg_back_up_list_num; i++)
+			mtk_regmap_write(regmap,
+				afe->reg_back_up_list[i],
+				afe->reg_back_up[i]);
+	} else
 		dev_dbg(dev, "%s no reg_backup\n", __func__);
-
-	for (i = 0; i < afe->reg_back_up_list_num; i++)
-		mtk_regmap_write(regmap, afe->reg_back_up_list[i],
-				 afe->reg_back_up[i]);
 
 	afe->suspended = false;
 	return 0;

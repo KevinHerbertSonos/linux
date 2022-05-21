@@ -1,0 +1,247 @@
+/*
+ * mt8518-codec.h  --  Mediatek 8518 ALSA SoC Codec driver
+ *
+ * Copyright (c) 2018 MediaTek Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#ifndef __MT8518_CODEC_H__
+#define __MT8518_CODEC_H__
+
+#define AFE_OFFSET               (0xA0000000)
+#define APMIXED_OFFSET           (0x0B000000)
+
+#define AFE_REG(reg)             (reg | AFE_OFFSET)
+#define APMIXED_REG(reg)         (reg | APMIXED_OFFSET)
+
+/* audio_top_sys */
+#define AFE_ADDA_DL_SRC2_CON0    AFE_REG(0x2d08)
+#define AFE_ADDA_DL_SRC2_CON1    AFE_REG(0x2d0C)
+#define AFE_ADDA_TOP_CON0        AFE_REG(0x2d20)
+#define AFE_ADDA_UL_DL_CON0      AFE_REG(0x2d24)
+#define AFE_NLE_CFG                  AFE_REG(0x2d50)
+#define AFE_NLE_PRE_BUF_CFG          AFE_REG(0x2d54)
+#define AFE_NLE_PWR_DET_LCH_CFG      AFE_REG(0x2d58)
+#define AFE_NLE_ZCD_LCH_CFG          AFE_REG(0x2d5c)
+#define AFE_NLE_GAIN_ADJ_LCH_CFG0    AFE_REG(0x2d60)
+#define AFE_NLE_GAIN_IMP_LCH_CFG0    AFE_REG(0x2d6c)
+#define AFE_NLE_PWE_DET_LCH_MON      AFE_REG(0x2d78)
+#define AFE_NLE_GAIN_ADJ_LCH_MON0    AFE_REG(0x2d7c)
+#define AFE_NLE_LCH_MON0             AFE_REG(0x2d84)
+#define AFE_NLE_PWR_DET_RCH_CFG      AFE_REG(0x2d90)
+#define AFE_NLE_ZCD_RCH_CFG          AFE_REG(0x2d94)
+#define AFE_NLE_GAIN_ADJ_RCH_CFG0    AFE_REG(0x2d98)
+#define AFE_NLE_GAIN_IMP_RCH_CFG0    AFE_REG(0x2da4)
+#define AFE_NLE_PWE_DET_RCH_MON      AFE_REG(0x2db0)
+#define AFE_NLE_GAIN_ADJ_RCH_MON0    AFE_REG(0x2db4)
+#define AFE_NLE_RCH_MON0             AFE_REG(0x2dbc)
+#define ABB_AFE_CON0             AFE_REG(0x2e00)
+#define ABB_AFE_CON1             AFE_REG(0x2e04)
+#define ABB_AFE_CON2             AFE_REG(0x2e08)
+#define ABB_AFE_CON3             AFE_REG(0x2e0c)
+#define ABB_AFE_CON4             AFE_REG(0x2e10)
+#define ABB_AFE_CON5             AFE_REG(0x2e14)
+#define ABB_AFE_CON6             AFE_REG(0x2e18)
+#define ABB_AFE_CON7             AFE_REG(0x2e1c)
+#define ABB_AFE_CON8             AFE_REG(0x2e20)
+#define ABB_AFE_CON10            AFE_REG(0x2e28)
+#define ABB_AFE_CON11            AFE_REG(0x2e2c)
+#define ABB_AFE_SDM_TEST         AFE_REG(0x2e4c)
+#define AFE_AD_UL_DL_CON0        AFE_REG(0x2f00)
+#define AFE_AD_UL_SRC_CON0       AFE_REG(0x2f04)
+#define AFE_AD_UL_SRC_CON1       AFE_REG(0x2f08)
+#define ABB_ULAFE_CON0           AFE_REG(0x2f4c)
+#define ABB_ULAFE_CON1           AFE_REG(0x2f50)
+#define ABB_ULAFE_CON2           AFE_REG(0x2f54)
+#define ABB_ULAFE_CON7           AFE_REG(0x2f64)
+#define ABB_ULAFE_CON11          AFE_REG(0x2f6c)
+
+/* apmixedsys */
+#define AUDIO_CODEC_CON00        APMIXED_REG(0x0700)
+#define AUDIO_CODEC_CON01        APMIXED_REG(0x0704)
+#define AUDIO_CODEC_CON02        APMIXED_REG(0x0708)
+#define AUDIO_CODEC_CON03        APMIXED_REG(0x070c)
+#define AUDIO_CODEC_CON04        APMIXED_REG(0x0710)
+#define AADC_CODEC_CON00         APMIXED_REG(0x0800)
+#define AADC_CODEC_CON01         APMIXED_REG(0x0804)
+#define AADC_CODEC_CON02         APMIXED_REG(0x0808)
+
+
+/* AFE_ADDA_DL_SRC2_CON0 */
+#define AFE_ADDA_DL_SRC2_CON0_DL_INPUT_MODE_MASK    GENMASK(31, 28)
+#define AFE_ADDA_DL_SRC2_CON0_DL_INPUT_MODE(x)      (((x) & 0xf) << 28)
+#define AFE_ADDA_DL_SRC2_CON0_MUTE_OFF_CTRL_MASK    GENMASK(12, 11)
+#define AFE_ADDA_DL_SRC2_CON0_MUTE_OFF_CTRL_VAL     GENMASK(12, 11)
+#define AFE_ADDA_DL_SRC2_CON0_DL_VOICE_MODE_MASK    BIT(5)
+#define AFE_ADDA_DL_SRC2_CON0_DL_VOICE_MODE(x)      (((x) & 0x1) << 5)
+#define AFE_ADDA_DL_SRC2_CON0_GAIN_ON_MASK          BIT(1)
+#define AFE_ADDA_DL_SRC2_CON0_GAIN_ON_VAL           BIT(1)
+#define AFE_ADDA_DL_SRC2_CON0_DL_SRC_ON_MASK        BIT(0)
+#define AFE_ADDA_DL_SRC2_CON0_DL_SRC_ON_VAL         BIT(0)
+
+/* AFE_ADDA_DL_SRC2_CON1 */
+#define AFE_ADDA_DL_SRC2_CON1_GAIN_CTRL_MASK        GENMASK(31, 16)
+#define AFE_ADDA_DL_SRC2_CON1_GAIN_CTRL_VAL(x)      (((x) & 0xffff) << 16)
+
+/* AFE_ADDA_UL_DL_CON0 */
+#define AFE_ADDA_UL_DL_CON0_DL_ASRC_ON_MASK         BIT(1)
+#define AFE_ADDA_UL_DL_CON0_DL_ASRC_ON_VAL          BIT(1)
+
+/* AFE_NLE_CFG */
+#define AFE_NLE_CFG_SW_RSTB_MASK    BIT(31)
+#define AFE_NLE_CFG_SW_RSTB_VAL(x)  (((x) & 0x1) << 31)
+#define AFE_NLE_CFG_AFE_NLE_ON_MASK BIT(0)
+#define AFE_NLE_CFG_AFE_NLE_ON      BIT(0)
+
+/* AFE_NLE_PRE_BUF_CFG */
+#define AFE_NLE_PRE_BUF_CFG_POINT_END_MASK   GENMASK(10, 0)
+
+/* AFE_NLE_PWR_DET_LCH_CFG
+ * AFE_NLE_PWR_DET_RCH_CFG
+ */
+#define H2L_HOLD_TIME_MS                             (26)
+#define AFE_NLE_PWR_DET_CH_CFG_H2L_HOLD_TIME_MASK    GENMASK(28, 24)
+#define AFE_NLE_PWR_DET_CH_CFG_H2L_HOLD_TIME_VAL(x)  (((x) & 0x1f) << 24)
+#define AFE_NLE_PWR_DET_CH_CFG_H2L_HOLD_TIME_DEF_VAL (H2L_HOLD_TIME_MS << 24)
+#define AFE_NLE_PWR_DET_CH_CFG_NLE_VTH_MASK          GENMASK(23, 0)
+#define AFE_NLE_PWR_DET_CH_CFG_NLE_VTH_VAL(x)        (x)
+
+/* AFE_NLE_ZCD_LCH_CFG
+ * AFE_NLE_ZCD_RCH_CFG
+ */
+#define AFE_NLE_ZCD_CH_CFG_ZCD_CHECK_MODE_MASK      BIT(2)
+#define AFE_NLE_ZCD_CH_CFG_ZCD_CHECK_MODE_VAL(x)    (x << 2)
+#define AFE_NLE_ZCD_CH_CFG_ZCD_MODE_SEL_MASK        GENMASK(1, 0)
+#define AFE_NLE_ZCD_CH_CFG_ZCD_MODE_SEL_VAL(x)      (x)
+
+/* AFE_NLE_GAIN_ADJ_LCH_CFG0
+ * AFE_NLE_GAIN_ADJ_RCH_CFG0
+ */
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_GAIN_ADJ_BYPASS_ZCD_MASK   BIT(31)
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_GAIN_ADJ_BYPASS_ZCD_VAL(x) (x << 31)
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_TIME_OUT_MASK              GENMASK(26, 24)
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_TIME_OUT_VAL(x)            (((x) & 0x7) << 24)
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_HOLD_TIME_PER_JUMP_MASK    GENMASK(22, 20)
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_HOLD_TIME_PER_JUMP_VAL(x)  (((x) & 0x7) << 20)
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_GAIN_STEP_PER_JUMP_MASK    GENMASK(17, 16)
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_GAIN_STEP_PER_JUMP_VAL(x)  (((x) & 0x3) << 16)
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_GAIN_STEP_PER_ZCD_MASK     GENMASK(13, 8)
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_GAIN_STEP_PER_ZCD_VAL(x)   (x << 8)
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_AG_MIN_MASK                GENMASK(7, 4)
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_AG_MIN_VAL(x)              (((x) & 0xf) << 4)
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_AG_MAX_MASK                GENMASK(2, 0)
+#define AFE_NLE_GAIN_ADJ_CH_CFG0_AG_MAX_VAL(x)              ((x) & 0x7)
+
+/* AFE_NLE_GAIN_IMP_LCH_CFG0
+ * AFE_NLE_GAIN_IMP_RCH_CFG0
+ */
+#define AFE_NLE_GAIN_IMP_CH_CFG0_AG_DELAY_MASK              GENMASK(21, 16)
+#define AFE_NLE_GAIN_IMP_CH_CFG0_AG_DELAY_VAL(x)            (x << 16)
+
+/* ABB_AFE_CON0 */
+#define ABB_AFE_CON0_DL_EN_MASK    BIT(0)
+#define ABB_AFE_CON0_DL_EN_VAL     BIT(0)
+
+/* ABB_AFE_CON1 */
+#define ABB_AFE_CON1_DL_RATE_MASK    GENMASK(3, 0)
+#define ABB_AFE_CON1_DL_RATE(x)      (((x) & 0xf) << 0)
+
+/* ABB_AFE_CON5 */
+#define ABB_AFE_CON5_SDM_GAIN_VAL_MASK    GENMASK(5, 0)
+#define ABB_AFE_CON5_SDM_GAIN_VAL(x)      (((x) & 0x3f) << 0)
+
+/* ABB_AFE_CON11 */
+#define ABB_AFE_CON11_DC_CTRL         BIT(9)
+#define ABB_AFE_CON11_TOP_CTRL        BIT(8)
+#define ABB_AFE_CON11_DC_CTRL_STATUS  BIT(1)
+#define ABB_AFE_CON11_TOP_CTRL_STATUS BIT(0)
+
+/* AFE_AD_UL_DL_CON0 */
+#define AFE_AD_UL_DL_CON0_ADDA_AFE_ON BIT(0)
+
+/* AFE_AD_UL_SRC_CON0 */
+#define AFE_AD_UL_SRC_CON0_UL_VOICE_MODE_MASK  GENMASK(18, 17)
+#define AFE_AD_UL_SRC_CON0_UL_VOICE_MODE(x)    (((x) & 0x3) << 17)
+#define AFE_AD_UL_SRC_CON0_UL_SRC_ON_MASK      BIT(0)
+#define AFE_AD_UL_SRC_CON0_UL_SRC_ON_VAL       BIT(0)
+
+/* ABB_ULAFE_CON0 */
+#define ABB_ULAFE_CON0_AMIC_SCK_SEL_MASK    BIT(4)
+#define ABB_ULAFE_CON0_AMIC_SCK_SEL_VAL     BIT(4)
+#define ABB_ULAFE_CON0_UL_EN_MASK           BIT(1)
+#define ABB_ULAFE_CON0_UL_EN_VAL            BIT(1)
+#define ABB_ULAFE_CON0_AFE_ON_UL_MASK       BIT(0)
+#define ABB_ULAFE_CON0_AFE_ON_UL_VAL        BIT(0)
+
+/* ABB_ULAFE_CON1 */
+#define ABB_ULAFE_CON1_UL_RATE_MASK   BIT(4)
+#define ABB_ULAFE_CON1_UL_RATE(x)     (((x) & 0x1) << 4)
+
+/* ABB_ULAFE_CON11 */
+#define ABB_ULAFE_CON11_TOP_CTRL                BIT(8)
+#define ABB_ULAFE_CON11_TOP_CTRL_STATUS         BIT(8)
+#define ABB_ULAFE_CON11_ASYNC_FIFO_SRPT_MASK    GENMASK(4, 0)
+#define ABB_ULAFE_CON11_ASYNC_FIFO_SRPT_VAL(x)  (((x) & 0x1f) << 0)
+
+/* AUDIO_CODEC_CON00 */
+#define AUDIO_CODEC_CON00_AUD_LDO_EN_MASK     BIT(25)
+
+/* AUDIO_CODEC_CON01 */
+#define AUDIO_CODEC_CON01_ABUF_BIAS_MASK      GENMASK(31, 30)
+#define AUDIO_CODEC_CON01_ABUF_BIAS_VAL(x)    (x << 30)
+#define AUDIO_CODEC_CON01_VDPG_MASK           GENMASK(14, 11)
+#define AUDIO_CODEC_CON01_VDPG_VAL(x)         (x << 11)
+#define AUDIO_CODEC_CON01_CLKSQ_EN_MASK       BIT(0)
+
+/* AUDIO_CODEC_CON02 */
+#define AUDIO_CODEC_CON02_AUD_CLKDIV4_EN_MASK BIT(26)
+
+/* AUDIO_CODEC_CON03 */
+#define AUDIO_CODEC_CON03_LDO2P2_PWDB_MASK     BIT(28)
+#define AUDIO_CODEC_CON03_LDO2P2_VOSEL_MASK    GENMASK(27, 25)
+#define AUDIO_CODEC_CON03_LDO2P2_VOSEL_VAL(x)  (x << 25)
+#define AUDIO_CODEC_CON03_LDO2P8_PWDB_MASK     BIT(23)
+#define AUDIO_CODEC_CON03_LDO2P8_VOSEL_MASK    GENMASK(22, 20)
+#define AUDIO_CODEC_CON03_LDO2P8_VOSEL_VAL(x)  (x << 20)
+#define AUDIO_CODEC_CON03_LDO2P8_IQ_SEL_MASK   GENMASK(18, 17)
+#define AUDIO_CODEC_CON03_LDO2P8_IQ_SEL_VAL(x) (x << 17)
+#define AUDIO_CODEC_CON03_CK_SEL_MASK          GENMASK(16, 14)
+#define AUDIO_CODEC_CON03_CK_SEL_VAL(x)        (x << 14)
+#define AUDIO_CODEC_CON03_CK_EN                BIT(13)
+#define AUDIO_CODEC_CON03_DP_VCM_EN            BIT(12)
+#define AUDIO_CODEC_CON03_DP_RAMPGEN_EN_MASK   BIT(8)
+#define AUDIO_CODEC_CON03_DP_RAMPGEN_EN_VAL(x) (x << 8)
+#define AUDIO_CODEC_CON03_DP_RAMP_START        BIT(7)
+#define AUDIO_CODEC_CON03_DP_RAMP_ISEL_MASK    GENMASK(6, 4)
+#define AUDIO_CODEC_CON03_DP_RAMP_ISEL_VAL(x)  (x << 4)
+#define AUDIO_CODEC_CON03_DP_RAMP_CAP_RSTB     BIT(2)
+#define AUDIO_CODEC_CON03_ADEPOPX_EN           BIT(0)
+
+/* AUDIO_CODEC_CON04 */
+#define AUDIO_CODEC_CON04_DP_RAMPGEN_SEL_MASK      BIT(23)
+#define AUDIO_CODEC_CON04_DP_RAMPGEN_SEL_VAL(x)    (x << 23)
+#define AUDIO_CODEC_CON04_DP_GAMP_GAIN_SEL_MASK    GENMASK(21, 20)
+#define AUDIO_CODEC_CON04_DP_GAMP_GAIN_SEL_VAL(x)  (x << 20)
+#define AUDIO_CODEC_CON04_LCH_TIRE_LOW_MASK        BIT(8)
+#define AUDIO_CODEC_CON04_LCH_TIRE_LOW_EN          BIT(8)
+#define AUDIO_CODEC_CON04_RCH_TIRE_LOW_MASK        BIT(9)
+#define AUDIO_CODEC_CON04_RCH_TIRE_LOW_EN          BIT(9)
+#define AUDIO_CODEC_CON04_UL_CLK_GATE_EN_MASK      BIT(5)
+
+/* AADC_CODEC_CON02 */
+#define AADC_CODEC_CON02_AUDUL_LDO2P2_PWDB_MASK    BIT(30)
+#define AADC_CODEC_CON02_AUDUL_LDO2P2_VOSEL_MASK   GENMASK(29, 27)
+#define AADC_CODEC_CON02_AUDUL_LDO2P2_VOSEL_VAL(x) (x << 27)
+#define AADC_CODEC_CON02_AUDMICBIASVREF_MASK       GENMASK(20, 19)
+#define AADC_CODEC_CON02_AUDMICBIASVREF_VAL(x)     (((x) & 0x3) << 19)
+#define AADC_CODEC_CON02_AUDUL_CLK_EN_MASK         BIT(23)
+
+#endif

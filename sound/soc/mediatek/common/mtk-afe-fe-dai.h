@@ -20,6 +20,7 @@
 struct snd_soc_dai_ops;
 struct mtk_base_afe;
 struct mtk_base_afe_memif;
+struct mtk_base_memif_data;
 
 int mtk_afe_fe_startup(struct snd_pcm_substream *substream,
 		       struct snd_soc_dai *dai);
@@ -41,5 +42,12 @@ int mtk_dynamic_irq_acquire(struct mtk_base_afe *afe);
 int mtk_dynamic_irq_release(struct mtk_base_afe *afe, int irq_id);
 int mtk_afe_dai_suspend(struct snd_soc_dai *dai);
 int mtk_afe_dai_resume(struct snd_soc_dai *dai);
+
+int mtk_afe_configure_dma(struct mtk_base_afe *afe,
+	const struct mtk_base_memif_data *data,
+	dma_addr_t dma_addr,
+	size_t dma_size,
+	unsigned int fs,
+	unsigned int channels);
 
 #endif

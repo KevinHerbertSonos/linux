@@ -75,3 +75,43 @@ config SND_SOC_MT8173_RT5650_RT5676
 	  with the RT5650 and RT5676 codecs.
 	  Select Y if you have such device.
 	  If unsure select "N".
+
+config SND_SOC_MT8518
+	tristate "ASoC support for Mediatek MT8518 chip"
+	select SND_SOC_MEDIATEK
+	help
+	  This adds ASoC platform driver support for Mediatek MT8518 chip
+	  that can be used with other codecs.
+	  Select Y if you have such device.
+	  Ex: MT8158
+
+config SND_SOC_MT8518S_P2
+	tristate "ASoC Audio driver for MT8158 with internal and AK4438 codec"
+	depends on SND_SOC_MT8518
+	select SND_SOC_MT8518_CODEC
+	select SND_SOC_TLV320ADC3101
+	select SND_SOC_AK4438
+	help
+	  This adds ASoC driver for Mediatek MT8518 boards
+	  with the internal audio codec.
+	  Select Y if you have such device.
+	  If unsure select "N".
+
+config SND_SOC_MT8518S_BRAVO
+	tristate "ASoC Audio driver for Bravo board"
+	depends on SND_SOC_MT8518
+	help
+	  This adds ASoC driver for Bravo board
+	  with the TAS5720 SPK AMP.
+	  Select Y if you have such device.
+	  If unsure select "N".
+
+config MTK_SND_SOC_CODEC
+	string "String for Mediatek audio codec"
+	help
+	  Specify Mediatek audio codec.
+	  It depend on the string to choose the audio codec.
+	  Say "mt6351" if you have mt6351 audio codec.
+	  Say "mt6337" if you have mt6337 audio codec.
+	  Say "mt6355" if you have mt6355 audio codec.
+
