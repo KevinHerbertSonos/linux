@@ -418,13 +418,13 @@ static int otp_wait_busy(u32 flags)
 	return 0;
 }
 
-static ssize_t fsl_otp_show(struct kobject *kobj, struct kobj_attribute *attr,
-			    char *buf)
+/* returns 0 on success, negative errno on error */
+int fsl_otp_read_by_index(unsigned int index, u32 *pValue)
 {
-	unsigned int index = attr - otp_kattr;
 	unsigned int phy_index;
-	u32 value = 0;
 	int ret;
+
+	*pValue = 0;
 
 	if (!fsl_otp)
 		return -ENODEV;
@@ -441,15 +441,17 @@ static ssize_t fsl_otp_show(struct kobject *kobj, struct kobj_attribute *attr,
 	if (ret)
 		goto out;
 
+	/* ret is 0 here, no need to set it up */
+
 	if (fsl_otp->devtype == FSL_OTP_MX7ULP) {
-		value = __raw_readl(otp_base + HW_OCOTP_OUT_STATUS_ULP);
-		if (value & BM_OUT_STATUS_DED_ULP) {
+		*pValue = __raw_readl(otp_base + HW_OCOTP_OUT_STATUS_ULP);
+		if (*pValue & BM_OUT_STATUS_DED_ULP) {
 			__raw_writel(BM_OUT_STATUS_DED_ULP, otp_base + HW_OCOTP_OUT_STATUS_CLR_ULP);
 			goto out;
 		}
 	}
 
-	value = __raw_readl(otp_base + HW_OCOTP_CUST_N(phy_index));
+	*pValue = __raw_readl(otp_base + HW_OCOTP_CUST_N(phy_index));
 
 	if (fsl_otp->devtype == FSL_OTP_MX7ULP) {
 		__raw_writel(1, otp_base + HW_OCOTP_PDN_ULP);
@@ -458,7 +460,18 @@ static ssize_t fsl_otp_show(struct kobject *kobj, struct kobj_attribute *attr,
 out:
 	mutex_unlock(&otp_mutex);
 	clk_disable_unprepare(otp_clk);
-	return ret ? 0 : sprintf(buf, "0x%x\n", value);
+	return ret;
+}
+EXPORT_SYMBOL(fsl_otp_read_by_index);
+
+static ssize_t fsl_otp_show(struct kobject *kobj, struct kobj_attribute *attr,
+			    char *buf)
+{
+	u32 value = 0;
+
+	return fsl_otp_read_by_index(attr - otp_kattr, &value)
+		? 0
+		: sprintf(buf, "0x%x\n", value);
 }
 
 static int imx6_otp_write_bits(int addr, u32 data, u32 magic)
