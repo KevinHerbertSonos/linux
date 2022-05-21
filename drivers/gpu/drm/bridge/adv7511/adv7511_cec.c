@@ -311,7 +311,7 @@ int adv7511_cec_init(struct device *dev, struct adv7511 *adv7511)
 
 	adv7511->cec_adap = cec_allocate_adapter(&adv7511_cec_adap_ops,
 		adv7511, dev_name(dev),
-		(CEC_CAP_LOG_ADDRS | CEC_CAP_TRANSMIT | CEC_CAP_PASSTHROUGH | CEC_CAP_RC),
+		(CEC_CAP_LOG_ADDRS | CEC_CAP_PHYS_ADDR | CEC_CAP_TRANSMIT | CEC_CAP_PASSTHROUGH | CEC_CAP_RC),
 		ADV7511_MAX_ADDRS);
 	if (IS_ERR(adv7511->cec_adap)) {
 		ret = PTR_ERR(adv7511->cec_adap);
