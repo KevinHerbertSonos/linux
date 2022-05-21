@@ -321,6 +321,19 @@ static s32 ds1307_native_smbus_read_block_data(const struct i2c_client *client,
 
 /*----------------------------------------------------------------------*/
 
+/* Calculate day of the week from rtc_time and set it */
+static void set_wday(struct rtc_time *tm){
+	time64_t time;
+	int days;
+
+	time = rtc_tm_to_time64(tm);
+	days = div_s64(time, 86400);
+	/* day of the week, 1970-01-01 was a Thursday */
+	tm->tm_wday = (days + 4) % 7;
+}
+
+/*----------------------------------------------------------------------*/
+
 /*
  * The ds1337 and ds1339 both have two alarms, but we only use the first
  * one (with a "seconds" field).  For ds1337 we expect nINTA is our alarm
@@ -419,6 +432,7 @@ static int ds1307_set_time(struct device *dev, struct rtc_time *t)
 	int		tmp;
 	u8		*buf = ds1307->regs;
 
+	set_wday(t);
 	dev_dbg(dev, "%s secs=%d, mins=%d, "
 		"hours=%d, mday=%d, mon=%d, year=%d, wday=%d\n",
 		"write", t->tm_sec, t->tm_min,
@@ -740,6 +754,7 @@ static int mcp794xx_set_alarm(struct device *dev, struct rtc_wkalrm *t)
 	if (!test_bit(HAS_ALARM, &ds1307->flags))
 		return -EINVAL;
 
+	set_wday(&t->time);
 	dev_dbg(dev, "%s, sec=%d min=%d hour=%d wday=%d mday=%d mon=%d "
 		"enabled=%d pending=%d\n", __func__,
 		t->time.tm_sec, t->time.tm_min, t->time.tm_hour,
