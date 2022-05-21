@@ -9717,9 +9717,13 @@ static void spdif_in_info_update(struct mtk_base_afe *afe,
 static int spdif_in_detect_irq_handler(int irq, void *dev_id)
 {
 	struct mtk_base_afe *afe = dev_id;
+	struct mt8518_afe_private *priv = afe->platform_priv;
 	unsigned int debug1, debug2, debug3, int_ext2, data_type_chg;
 	unsigned int err;
 	unsigned int rate;
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->spdifin_ctrl_lock, flags);
 
 	regmap_read(afe->regmap, AFE_SPDIFIN_INT_EXT2, &int_ext2);
 	regmap_read(afe->regmap, AFE_SPDIFIN_DEBUG1, &debug1);
@@ -9731,8 +9735,8 @@ static int spdif_in_detect_irq_handler(int irq, void *dev_id)
 	      (debug2 & AFE_SPDIFIN_DEBUG2_FIFO_ERR) |
 	      (debug3 & AFE_SPDIFIN_DEBUG3_ALL_ERR);
 
-	data_type_chg = debug3 &
-		AFE_SPDIFIN_DEBUG3_CHSTS_PREAMPHASIS_STS;
+	data_type_chg = (debug3 &
+		AFE_SPDIFIN_DEBUG3_CHSTS_PREAMPHASIS_STS) >> 7;
 
 	dev_dbg(afe->dev,
 		"%s int_ext2(0x%x) debug(0x%x,0x%x,0x%x) err(0x%x)\n",
@@ -9745,7 +9749,7 @@ static int spdif_in_detect_irq_handler(int irq, void *dev_id)
 		rate = 0;
 		spdif_in_info_update(afe, rate, data_type_chg);
 
-		return 0;
+		goto spdif_in_detect_irq_end;
 	}
 
 	rate = get_spdif_in_sample_rate(afe);
@@ -9753,7 +9757,7 @@ static int spdif_in_detect_irq_handler(int irq, void *dev_id)
 		spdif_in_reset_and_clear_error(afe, AFE_SPDIFIN_EC_CLEAR_ALL);
 		spdif_in_info_update(afe, rate, data_type_chg);
 
-		return 0;
+		goto spdif_in_detect_irq_end;
 	}
 
 	spdif_in_info_update(afe, rate, data_type_chg);
@@ -9762,6 +9766,9 @@ static int spdif_in_detect_irq_handler(int irq, void *dev_id)
 	regmap_write(afe->regmap,
 		     AFE_SPDIFIN_EC,
 		     AFE_SPDIFIN_EC_CLEAR_ALL);
+
+spdif_in_detect_irq_end:
+	spin_unlock_irqrestore(&priv->spdifin_ctrl_lock, flags);
 
 	return 0;
 }
@@ -10544,6 +10551,7 @@ static void mt8518_afe_init_private(struct mt8518_afe_private *priv)
 	size_t i;
 
 	spin_lock_init(&priv->afe_ctrl_lock);
+	spin_lock_init(&priv->spdifin_ctrl_lock);
 
 	mutex_init(&priv->block_dpidle_mutex);
 
