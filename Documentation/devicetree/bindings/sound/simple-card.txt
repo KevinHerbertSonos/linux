@@ -86,6 +86,8 @@ Optional CPU/CODEC subnodes properties:
 					  in dai startup() and disabled with
 					  clk_disable_unprepare() in dai
 					  shutdown().
+- clock-id				: clk_id integer provided when calling
+					  snd_soc_dai_set_sysclk().  0 if not specified.
 
 Example 1 - single DAI link:
 
