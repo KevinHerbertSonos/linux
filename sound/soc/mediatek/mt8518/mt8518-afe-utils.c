@@ -518,6 +518,11 @@ static int mt8518_afe_enable_spdif_in(struct mtk_base_afe *afe)
 			   SPDIFIN_594MODE_EN);
 
 	regmap_update_bits(afe->regmap,
+			   AFE_SPDIFIN_INT_EXT2,
+			   SPDIFIN_LRCK_CHG_INT_EN_MASK,
+			   SPDIFIN_LRCK_CHG_INT_EN);
+
+	regmap_update_bits(afe->regmap,
 			   AFE_SPDIFIN_CFG1,
 			   AFE_SPDIFIN_CFG1_SET_MASK,
 			   AFE_SPDIFIN_CFG1_INT_BITS |
