@@ -90,6 +90,7 @@ struct mtk_dpi {
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pins_gpio;
 	struct pinctrl_state *pins_dpi;
+	int refcount;
 };
 
 static inline struct mtk_dpi *mtk_dpi_from_encoder(struct drm_encoder *e)
@@ -105,11 +106,6 @@ static inline struct mtk_dpi *mtk_dpi_from_connector(struct drm_connector *c)
 enum mtk_dpi_polarity {
 	MTK_DPI_POLARITY_RISING,
 	MTK_DPI_POLARITY_FALLING,
-};
-
-enum mtk_dpi_power_ctl {
-	DPI_POWER_START = BIT(0),
-	DPI_POWER_ENABLE = BIT(1),
 };
 
 struct mtk_dpi_polarities {
@@ -399,43 +395,32 @@ static void mtk_dpi_config_color_format(struct mtk_dpi *dpi,
 	}
 }
 
-static void mtk_dpi_power_off(struct mtk_dpi *dpi, enum mtk_dpi_power_ctl pctl)
+static void mtk_dpi_power_off(struct mtk_dpi *dpi)
 {
 	printk(KERN_DEBUG "y-t dpi power off.\n");
-	dpi->power_ctl &= ~pctl;
 
-	if ((dpi->power_ctl & DPI_POWER_START) ||
-	    (dpi->power_ctl & DPI_POWER_ENABLE))
+	if (WARN_ON(dpi->refcount ==0 ))
 		return;
 
-	if (!dpi->power_sta)
+	if (--dpi->refcount != 0)
 		return;
-
-	DRM_DEBUG_DRIVER("pctl %d\n", pctl);
 
 	mtk_dpi_disable(dpi);
 	clk_disable_unprepare(dpi->pixel_clk);
 	clk_disable_unprepare(dpi->engine_clk);
 	clk_disable_unprepare(dpi->mm_disp_dpi);
 	clk_disable_unprepare(dpi->mm_dpi);
-	dpi->power_sta = false;
 }
 
-static int mtk_dpi_power_on(struct mtk_dpi *dpi, enum mtk_dpi_power_ctl pctl)
+static int mtk_dpi_power_on(struct mtk_dpi *dpi)
 {
 	int ret;
 
 	printk(KERN_DEBUG "y-t dpi power on.\n");
-	dpi->power_ctl |= pctl;
 
-	if (!(dpi->power_ctl & DPI_POWER_START) &&
-	    !(dpi->power_ctl & DPI_POWER_ENABLE))
+	if (++dpi->refcount != 1)
 		return 0;
 
-	if (dpi->power_sta)
-		return 0;
-
-	DRM_DEBUG_DRIVER("pctl %d\n", pctl);
 	if (dpi->mm_dpi) {
 		ret = clk_prepare_enable(dpi->mm_dpi);
 		if (ret) {
@@ -455,7 +440,7 @@ static int mtk_dpi_power_on(struct mtk_dpi *dpi, enum mtk_dpi_power_ctl pctl)
 	ret = clk_prepare_enable(dpi->engine_clk);
 	if (ret) {
 		dev_err(dpi->dev, "Failed to enable engine clock: %d\n", ret);
-		goto err_eng;
+		goto err_refcount;
 	}
 
 	ret = clk_prepare_enable(dpi->pixel_clk);
@@ -465,13 +450,12 @@ static int mtk_dpi_power_on(struct mtk_dpi *dpi, enum mtk_dpi_power_ctl pctl)
 	}
 
 	mtk_dpi_enable(dpi);
-	dpi->power_sta = true;
 	return 0;
 
 err_pixel:
 	clk_disable_unprepare(dpi->engine_clk);
-err_eng:
-	dpi->power_ctl &= ~pctl;
+err_refcount:
+	dpi->refcount--;
 	return ret;
 }
 
@@ -625,7 +609,7 @@ static void mtk_dpi_encoder_disable(struct drm_encoder *encoder)
 	if (dpi->pinctrl && dpi->pins_gpio)                      
 		pinctrl_select_state(dpi->pinctrl, dpi->pins_gpio);
 
-	mtk_dpi_power_off(dpi, DPI_POWER_ENABLE);
+	mtk_dpi_power_off(dpi);
 }
 
 static void mtk_dpi_encoder_enable(struct drm_encoder *encoder)
@@ -638,7 +622,7 @@ static void mtk_dpi_encoder_enable(struct drm_encoder *encoder)
 		DRM_ERROR("Failed to enable power domain: %d %s\n", ret,
 		dev_name(dpi->dev));
 
-	mtk_dpi_power_on(dpi, DPI_POWER_ENABLE);
+	mtk_dpi_power_on(dpi);
 	mtk_dpi_set_display_mode(dpi, &dpi->mode);
 
 	if (dpi->pinctrl && dpi->pins_dpi)                    
@@ -646,7 +630,7 @@ static void mtk_dpi_encoder_enable(struct drm_encoder *encoder)
 
 	if (dpi->panel) {
 		if (drm_panel_enable(dpi->panel) < 0) {
-			mtk_dpi_power_off(dpi, DPI_POWER_ENABLE);
+			mtk_dpi_power_off(dpi);
 			DRM_ERROR("failed to enable the panel\n");
 		}
 	}
@@ -747,14 +731,14 @@ static void mtk_dpi_prepare(struct mtk_ddp_comp *comp)
 {
 	struct mtk_dpi *dpi = container_of(comp, struct mtk_dpi, ddp_comp);
 
-	mtk_dpi_power_on(dpi, DPI_POWER_START);
+	mtk_dpi_power_on(dpi);
 }
 
 static void mtk_dpi_unprepare(struct mtk_ddp_comp *comp)
 {
 	struct mtk_dpi *dpi = container_of(comp, struct mtk_dpi, ddp_comp);
 
-	mtk_dpi_power_off(dpi, DPI_POWER_START);
+	mtk_dpi_power_off(dpi);
 }
 
 static const struct mtk_ddp_comp_funcs mtk_dpi_funcs = {
