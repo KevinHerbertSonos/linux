@@ -1256,39 +1256,42 @@ configured:
 	adap->is_configuring = false;
 	cec_post_state_event(adap);
 
-	/*
-	 * Now post the Report Features and Report Physical Address broadcast
-	 * messages. Note that these are non-blocking transmits, meaning that
-	 * they are just queued up and once adap->lock is unlocked the main
-	 * thread will kick in and start transmitting these.
-	 *
-	 * If after this function is done (but before one or more of these
-	 * messages are actually transmitted) the CEC adapter is unconfigured,
-	 * then any remaining messages will be dropped by the main thread.
-	 */
-	for (i = 0; i < las->num_log_addrs; i++) {
-		struct cec_msg msg = {};
+	/* Do not auto-broadcast if in passthrough */
+	if (!adap->passthrough) {
+		/*
+		 * Now post the Report Features and Report Physical Address broadcast
+		 * messages. Note that these are non-blocking transmits, meaning that
+		 * they are just queued up and once adap->lock is unlocked the main
+		 * thread will kick in and start transmitting these.
+		 *
+		 * If after this function is done (but before one or more of these
+		 * messages are actually transmitted) the CEC adapter is unconfigured,
+		 * then any remaining messages will be dropped by the main thread.
+		 */
+		for (i = 0; i < las->num_log_addrs; i++) {
+			struct cec_msg msg = {};
 
-		if (las->log_addr[i] == CEC_LOG_ADDR_INVALID ||
-		    (las->flags & CEC_LOG_ADDRS_FL_CDC_ONLY))
-			continue;
+			if (las->log_addr[i] == CEC_LOG_ADDR_INVALID ||
+			    (las->flags & CEC_LOG_ADDRS_FL_CDC_ONLY))
+				continue;
 
-		msg.msg[0] = (las->log_addr[i] << 4) | 0x0f;
+			msg.msg[0] = (las->log_addr[i] << 4) | 0x0f;
 
-		/* Report Features must come first according to CEC 2.0 */
-		if (las->log_addr[i] != CEC_LOG_ADDR_UNREGISTERED &&
-		    adap->log_addrs.cec_version >= CEC_OP_CEC_VERSION_2_0) {
-			cec_fill_msg_report_features(adap, &msg, i);
+			/* Report Features must come first according to CEC 2.0 */
+			if (las->log_addr[i] != CEC_LOG_ADDR_UNREGISTERED &&
+			    adap->log_addrs.cec_version >= CEC_OP_CEC_VERSION_2_0) {
+				cec_fill_msg_report_features(adap, &msg, i);
+				cec_transmit_msg_fh(adap, &msg, NULL, false);
+			}
+
+			/* Report Physical Address */
+			cec_msg_report_physical_addr(&msg, adap->phys_addr,
+						     las->primary_device_type[i]);
+			dprintk(2, "config: la %d pa %x.%x.%x.%x\n",
+				las->log_addr[i],
+				cec_phys_addr_exp(adap->phys_addr));
 			cec_transmit_msg_fh(adap, &msg, NULL, false);
 		}
-
-		/* Report Physical Address */
-		cec_msg_report_physical_addr(&msg, adap->phys_addr,
-					     las->primary_device_type[i]);
-		dprintk(2, "config: la %d pa %x.%x.%x.%x\n",
-			las->log_addr[i],
-			cec_phys_addr_exp(adap->phys_addr));
-		cec_transmit_msg_fh(adap, &msg, NULL, false);
 	}
 	adap->kthread_config = NULL;
 	complete(&adap->config_completion);
