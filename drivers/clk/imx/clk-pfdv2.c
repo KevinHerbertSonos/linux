@@ -92,7 +92,9 @@ static unsigned long clk_pfd_recalc_rate(struct clk_hw *hw,
 	if (!frac) {
 		pr_debug("clk_pfdv2: %s invalid pfd frac value 0\n",
 			 clk_hw_get_name(hw));
-		return 0;
+
+		/* If fractional divider is not valid use the minimum valid value */
+		frac = 12;
 	}
 
 	tmp *= 18;
