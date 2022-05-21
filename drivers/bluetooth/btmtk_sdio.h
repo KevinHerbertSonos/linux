@@ -16,11 +16,17 @@
 #include "btmtk_config.h"
 #include <linux/pm_wakeup.h>
 
-#define VERSION "v0.0.1.12_2019081401"
+#define VERSION "v0.0.1.13_2020030601"
 
-#define SDIO_HEADER_LEN                 4
+#define SDIO_HEADER_LEN				4
+#define STP_HEADER_LEN				4
+#define COREDUMP_HEADER_LEN			5
+#define HCI_TYPE_LEN				1
+#define COREDUMP_PACKET_HEADER_LEN		13
 
 #define BD_ADDRESS_SIZE 6
+
+#define SET_POWER_NUM 3
 
 #define DUMP_HCI_LOG_FILE_NAME          "/sys/hcilog"
 /* SD block size can not bigger than 64 due to buf size limit in firmware */
@@ -114,7 +120,13 @@ struct btmtk_sdio_card_reg {
 #define BT_FULL_FW_DUMP "SUPPORT_FULL_FW_DUMP"
 #define BT_WOBLE_WAKELOCK "SUPPORT_WOBLE_WAKELOCK"
 #define BT_WOBLE_FOR_BT_DISABLE "SUPPORT_WOBLE_FOR_BT_DISABLE"
+#define BT_AUTO_PICUS "SUPPORT_AUTO_PICUS"
+#define BT_AUTO_PICUS_FILTER "PICUS_FILTER_CMD"
+#define BT_WMT_CMD "WMT_CMD"
+#define BT_VENDOR_CMD "VENDOR_CMD"
 
+#define WMT_CMD_COUNT 255
+#define VENDOR_CMD_COUNT 255
 
 #define WOBLE_SETTING_COUNT 10
 
@@ -129,7 +141,13 @@ enum bt_sdio_dongle_state {
 	BT_SDIO_DONGLE_STATE_ERROR
 };
 
-struct woble_setting_struct {
+enum fw_cfg_index_len {
+	FW_CFG_INX_LEN_NONE = 0,
+	FW_CFG_INX_LEN_2 = 2,
+	FW_CFG_INX_LEN_3 = 3,
+};
+
+struct fw_cfg_struct {
 	char	*content;	/* APCF conecnt or radio off content */
 	int	length;		/* APCF conecnt or radio off content of length */
 };
@@ -146,6 +164,10 @@ struct bt_cfg_struct {
 	unsigned int	dongle_reset_gpio_pin;		/* BT_DONGLE_RESET_GPIO_PIN number */
 	char	*sys_log_file_name;
 	char	*fw_dump_file_name;
+	bool	support_auto_picus;		/* support enable PICUS automatically */
+	struct fw_cfg_struct picus_filter;	/* support on PICUS filter command customization */
+	struct fw_cfg_struct wmt_cmd[WMT_CMD_COUNT];
+	struct fw_cfg_struct vendor_cmd[VENDOR_CMD_COUNT];
 };
 
 struct btmtk_sdio_card {
@@ -163,23 +185,23 @@ struct btmtk_sdio_card {
 	unsigned char		*woble_setting_file_name;
 
 	unsigned int		chip_id;
-	struct woble_setting_struct		woble_setting_apcf[WOBLE_SETTING_COUNT];
-	struct woble_setting_struct		woble_setting_apcf_fill_mac[WOBLE_SETTING_COUNT];
-	struct woble_setting_struct		woble_setting_apcf_fill_mac_location[WOBLE_SETTING_COUNT];
+	struct fw_cfg_struct		woble_setting_apcf[WOBLE_SETTING_COUNT];
+	struct fw_cfg_struct		woble_setting_apcf_fill_mac[WOBLE_SETTING_COUNT];
+	struct fw_cfg_struct		woble_setting_apcf_fill_mac_location[WOBLE_SETTING_COUNT];
 
-	struct woble_setting_struct		woble_setting_radio_off[WOBLE_SETTING_COUNT];
-	struct woble_setting_struct		woble_setting_radio_off_status_event[WOBLE_SETTING_COUNT];
+	struct fw_cfg_struct		woble_setting_radio_off[WOBLE_SETTING_COUNT];
+	struct fw_cfg_struct		woble_setting_radio_off_status_event[WOBLE_SETTING_COUNT];
 	/* complete event */
-	struct woble_setting_struct		woble_setting_radio_off_comp_event[WOBLE_SETTING_COUNT];
+	struct fw_cfg_struct		woble_setting_radio_off_comp_event[WOBLE_SETTING_COUNT];
 
-	struct woble_setting_struct		woble_setting_radio_on[WOBLE_SETTING_COUNT];
-	struct woble_setting_struct		woble_setting_radio_on_status_event[WOBLE_SETTING_COUNT];
-	struct woble_setting_struct		woble_setting_radio_on_comp_event[WOBLE_SETTING_COUNT];
+	struct fw_cfg_struct		woble_setting_radio_on[WOBLE_SETTING_COUNT];
+	struct fw_cfg_struct		woble_setting_radio_on_status_event[WOBLE_SETTING_COUNT];
+	struct fw_cfg_struct		woble_setting_radio_on_comp_event[WOBLE_SETTING_COUNT];
 
 	int		suspend_count;
 	/* set apcf after resume(radio on) */
-	struct woble_setting_struct		woble_setting_apcf_resume[WOBLE_SETTING_COUNT];
-	struct woble_setting_struct		woble_setting_apcf_resume_event[WOBLE_SETTING_COUNT];
+	struct fw_cfg_struct		woble_setting_apcf_resume[WOBLE_SETTING_COUNT];
+	struct fw_cfg_struct		woble_setting_apcf_resume_event[WOBLE_SETTING_COUNT];
 	unsigned char					bdaddr[BD_ADDRESS_SIZE];
 	unsigned int					woble_need_trigger_coredump;
 	unsigned char		*bt_cfg_file_name;
@@ -198,6 +220,7 @@ struct btmtk_sdio_card {
 	int duplex_setting;
 	u8 *bin_file_buffer;
 	size_t bin_file_size;
+	u8 efuse_mode;
 
 	enum bt_sdio_dongle_state dongle_state;
 };
@@ -406,7 +429,25 @@ static inline int is_mt7663(struct btmtk_sdio_card *data)
 #define FW_OWN_OFF "fw own off"
 #define FW_OWN_ON  "fw own on"
 
-extern int sdio_reset_comm(struct mmc_card *card);
+#define WOBLE_OFF "woble off"
+#define WOBLE_ON  "woble on"
+
+#define RX_CHECK_OFF "rx check off"
+#define RX_CHECK_ON "rx check on"
+
+#define RELOAD_SETTING "reload_setting"
+
+enum BTMTK_SDIO_RX_CHECKPOINT {
+	BTMTK_SDIO_RX_CHECKPOINT_INTR,
+	BTMTK_SDIO_RX_CHECKPOINT_RX_START,
+	BTMTK_SDIO_RX_CHECKPOINT_RX_DONE,
+	BTMTK_SDIO_RX_CHECKPOINT_ENABLE_INTR,
+
+	BTMTK_SDIO_RX_CHECKPOINT_NUM
+};
+
+#define BTMTK_SDIO_TIMESTAMP_NUM 50
+
 int btmtk_sdio_reset_dongle(void);
 #endif
 
