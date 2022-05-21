@@ -126,7 +126,8 @@ int adv7511_hdmi_hw_params(struct device *dev, void *data,
 
 	invert_clock = fmt->bit_clk_inv;
 
-	regmap_update_bits(adv7511->regmap, ADV7511_REG_AUDIO_SOURCE, 0x70,
+	regmap_update_bits(adv7511->regmap, ADV7511_REG_AUDIO_SOURCE,
+			   (adv7511->type == ADV7511) ? 0x70 : 0x10,
 			   audio_source << 4);
 	regmap_update_bits(adv7511->regmap, ADV7511_REG_AUDIO_CONFIG, BIT(6),
 			   invert_clock << 6);
