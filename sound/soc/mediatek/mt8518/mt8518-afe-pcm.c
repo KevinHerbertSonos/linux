@@ -9781,11 +9781,41 @@ static void spdif_in_info_update(struct mtk_base_afe *afe,
 				SNDRV_CTL_EVENT_MASK_VALUE);
 }
 
+/* Limit error IRQs to 50 per second */
+#define SPDIFIN_ERR_IRQ_RATELIMIT	(HZ / 50)
+
+/*
+ * This timer callback re-enables SPDIFIN signal error IRQs after
+ * a certain rate limiting delay (see spdif_in_detect_irq_handler)
+ */
+static void spdif_in_detect_error_timer(unsigned long data)
+{
+	struct mtk_base_afe *afe = (struct mtk_base_afe *)data;
+	struct mt8518_afe_private *priv = afe->platform_priv;
+	unsigned long flags;
+	unsigned int cfg1;
+
+	spin_lock_irqsave(&priv->spdifin_ctrl_lock, flags);
+
+	regmap_read(afe->regmap, AFE_SPDIFIN_CFG1, &cfg1);
+	dev_dbg(afe->dev, "%s cfg1(0x%x)\n", __func__, cfg1);
+
+	regmap_update_bits(afe->regmap,
+			AFE_SPDIFIN_CFG1,
+			AFE_SPDIFIN_CFG1_SIGNAL_ERR_INT_BITS,
+			AFE_SPDIFIN_CFG1_SIGNAL_ERR_INT_BITS);
+
+	dev_dbg(afe->dev, "spdifin detect signal error limitor release\n");
+
+	spin_unlock_irqrestore(&priv->spdifin_ctrl_lock, flags);
+}
+
 static int spdif_in_detect_irq_handler(int irq, void *dev_id)
 {
 	struct mtk_base_afe *afe = dev_id;
 	struct mt8518_afe_private *priv = afe->platform_priv;
 	unsigned int debug1, debug2, debug3, int_ext2, data_type_chg;
+	unsigned int cfg1;
 	unsigned int err;
 	unsigned int rate;
 	unsigned long flags;
@@ -9802,21 +9832,34 @@ static int spdif_in_detect_irq_handler(int irq, void *dev_id)
 	regmap_read(afe->regmap, AFE_SPDIFIN_DEBUG1, &debug1);
 	regmap_read(afe->regmap, AFE_SPDIFIN_DEBUG2, &debug2);
 	regmap_read(afe->regmap, AFE_SPDIFIN_DEBUG3, &debug3);
+	regmap_read(afe->regmap, AFE_SPDIFIN_CFG1, &cfg1);
 
+	/* debug3 should only be checked for enabled interrupts */
 	err = (int_ext2 & AFE_SPDIFIN_INT_EXT2_LRCK_CHANGE) |
 	      (debug1 & AFE_SPDIFIN_DEBUG1_DATALAT_ERR) |
 	      (debug2 & AFE_SPDIFIN_DEBUG2_FIFO_ERR) |
-	      (debug3 & AFE_SPDIFIN_DEBUG3_ALL_ERR);
+	      (debug3 & AFE_SPDIFIN_CFG1_TO_DEBUG3_SIGNAL_ERR_MASK(cfg1));
 
 	data_type_chg = (debug3 &
 		AFE_SPDIFIN_DEBUG3_CHSTS_PREAMPHASIS_STS) >> 7;
 
 	dev_dbg(afe->dev,
-		"%s int_ext2(0x%x) debug(0x%x,0x%x,0x%x) err(0x%x)\n",
-		__func__, int_ext2, debug1, debug2, debug3, err);
+		"%s int_ext2(0x%x) debug(0x%x,0x%x,0x%x) cfg1(0x%x) err(0x%x)\n",
+		__func__, int_ext2, debug1, debug2, debug3, cfg1, err);
 
 	if (err != 0) {
 		mt8518_afe_spdifin_errors_track(afe, err);
+
+		if (err & AFE_SPDIFIN_DEBUG3_ALL_ERR) {
+			/* Temporarily disable error interrupt bits */
+			regmap_update_bits(afe->regmap,
+				AFE_SPDIFIN_CFG1,
+				AFE_SPDIFIN_CFG1_SIGNAL_ERR_INT_BITS,
+				0);
+			priv->spdifin_detect_err_timer.data = (unsigned long)afe;
+			dev_dbg(afe->dev, "spdifin detect signal error limitor set (%08lx)\n", debug3 & AFE_SPDIFIN_CFG1_TO_DEBUG3_SIGNAL_ERR_MASK(cfg1));
+			mod_timer(&(priv->spdifin_detect_err_timer), jiffies + SPDIFIN_ERR_IRQ_RATELIMIT);
+		}
 
 		spdif_in_reset_and_clear_error(afe,
 			get_spdif_in_clear_bits(err));
@@ -10666,6 +10709,9 @@ static void mt8518_afe_init_private(struct mt8518_afe_private *priv)
 
 	spin_lock_init(&priv->afe_ctrl_lock);
 	spin_lock_init(&priv->spdifin_ctrl_lock);
+
+	init_timer(&priv->spdifin_detect_err_timer);
+	priv->spdifin_detect_err_timer.function = spdif_in_detect_error_timer;
 
 	mutex_init(&priv->block_dpidle_mutex);
 
