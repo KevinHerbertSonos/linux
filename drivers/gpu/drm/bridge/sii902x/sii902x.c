@@ -109,7 +109,6 @@ struct sii902x {
 	struct drm_bridge bridge;
 	struct drm_connector connector;
 	struct gpio_desc *reset_gpio;
-	struct gpio_desc *hdmi5v_gpio;
 	struct mutex mutex;
 };
 
@@ -165,13 +164,6 @@ static void process_dbg_opt(const char *opt)
 			ret = regmap_read(regmap, vadr_regstart, &val);
 		} while (ret);
 		Sii902x_Debug_LOG("w:0x%08x = 0x%x\n", vadr_regstart, val);
-	}
-
-	if (strncmp(opt, "hdmi5v:", 7) == 0) {
-		ret = sscanf(opt + 7, "%d", &val_temp);
-		val = (unsigned int)val_temp;
-		gpiod_set_value(sii902x_debug->hdmi5v_gpio, val_temp);
-		Sii902x_Debug_LOG("hdmi5v:%d\n", val);
 	}
 
 	if (strncmp(opt, "cec_write:", 10) == 0) {
@@ -1017,16 +1009,6 @@ static int sii902x_probe(struct i2c_client *client,
 				PTR_ERR(sii902x->reset_gpio));
 			return PTR_ERR(sii902x->reset_gpio);
 		}
-
-		/*hdmi 5v set*/
-		sii902x->hdmi5v_gpio = devm_gpiod_get_optional(dev, "hdmi5v",
-		GPIOD_OUT_LOW);
-		if (IS_ERR(sii902x->hdmi5v_gpio)) {
-			dev_info(dev, "Failed to retrieve/request hdmi5v gpio: %ld\n",
-			PTR_ERR(sii902x->hdmi5v_gpio));
-			return PTR_ERR(sii902x->hdmi5v_gpio);
-		}
-		gpiod_set_value(sii902x->hdmi5v_gpio, 1);
 
 		/*9022 mutex init*/
 		mutex_init(&sii902x->mutex);
