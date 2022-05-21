@@ -88,6 +88,7 @@
 #define SII902X_INT_STATUS			0x3d
 #define SII902X_HOTPLUG_EVENT			BIT(0)
 #define SII902X_PLUGGED_STATUS			BIT(2)
+#define SII902X_CEC_EVENT			BIT(3)
 
 #define SII902X_REG_TPI_RQB			0xc7
 
@@ -121,11 +122,6 @@ struct sii902x_cec {
 struct sii902x_cec *cec;
 struct regmap *sii902x_cec_regmap;
 struct sii902x *sii902x_for_i2c;
-static struct timer_list r_sii9022_timer;
-static struct task_struct *sii9022_timer_task;
-wait_queue_head_t sii9022_timer_wq;
-atomic_t sii9022_timer_event = ATOMIC_INIT(0);
-
 static char debug_buffer[2048];
 struct sii902x *sii902x_debug;
 struct sii902x *sii902x_mutex;
@@ -298,9 +294,9 @@ void sii9022_cec_handler(void)
 	struct SI_CpiStatus_t  cecStatus;
 	struct cec_msg  receive_msg;
 
-    /* Get the CEC transceiver status and pass it to the    */
-    /* current task.  The task will send any required       */
-    /* CEC commands.                                        */
+	/* Get the CEC transceiver status and pass it to the    */
+	/* current task.  The task will send any required       */
+	/* CEC commands.                                        */
 	SI_CpiStatus(&cecStatus);
 
 	/*add by mtk*/
@@ -322,6 +318,7 @@ void sii9022_cec_handler(void)
 		/* Get CEC frames until no more are present.    */
 		cecStatus.rxState = 0;      // Clear activity flag
 		frameCount = ((SiIRegioRead(REG_CEC_RX_COUNT) & 0xF0) >> 4);
+ 
 		while (frameCount) {
 			pr_info("\n%d frames in Rx Fifo\n", (int)frameCount);
 
@@ -329,6 +326,7 @@ void sii9022_cec_handler(void)
 				pr_info("Error in Rx Fsi_CecRxMsgHandlerifo\n");
 				break;
 			}
+
 			if (1) {
 				int i;
 				struct cec_adapter *new_adap;
@@ -365,33 +363,6 @@ void sii9022_cec_handler(void)
 		}
 	}
 }
-
-void sii9022_poll_isr(unsigned long n)
-{
-	atomic_set(&sii9022_timer_event, 1);
-	wake_up_interruptible(&sii9022_timer_wq);
-	mod_timer(&r_sii9022_timer, jiffies + 50 / (1000 / HZ));
-}
-
-static int sii9022_timer_kthread(void *data)
-{
-	struct sched_param param = {.sched_priority = 93 };
-	/* RTPM_PRIO_SCRN_UPDATE */
-	sched_setscheduler(current, SCHED_RR, &param);
-
-	for (;;) {
-		wait_event_interruptible(sii9022_timer_wq,
-			atomic_read(&sii9022_timer_event));
-		atomic_set(&sii9022_timer_event, 0);
-		sii9022_HdmiTx_TPI_Poll();
-		sii9022_cec_handler();
-		if (kthread_should_stop())
-			break;
-	}
-
-	return 0;
-}
-
 
 /*i2c api for hdmi audio*/
 byte ReadByteTPI(byte RegOffset)
@@ -602,12 +573,17 @@ static int sii902x_get_modes(struct drm_connector *connector)
 	unsigned long timeout;
 	unsigned int status;
 	u8 output_mode = SII902X_SYS_CTRL_OUTPUT_DVI;
-	struct edid *edid;
+	struct edid *edid = NULL;
 	int num = 0;
 	int i = 0;
 	int ret;
+	int retry=3;
 
 	mutex_lock(&sii902x->mutex);
+	//close the hotplug & cec interrput
+	regmap_write(sii902x->regmap,
+					SII902X_INT_ENABLE,
+					0);
 	ret = regmap_update_bits(regmap, SII902X_SYS_CTRL_DATA,
 				 SII902X_SYS_CTRL_DDC_BUS_REQ,
 				 SII902X_SYS_CTRL_DDC_BUS_REQ);
@@ -638,43 +614,28 @@ static int sii902x_get_modes(struct drm_connector *connector)
 		mutex_unlock(&sii902x->mutex);
 		return ret;
 	}
+	while((edid==NULL) && (retry > 0))
+	{
+		edid = drm_get_edid(connector, sii902x->i2c->adapter);
+		if(edid == NULL)
+			retry--;
+	}
+	if(edid ==NULL)
+		dev_info(&sii902x->i2c->dev, "failed to get edid");
 
-	edid = drm_get_edid(connector, sii902x->i2c->adapter);
 	drm_mode_connector_update_edid_property(connector, edid);
 	if (edid) {
 		if (drm_detect_hdmi_monitor(edid))
 			output_mode = SII902X_SYS_CTRL_OUTPUT_HDMI;
 		num = drm_add_edid_modes(connector, edid);
-		/*get PA for cec*/
-		if (1) {
-			int offset = 0;
-			u16 phy_addr = CEC_PHYS_ADDR_INVALID;
-			int err;
-
-			phy_addr =
-				cec_get_edid_phys_addr((u8 *)edid,
-				EDID_LENGTH * (1 + (edid->extensions)),
-				&offset);
-			if (offset == 0) {
-				pr_info("no cec phys addr found\n");
-			};
-
-			err = cec_phys_addr_validate(phy_addr, NULL, NULL);
-			if (err) {
-				pr_info("cec phys addr invalid\n");
-			} else {
-				pr_info("phy_addr is 0x%x\n", phy_addr);
-				if (cec->adap != NULL)
-					cec_s_phys_addr(cec->adap,
-					phy_addr, true);
-			}
-		}
-		kfree(edid);
 	}
 
 	status |= output_mode;
 	for (i = 0; i < 2; i++)
+	{
 		ret = regmap_write(regmap, SII902X_SYS_CTRL_DATA, status);
+	}
+
 	ret = drm_display_info_set_bus_formats(
 		&connector->display_info, &bus_format, 1);
 	if (ret) {
@@ -683,7 +644,9 @@ static int sii902x_get_modes(struct drm_connector *connector)
 	}
 
 	for (i = 0; i < 2; i++)
+	{
 		ret = regmap_read(regmap, SII902X_SYS_CTRL_DATA, &status);
+	}
 	if (ret) {
 		mutex_unlock(&sii902x->mutex);
 		return ret;
@@ -692,6 +655,7 @@ static int sii902x_get_modes(struct drm_connector *connector)
 	ret = regmap_update_bits(regmap, SII902X_SYS_CTRL_DATA,
 				 SII902X_SYS_CTRL_DDC_BUS_REQ |
 				 SII902X_SYS_CTRL_DDC_BUS_GRTD, 0);
+
 	if (ret) {
 		mutex_unlock(&sii902x->mutex);
 		return ret;
@@ -718,7 +682,38 @@ static int sii902x_get_modes(struct drm_connector *connector)
 
 	ret = regmap_update_bits(sii902x->regmap, SII902X_SYS_CTRL_DATA,
 				 SII902X_SYS_CTRL_OUTPUT_MODE, output_mode);
+
+	//open the hotplug & cec interrput
+	regmap_write(sii902x->regmap,
+					SII902X_INT_ENABLE,
+					SII902X_HOTPLUG_EVENT | SII902X_CEC_EVENT);
 	mutex_unlock(&sii902x->mutex);
+
+	/*get PA for cec*/
+	if (edid) {
+		int offset = 0;
+		u16 phy_addr = CEC_PHYS_ADDR_INVALID;
+		int err;
+
+		phy_addr =
+			cec_get_edid_phys_addr((u8 *)edid,
+			EDID_LENGTH * (1 + (edid->extensions)),
+			&offset);
+		if (offset == 0) {
+			pr_info("no cec phys addr found\n");
+		};
+
+		err = cec_phys_addr_validate(phy_addr, NULL, NULL);
+		if (err) {
+			pr_info("cec phys addr invalid\n");
+		} else {
+			pr_info("phy_addr is 0x%x\n", phy_addr);
+			if (cec->adap != NULL)
+				cec_s_phys_addr(cec->adap,
+				phy_addr, true);
+		}
+		kfree(edid);
+	}
 
 	return num;
 }
@@ -803,12 +798,14 @@ static void sii902x_bridge_mode_set(struct drm_bridge *bridge,
 	if (ret < 0) {
 		DRM_ERROR("couldn't fill AVI infoframe\n");
 		mutex_unlock(&sii902x->mutex);
+
 		return;
 	}
 	ret = hdmi_avi_infoframe_pack(&frame, buf, sizeof(buf));
 	if (ret < 0) {
 		DRM_ERROR("failed to pack AVI infoframe: %d\n", ret);
 		mutex_unlock(&sii902x->mutex);
+
 		return;
 	}
 
@@ -818,7 +815,9 @@ static void sii902x_bridge_mode_set(struct drm_bridge *bridge,
 					buf + HDMI_INFOFRAME_HEADER_SIZE - 1,
 					HDMI_AVI_INFOFRAME_SIZE + 1);
 	mutex_unlock(&sii902x->mutex);
+
 	siHdmiTx_AudioSet();
+
 }
 
 static int sii902x_bridge_attach(struct drm_bridge *bridge)
@@ -895,10 +894,15 @@ static irqreturn_t sii902x_interrupt(int irq, void *data)
 	struct sii902x *sii902x = data;
 	unsigned int status = 0;
 
-	//mutex_lock(&sii902x->mutex);
+	mutex_lock(&sii902x->mutex);
 	regmap_read(sii902x->regmap, SII902X_INT_STATUS, &status);
 	regmap_write(sii902x->regmap, SII902X_INT_STATUS, status);
-	//mutex_unlock(&sii902x->mutex);
+	mutex_unlock(&sii902x->mutex);
+
+	if(status & SII902X_CEC_EVENT)
+	{
+		sii9022_cec_handler();
+	}
 
 	if ((status & SII902X_HOTPLUG_EVENT) && sii902x->bridge.dev)
 		drm_helper_hpd_irq_event(sii902x->bridge.dev);
@@ -926,6 +930,8 @@ static void sii9022_print_cec_frame(struct cec_msg *frame)
 
 static int sii9022_cec_adap_log_addr(struct cec_adapter *adap, u8 logical_addr)
 {
+	pr_info("cec message opcode is\n");
+
 	SiIRegioWrite(CEC_OP_ABORT_31, CLEAR_BITS);
 	if (!SI_CpiSetLogicalAddr(logical_addr))
 		DEBUG_PRINT(MSG_ALWAYS, ("\n Cannot init CPI/CEC"));
@@ -958,6 +964,7 @@ static int sii9022_cec_adap_transmit(struct cec_adapter *adap, u8 attempts,
 			cecFrame.args[i]   = msg->msg[i+2];
 	    SI_CpiWrite(&cecFrame);
 	}
+
 	return 0;
 }
 
@@ -1052,7 +1059,7 @@ static int sii902x_probe(struct i2c_client *client,
 		if (client->irq > 0) {
 			regmap_write(sii902x->regmap,
 				SII902X_INT_ENABLE,
-				SII902X_HOTPLUG_EVENT);
+				SII902X_HOTPLUG_EVENT | SII902X_CEC_EVENT);
 
 			ret = devm_request_threaded_irq(dev, client->irq, NULL,
 						sii902x_interrupt,
@@ -1075,21 +1082,6 @@ static int sii902x_probe(struct i2c_client *client,
 		i2c_set_clientdata(client, sii902x);
 		Sii902x_DBG_Init();
 
-		/*create timer*/
-		memset((void *)&r_sii9022_timer, 0, sizeof(r_sii9022_timer));
-		r_sii9022_timer.expires = jiffies + 50 / (1000 / HZ);
-		/* wait 50ms to stable */
-		r_sii9022_timer.function = sii9022_poll_isr;
-		r_sii9022_timer.data = 0;
-		init_timer(&r_sii9022_timer);
-
-		init_waitqueue_head(&sii9022_timer_wq);
-		sii9022_timer_task =
-			    kthread_create(sii9022_timer_kthread, NULL,
-			    "sii9022_timer_kthread");
-		wake_up_process(sii9022_timer_task);
-
-		add_timer(&r_sii9022_timer);
 	} else if (strcmp(client->name, "sii9022-cec") == 0) {
 
 		cec = devm_kzalloc(dev, sizeof(*cec), GFP_KERNEL);
@@ -1119,6 +1111,11 @@ static int sii902x_probe(struct i2c_client *client,
 			cec_delete_adapter(cec->adap);
 			return ret;
 		}
+		SiIRegioWrite(REG_CEC_INT_ENABLE_0, 0x27);
+		SiIRegioWrite(REG_CEC_INT_ENABLE_1, 0x0F);
+		SiIRegioWrite(CEC_OP_ABORT_31, CLEAR_BITS);
+		//~ if (!SI_CpiSetLogicalAddr(0x50))
+			//~ DEBUG_PRINT(MSG_ALWAYS, ("\n Cannot init CPI/CEC"));
 #endif
 	}
 	return 0;
