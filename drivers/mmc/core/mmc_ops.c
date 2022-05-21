@@ -344,7 +344,7 @@ int mmc_send_csd(struct mmc_card *card, u32 *csd)
 	if (ret)
 		goto err;
 
-	for (i = 0;i < 4;i++)
+	for (i = 0; i < 4; i++)
 		csd[i] = be32_to_cpu(csd_tmp[i]);
 
 err:
@@ -372,7 +372,7 @@ int mmc_send_cid(struct mmc_host *host, u32 *cid)
 	if (ret)
 		goto err;
 
-	for (i = 0;i < 4;i++)
+	for (i = 0; i < 4; i++)
 		cid[i] = be32_to_cpu(cid_tmp[i]);
 
 err:
@@ -663,6 +663,7 @@ out:
 	return err;
 }
 EXPORT_SYMBOL_GPL(mmc_send_tuning);
+
 int mmc_gen_cmd(struct mmc_card *card, void *buf, unsigned int args, int write)
 {
    struct mmc_request mrq;
@@ -778,6 +779,31 @@ int mmc_gen_cmd(struct mmc_card *card, void *buf, unsigned int args, int write)
    return 0;
 }
 EXPORT_SYMBOL_GPL(mmc_gen_cmd);
+
+int mmc_abort_tuning(struct mmc_host *host, u32 opcode)
+{
+	struct mmc_command cmd = {0};
+
+	/*
+	 * eMMC specification specifies that CMD12 can be used to stop a tuning
+	 * command, but SD specification does not, so do nothing unless it is
+	 * eMMC.
+	 */
+	if (opcode != MMC_SEND_TUNING_BLOCK_HS200)
+		return 0;
+
+	cmd.opcode = MMC_STOP_TRANSMISSION;
+	cmd.flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_AC;
+
+	/*
+	 * For drivers that override R1 to R1b, set an arbitrary timeout based
+	 * on the tuning timeout i.e. 150ms.
+	 */
+	cmd.busy_timeout = 150;
+
+	return mmc_wait_for_cmd(host, &cmd, 0);
+}
+EXPORT_SYMBOL_GPL(mmc_abort_tuning);
 
 static int
 mmc_send_bus_test(struct mmc_card *card, struct mmc_host *host, u8 opcode,
@@ -915,3 +941,25 @@ int mmc_can_ext_csd(struct mmc_card *card)
 {
 	return (card && card->csd.mmca_vsn > CSD_SPEC_VER_3);
 }
+
+static int mmc_cmdq_switch(struct mmc_card *card, bool enable)
+{
+	u8 val = enable ? EXT_CSD_CMDQ_MODE_ENABLED : 0;
+	int err;
+
+	if (!card->ext_csd.cmdq_support)
+		return -EOPNOTSUPP;
+
+	err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL, EXT_CSD_CMDQ_MODE_EN,
+			 val, card->ext_csd.generic_cmd6_time);
+	if (!err)
+		card->ext_csd.cmdq_en = enable;
+
+	return err;
+}
+
+int mmc_cmdq_enable(struct mmc_card *card)
+{
+	return mmc_cmdq_switch(card, true);
+}
+EXPORT_SYMBOL_GPL(mmc_cmdq_enable);

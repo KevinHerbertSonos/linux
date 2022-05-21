@@ -10,8 +10,9 @@
 
 #include <linux/interrupt.h>
 #include <linux/completion.h>
+#include <linux/types.h>
+#include <linux/mmc/card.h>
 
-struct request;
 struct mmc_data;
 struct mmc_request;
 
@@ -111,11 +112,18 @@ struct mmc_data {
 	unsigned int		timeout_clks;	/* data timeout (in clocks) */
 	unsigned int		blksz;		/* data block size */
 	unsigned int		blocks;		/* number of blocks */
+	unsigned int		blk_addr;	/* block address */
 	int			error;		/* data error */
 	unsigned int		flags;
 
-#define MMC_DATA_WRITE	(1 << 8)
-#define MMC_DATA_READ	(1 << 9)
+#define MMC_DATA_WRITE		BIT(8)
+#define MMC_DATA_READ		BIT(9)
+/* Extra flags used by CQE */
+#define MMC_DATA_QBR		BIT(10)		/* CQE queue barrier*/
+#define MMC_DATA_PRIO		BIT(11)		/* CQE high priority */
+#define MMC_DATA_REL_WR		BIT(12)		/* Reliable write */
+#define MMC_DATA_DAT_TAG	BIT(13)		/* Tag request */
+#define MMC_DATA_FORCED_PRG	BIT(14)		/* Forced programming */
 
 	unsigned int		bytes_xfered;
 
@@ -142,6 +150,8 @@ struct mmc_request {
 
 	/* Allow other commands during this ongoing data transfer or busy wait */
 	bool			cap_cmd_during_tfr;
+
+	int			tag;
 	ktime_t			io_start;
 #ifdef CONFIG_BLOCK
 	int			lat_hist_enabled;
@@ -224,5 +234,7 @@ static inline void mmc_claim_host(struct mmc_host *host)
 struct device_node;
 extern u32 mmc_vddrange_to_ocrmask(int vdd_min, int vdd_max);
 extern int mmc_of_parse_voltage(struct device_node *np, u32 *mask);
+
+void mmc_cqe_request_done(struct mmc_host *host, struct mmc_request *mrq);
 
 #endif /* LINUX_MMC_CORE_H */

@@ -371,7 +371,8 @@ u8 sdio_readb(struct sdio_func *func, unsigned int addr, int *err_ret)
 	u8 val;
 
 	if (!func) {
-		*err_ret = -EINVAL;
+		if (err_ret)
+			*err_ret = -EINVAL;
 		return 0xFF;
 	}
 
@@ -438,7 +439,8 @@ void sdio_writeb(struct sdio_func *func, u8 b, unsigned int addr, int *err_ret)
 	int ret;
 
 	if (!func) {
-		*err_ret = -EINVAL;
+		if (err_ret)
+			*err_ret = -EINVAL;
 		return;
 	}
 
@@ -666,7 +668,8 @@ unsigned char sdio_f0_readb(struct sdio_func *func, unsigned int addr,
 	unsigned char val;
 
 	if (!func) {
-		*err_ret = -EINVAL;
+		if (err_ret)
+			*err_ret = -EINVAL;
 		return 0xFF;
 	}
 
@@ -704,7 +707,8 @@ void sdio_f0_writeb(struct sdio_func *func, unsigned char b, unsigned int addr,
 	int ret;
 
 	if (!func) {
-		*err_ret = -EINVAL;
+		if (err_ret)
+			*err_ret = -EINVAL;
 		return;
 	}
 
