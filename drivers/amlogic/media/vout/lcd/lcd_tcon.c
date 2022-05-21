@@ -33,7 +33,9 @@
 #include <linux/dma-contiguous.h>
 #include <linux/dma-mapping.h>
 #include <linux/amlogic/media/vout/lcd/lcd_vout.h>
+#ifdef CONFIG_AMLOGIC_UNIFYKEY
 #include <linux/amlogic/media/vout/lcd/lcd_unifykey.h>
+#endif
 #include "lcd_common.h"
 #include "lcd_reg.h"
 #include "lcd_tcon.h"
@@ -958,6 +960,7 @@ static void lcd_tcon_intr_init(struct aml_lcd_drv_s *lcd_drv)
 
 static int lcd_tcon_config(struct aml_lcd_drv_s *lcd_drv)
 {
+#ifdef CONFIG_AMLOGIC_UNIFYKEY
 	int key_len, reg_len, ret;
 
 #if 1
@@ -1001,6 +1004,7 @@ static int lcd_tcon_config(struct aml_lcd_drv_s *lcd_drv)
 	}
 	LCDPR("tcon: load default table len: %d\n", key_len);
 #endif
+#endif
 
 	lcd_tcon_data_load();
 	lcd_drv->tcon_status = tcon_rmem.vac_valid |
@@ -1013,6 +1017,7 @@ static int lcd_tcon_config(struct aml_lcd_drv_s *lcd_drv)
 
 static void lcd_tcon_config_delayed(struct work_struct *work)
 {
+#ifdef CONFIG_AMLOGIC_UNIFYKEY
 	struct aml_lcd_drv_s *lcd_drv = aml_lcd_get_driver();
 	int key_init_flag = 0;
 	int i = 0;
@@ -1027,6 +1032,7 @@ static void lcd_tcon_config_delayed(struct work_struct *work)
 	LCDPR("tcon: key_init_flag=%d, i=%d\n", key_init_flag, i);
 	if (key_init_flag)
 		lcd_tcon_config(lcd_drv);
+#endif
 }
 
 /* **********************************
@@ -1396,7 +1402,9 @@ int lcd_tcon_probe(struct aml_lcd_drv_s *lcd_drv)
 {
 	struct cma *cma;
 	unsigned int mem_size;
+#ifdef CONFIG_AMLOGIC_UNIFYKEY
 	int key_init_flag = 0;
+#endif
 	int ret = 0;
 
 	lcd_tcon_data = NULL;
@@ -1454,6 +1462,7 @@ int lcd_tcon_probe(struct aml_lcd_drv_s *lcd_drv)
 
 	INIT_DELAYED_WORK(&lcd_tcon_delayed_work, lcd_tcon_config_delayed);
 
+#ifdef CONFIG_AMLOGIC_UNIFYKEY
 	key_init_flag = key_unify_get_init_flag();
 	if (key_init_flag) {
 		ret = lcd_tcon_config(lcd_drv);
@@ -1467,6 +1476,7 @@ int lcd_tcon_probe(struct aml_lcd_drv_s *lcd_drv)
 				msecs_to_jiffies(2000));
 		}
 	}
+#endif
 
 	return ret;
 }

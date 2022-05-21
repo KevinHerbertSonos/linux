@@ -42,7 +42,9 @@
 #include <linux/amlogic/media/vout/vout_notify.h>
 #include <linux/amlogic/media/vout/lcd/lcd_vout.h>
 #include <linux/amlogic/media/vout/lcd/lcd_notify.h>
+#ifdef CONFIG_AMLOGIC_UNIFYKEY
 #include <linux/amlogic/media/vout/lcd/lcd_unifykey.h>
+#endif
 #ifdef CONFIG_AMLOGIC_LCD_EXTERN
 #include <linux/amlogic/media/vout/lcd/lcd_extern.h>
 #endif
@@ -1191,10 +1193,13 @@ static void lcd_vout_server_remove(void)
 
 static void lcd_config_probe_delayed(struct work_struct *work)
 {
+#ifdef CONFIG_AMLOGIC_UNIFYKEY
 	int key_init_flag = 0;
+#endif
 	int i = 0;
 	int ret;
 
+#ifdef CONFIG_AMLOGIC_UNIFYKEY
 	key_init_flag = key_unify_get_init_flag();
 	while (key_init_flag == 0) {
 		if (i++ >= LCD_UNIFYKEY_WAIT_TIMEOUT)
@@ -1219,6 +1224,7 @@ static void lcd_config_probe_delayed(struct work_struct *work)
 		lcd_driver = NULL;
 		LCDERR("probe exit\n");
 	}
+#endif
 
 	if ((lcd_driver->lcd_status & LCD_STATUS_VMODE_ACTIVE)
 	&& !(lcd_driver->lcd_status & LCD_STATUS_ENCL_ON)) {
