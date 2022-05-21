@@ -387,6 +387,13 @@ config SPI_MESON_SPICC
 	  If you want to use meson SPICC interface,
 	  say Y or M here.If you are not sure, say N.
 
+config SPI_FSL_LPSPI
+	tristate "Freescale i.MX LPSPI controller"
+	depends on ARCH_MXC || ARCH_MXC_ARM64 || COMPILE_TEST
+	select SPI_BITBANG
+	help
+	  This enables Freescale i.MX LPSPI controllers in master mode.
+
 config SPI_MESON_SPIFC
 	tristate "Amlogic Meson SPIFC controller"
 	depends on ARCH_MESON || COMPILE_TEST
