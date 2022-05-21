@@ -16,12 +16,13 @@
 #include "btmtk_config.h"
 #include <linux/pm_wakeup.h>
 
-#define VERSION "v0.0.1.13_2020030601"
+#define VERSION "v0.0.1.13_2020061801"
 
 #define SDIO_HEADER_LEN				4
 #define STP_HEADER_LEN				4
 #define COREDUMP_HEADER_LEN			5
 #define HCI_TYPE_LEN				1
+#define HCI_EVENT_CODE_LEN			1
 #define COREDUMP_PACKET_HEADER_LEN		13
 
 #define BD_ADDRESS_SIZE 6
@@ -120,6 +121,7 @@ struct btmtk_sdio_card_reg {
 #define BT_FULL_FW_DUMP "SUPPORT_FULL_FW_DUMP"
 #define BT_WOBLE_WAKELOCK "SUPPORT_WOBLE_WAKELOCK"
 #define BT_WOBLE_FOR_BT_DISABLE "SUPPORT_WOBLE_FOR_BT_DISABLE"
+#define BT_RESET_STACK_AFTER_WOBLE "RESET_STACK_AFTER_WOBLE"
 #define BT_AUTO_PICUS "SUPPORT_AUTO_PICUS"
 #define BT_AUTO_PICUS_FILTER "PICUS_FILTER_CMD"
 #define BT_WMT_CMD "WMT_CMD"
@@ -161,6 +163,7 @@ struct bt_cfg_struct {
 	bool	support_full_fw_dump;		/* dump full fw coredump or not */
 	bool	support_woble_wakelock;		/* support when woble error, do wakelock or not */
 	bool	support_woble_for_bt_disable;		/* when bt disable, support enter susend or not */
+	bool	reset_stack_after_woble;	/* support reset stack to re-connect IOT after resume */
 	unsigned int	dongle_reset_gpio_pin;		/* BT_DONGLE_RESET_GPIO_PIN number */
 	char	*sys_log_file_name;
 	char	*fw_dump_file_name;
@@ -207,8 +210,8 @@ struct btmtk_sdio_card {
 	unsigned char		*bt_cfg_file_name;
 	unsigned char		*setting_file;
 	struct bt_cfg_struct		bt_cfg;
-	struct		wakeup_source woble_ws;
-	struct		wakeup_source eint_ws;
+	struct		wakeup_source	*woble_ws;
+	struct		wakeup_source	*eint_ws;
 
 	/* WoBLE */
 	unsigned int wobt_irq;
@@ -449,5 +452,13 @@ enum BTMTK_SDIO_RX_CHECKPOINT {
 #define BTMTK_SDIO_TIMESTAMP_NUM 50
 
 int btmtk_sdio_reset_dongle(void);
+
+/* WOBX attribute type */
+#define WOBX_TRIGGER_INFO_ADDR_TYPE         1
+#define WOBX_TRIGGER_INFO_ADV_DATA_TYPE     2
+#define WOBX_TRIGGER_INFO_TRACE_LOG_TYPE    3
+#define WOBX_TRIGGER_INFO_SCAN_LOG_TYPE     4
+#define WOBX_TRIGGER_INFO_TRIGGER_CNT_TYPE  5
+
 #endif
 
