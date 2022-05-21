@@ -152,10 +152,10 @@ amlogic/%.dtb: scripts
 	$(Q)$(MAKE) $(build)=$(boot)/dts $(boot)/dts/$@
 
 %.dtb: scripts
-	$(Q)$(MAKE) $(build)=$(boot)/dts/amlogic $(boot)/dts/amlogic/$@
+	$(Q)$(MAKE) $(build)=$(boot)/dts $(boot)/dts/$@
 ifeq ($(CONFIG_AMLOGIC_MODIFY),y)
 %.dtbo: scripts
-	$(Q)$(MAKE) $(build)=$(boot)/dts/amlogic $(boot)/dts/amlogic/$@
+	$(Q)$(MAKE) $(build)=$(boot)/dts $(boot)/dts/$@
 endif
 
 PHONY += dtbs dtbs_install
