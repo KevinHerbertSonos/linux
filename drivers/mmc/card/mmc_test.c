@@ -3164,6 +3164,167 @@ static const struct file_operations mmc_test_fops_testlist = {
 	.release	= single_release,
 };
 
+#define VENDOR_TOSHIBA  0x11
+#define VENDOR_MICRON   0x13
+#define VENDOR_SANDISK  0x17
+#define VENDOR_HYNIX    0x19
+#define MICRON_BAD_BLOCK_COUNTERS   0x8
+#define MICRON_BAD_BLOCK_DETAIL_INFORMATION
+#define MICRON_BLOCK_ERASE_COUNTERS_MLC 0x11
+
+
+void dump_data_block(struct seq_file *sf, char *lba_block_data)
+{
+    int count=0;
+    seq_printf(sf, "CMD56 data block dumping:");
+
+    while( count < 512) {
+        if(count % 16 == 0) {
+            seq_printf(sf, "\n%03d: ", count);
+            seq_printf(sf, "%02x ", lba_block_data[count]);
+            count++;
+        }
+    }
+    seq_printf(sf, "\n");
+    return;
+}
+static int mmc_show_micron_block_erase_data(struct seq_file *sf)
+{
+    unsigned char *health_data;
+    unsigned short minimum_block_erase = 0;
+    unsigned short maximum_block_erase = 0;
+    unsigned short average_block_erase = 0;
+
+    struct mmc_card *card = (struct mmc_card *)sf->private;
+
+    health_data = kzalloc(512, GFP_KERNEL);
+    if (!health_data)
+        return -ENOMEM;
+
+    if(0 == mmc_gen_cmd(card, health_data, MICRON_BLOCK_ERASE_COUNTERS_MLC, 0)) {
+        minimum_block_erase = health_data[0] <<8 | health_data[1];
+        maximum_block_erase = health_data[2] <<8 | health_data[3];
+        average_block_erase = health_data[4] <<8 | health_data[5];
+        seq_printf(sf, "minimum_block_erase:%d\n", minimum_block_erase);
+        seq_printf(sf, "maximum_block_erase:%d\n", maximum_block_erase);
+        seq_printf(sf, "average_block_erase:%d\n", average_block_erase);
+    } else {
+        seq_printf(sf, "error getting the block_erase_data\n");
+    }
+
+    kfree(health_data);
+    return 0;
+}
+
+static int mmc_show_micron_bad_block_data(struct seq_file *sf)
+{
+    unsigned char *health_data;
+    unsigned short initial_bad_block_count = 0;
+    unsigned short run_time_bad_block_count = 0;
+    unsigned short remaining_spare_block_count = 0;
+
+    struct mmc_card *card = (struct mmc_card *)sf->private;
+
+    health_data = kzalloc(512, GFP_KERNEL);
+    if (!health_data)
+        return -ENOMEM;
+
+    if(0 == mmc_gen_cmd(card, health_data, MICRON_BAD_BLOCK_COUNTERS, 0)) {
+        initial_bad_block_count = health_data[0] <<8 | health_data[1];
+        run_time_bad_block_count = health_data[2] <<8 | health_data[3];
+        remaining_spare_block_count = health_data[4] <<8 | health_data[5];
+        seq_printf(sf, "initial_bad_block_count:%d\n", initial_bad_block_count);
+        seq_printf(sf, "run_time_bad_block_count:%d\n", run_time_bad_block_count);
+        seq_printf(sf, "remaining_spare_block_count:%d\n", remaining_spare_block_count);
+    } else {
+        seq_printf(sf, "error getting the bad block info\n");
+    }
+
+    kfree(health_data);
+    return 0;
+}
+
+static int mtf_get_additional_health(struct seq_file *sf, struct mmc_card *card)
+{
+    int rst = 0;
+
+    if (card->cid.manfid == VENDOR_TOSHIBA) {
+        /* Toshiba doesn't have additional info */
+        rst = 1;
+        goto end;
+    } else if (card->cid.manfid == VENDOR_MICRON) {
+        mutex_lock(&mmc_test_lock);
+        mmc_show_micron_bad_block_data(sf);
+        mmc_show_micron_block_erase_data(sf);
+        mutex_unlock(&mmc_test_lock);
+
+    } else if (card->cid.manfid == VENDOR_SANDISK) {
+        rst = 1;
+        goto end;
+    } else if (card->cid.manfid == VENDOR_HYNIX) {
+        rst = 1;
+        goto end;
+    } else {
+        rst = 1;
+        goto end;
+    }
+
+end:
+    return 0;
+}
+
+
+static int mtf_health_show(struct seq_file *sf, void *data)
+{
+    char str_tmp[1024];
+    char *vendor;
+
+    struct mmc_card *card = (struct mmc_card *)sf->private;
+
+    mutex_lock(&mmc_test_lock);
+    memset(str_tmp, 0, 1024);
+    strlcpy(str_tmp, card->cid.prod_name, 8);
+    seq_printf(sf, "Product:%s\n", str_tmp);
+
+
+
+    if (card->cid.manfid == VENDOR_TOSHIBA) {
+        vendor = "TOSHIBA";
+    } else if (card->cid.manfid == VENDOR_MICRON) {
+        vendor = "MICRON";
+
+    } else if (card->cid.manfid == VENDOR_SANDISK) {
+        vendor = "SANDISK";
+    } else if (card->cid.manfid == VENDOR_HYNIX) {
+        vendor = "HYNIX";
+    } else {
+        vendor = "UNKNOW";
+    }
+
+    seq_printf(sf, "manuId:%s %x, serials:0x%08x\n", vendor, card->cid.manfid, card->cid.serial);
+    seq_printf(sf, "pre_eol_info:%02x\n", card->ext_csd.pre_eol_info);
+    seq_printf(sf, "device_life_time_est_typ_a:%02x\n", card->ext_csd.device_life_time_est_typ_a);
+    seq_printf(sf, "device_life_time_est_typ_b:%02x\n", card->ext_csd.device_life_time_est_typ_b);
+
+    mutex_unlock(&mmc_test_lock);
+
+    mtf_get_additional_health(sf, card);
+
+    return 0;
+}
+
+static int mtf_health_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, mtf_health_show, inode->i_private);
+}
+
+static const struct file_operations mmc_test_fops_health = {
+    .open       = mtf_health_open,
+    .read       = seq_read,
+    .llseek     = seq_lseek,
+    .release    = single_release,
+};
+
 static void mmc_test_free_dbgfs_file(struct mmc_card *card)
 {
 	struct mmc_test_dbgfs_file *df, *dfs;
@@ -3228,6 +3389,11 @@ static int mmc_test_register_dbgfs_file(struct mmc_card *card)
 		&mmc_test_fops_testlist);
 	if (ret)
 		goto err;
+
+    ret = __mmc_test_register_dbgfs_file(card, "health", S_IRUGO,
+        &mmc_test_fops_health);
+    if (ret)
+        goto err;
 
 err:
 	mutex_unlock(&mmc_test_lock);
