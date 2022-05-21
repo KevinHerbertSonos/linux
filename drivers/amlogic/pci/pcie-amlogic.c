@@ -35,6 +35,7 @@
 #include <linux/clk-provider.h>
 #include "../clk/clkc.h"
 
+#undef PCIE_COMPLIANCE_TEST
 
 struct amlogic_pcie {
 	struct pcie_port	pp;
@@ -53,6 +54,7 @@ struct amlogic_pcie {
 	u32			port_num;
 	u32			pm_enable;
 	u32			device_attch;
+	u32			speed_mod;
 };
 
 #define to_amlogic_pcie(x)	container_of(x, struct amlogic_pcie, pp)
@@ -277,6 +279,12 @@ static void amlogic_pcie_assert_reset(struct amlogic_pcie *amlogic_pcie)
 		}
 	} else {
 		dev_info(amlogic_pcie->pp.dev, "normal gpio\n");
+#ifdef CONFIG_SONOS
+		if (!gpio_is_valid(amlogic_pcie->reset_gpio))
+			return ;
+		msleep(100);
+		gpio_set_value_cansleep(amlogic_pcie->reset_gpio, 1);
+#else
 		if (amlogic_pcie->reset_gpio >= 0)
 			devm_gpio_request(dev,
 				amlogic_pcie->reset_gpio, "RESET");
@@ -290,6 +298,7 @@ static void amlogic_pcie_assert_reset(struct amlogic_pcie *amlogic_pcie)
 			gpio_set_value_cansleep(
 				amlogic_pcie->reset_gpio, 1);
 		}
+#endif
 	}
 
 }
@@ -330,6 +339,23 @@ void amlogic_set_max_payload(struct amlogic_pcie *amlogic_pcie, int size)
 	val = amlogic_elb_readl(amlogic_pcie, PCIE_DEV_CTRL_DEV_STUS);
 	val |= (max_payload_size<<5);
 	amlogic_elb_writel(amlogic_pcie, val, PCIE_DEV_CTRL_DEV_STUS);
+}
+
+void amlogic_set_speed_mod(struct amlogic_pcie *amlogic_pcie)
+{
+	u32 val = 0;
+
+	if (amlogic_pcie->speed_mod == PCIE_GEN_1 ) {
+		val = amlogic_elb_readl(amlogic_pcie, PCIE_LINK_CTRL_2_REG);
+		val &= ~(0xf);
+		val |= (0x1);
+		amlogic_elb_writel(amlogic_pcie, val, PCIE_LINK_CTRL_2_REG);
+	} else {
+		val = amlogic_elb_readl(amlogic_pcie, PCIE_LINK_CTRL_2_REG);
+		val &= ~(0xf);
+		val |= (0x2);
+		amlogic_elb_writel(amlogic_pcie, val, PCIE_LINK_CTRL_2_REG);
+	}
 }
 
 void amlogic_set_max_rd_req_size(struct amlogic_pcie *amlogic_pcie, int size)
@@ -424,6 +450,7 @@ static int amlogic_pcie_establish_link(struct amlogic_pcie *amlogic_pcie)
 	amlogic_pcie_init_dw(amlogic_pcie);
 	amlogic_set_max_payload(amlogic_pcie, 256);
 	amlogic_set_max_rd_req_size(amlogic_pcie, 256);
+	amlogic_set_speed_mod(amlogic_pcie);
 
 	dw_pcie_setup_rc(pp);
 	amlogic_enable_memory_space(amlogic_pcie);
@@ -561,8 +588,10 @@ int amlogic_pcie_link_up(struct pcie_port *pp)
 		udelay(20);
 	}
 
+#ifndef CONFIG_SONOS
 	if (current_data_rate == PCIE_GEN2)
 		dev_info(pp->dev, "PCIE SPEED IS GEN2\n");
+#endif
 
 	return 1;
 }
@@ -629,6 +658,8 @@ static int __init amlogic_add_pcie_port(struct amlogic_pcie *amlogic_pcie,
 
 	if (amlogic_pcie->device_attch == 0) {
 		dev_err(pp->dev, "link timeout, disable PCIE PLL\n");
+#ifdef CONFIG_SONOS
+#ifndef PCIE_COMPLIANCE_TEST
 		clk_disable_unprepare(amlogic_pcie->port_clk);
 		clk_disable_unprepare(amlogic_pcie->general_clk);
 		clk_disable_unprepare(amlogic_pcie->mipi_bandgap_gate);
@@ -642,6 +673,8 @@ static int __init amlogic_add_pcie_port(struct amlogic_pcie *amlogic_pcie,
 				amlogic_pcie->phy->power_state = 0;
 			}
 		}
+#endif
+#endif
 	}
 
 	return 0;
@@ -661,6 +694,7 @@ static int __init amlogic_pcie_probe(struct platform_device *pdev)
 	int ret;
 	int pcie_num = 0;
 	int num_lanes = 0;
+	int speed_mod = 0;
 	int gpio_type = 0;
 	unsigned long rate = 100000000;
 	int err;
@@ -708,6 +742,12 @@ static int __init amlogic_pcie_probe(struct platform_device *pdev)
 		pp->lanes = 0;
 	pp->lanes = num_lanes;
 
+	ret = of_property_read_u32(np, "speed-mod", &speed_mod);
+	if (ret)
+		amlogic_pcie->speed_mod = 0;
+	else
+		amlogic_pcie->speed_mod = speed_mod;
+
 	if (!amlogic_pcie->phy->phy_base) {
 		phy_base = platform_get_resource_byname(
 			pdev, IORESOURCE_MEM, "phy");
@@ -733,6 +773,16 @@ static int __init amlogic_pcie_probe(struct platform_device *pdev)
 	amlogic_pcie->gpio_type = gpio_type;
 
 	amlogic_pcie->reset_gpio = of_get_named_gpio(np, "reset-gpio", 0);
+
+#ifdef CONFIG_SONOS
+	if (gpio_is_valid(amlogic_pcie->reset_gpio)) {
+		devm_gpio_request(dev,
+				amlogic_pcie->reset_gpio, "RESET");
+		dev_info(amlogic_pcie->pp.dev,
+			"GPIO pad: reset low\n");
+		gpio_direction_output( amlogic_pcie->reset_gpio, 0);
+	}
+#endif
 
 	if (!amlogic_pcie->phy->reset_base) {
 		reset_base = platform_get_resource_byname(
@@ -766,7 +816,7 @@ static int __init amlogic_pcie_probe(struct platform_device *pdev)
 			goto fail_pcie;
 		}
 
-		if (clk_get_rate(amlogic_pcie->bus_clk) != rate) {
+		if (clk_get_rate(amlogic_pcie->bus_clk) == rate) {
 			ret = -ENODEV;
 			goto fail_pcie;
 		}

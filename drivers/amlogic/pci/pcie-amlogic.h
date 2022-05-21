@@ -43,7 +43,9 @@
 #define PCIE_PHY_DEBUG_R1_LINK_UP	(0x1 << 4)
 #define PCIE_PHY_DEBUG_R1_LINK_IN_TRAINING	(0x1 << 29)
 
-#define    WAIT_LINKUP_TIMEOUT         2000
+#define WAIT_LINKUP_TIMEOUT	2000
+
+#define PCIE_GEN_1	1
 
 enum pcie_data_rate {
 	PCIE_GEN1,
@@ -54,6 +56,7 @@ enum pcie_data_rate {
 
 #define PCIE_CAP_OFFSET	0x70
 #define PCIE_DEV_CTRL_DEV_STUS	(PCIE_CAP_OFFSET + 0x08)
+#define PCIE_LINK_CTRL_2_REG	(PCIE_CAP_OFFSET + 0x30)
 
 union phy_r0 {
 	/** raw register data */
