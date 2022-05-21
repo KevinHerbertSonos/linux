@@ -2449,6 +2449,7 @@ void aml_host_bus_fsm_show(struct amlsd_host *host, int fsm_val)
 
 void mmc_cmd_LBA_show(struct mmc_host *mmc, struct mmc_request *mrq)
 {
+#ifndef CONFIG_SONOS
 	int i;
 	uint64_t offset, size;
 	struct partitions *pp;
@@ -2474,6 +2475,7 @@ void mmc_cmd_LBA_show(struct mmc_host *mmc, struct mmc_request *mrq)
 		pr_err("%s: cmd %d, arg 0x%x, operation is in [unknown] disk!\n",
 				mmc_hostname(mmc),
 				mrq->cmd->opcode, mrq->cmd->arg);
+#endif
 }
 
 static irqreturn_t meson_mmc_irq(int irq, void *dev_id)
