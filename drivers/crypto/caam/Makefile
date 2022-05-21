@@ -12,6 +12,9 @@ obj-$(CONFIG_CRYPTO_DEV_FSL_CAAM_AHASH_API) += caamhash.o
 obj-$(CONFIG_CRYPTO_DEV_FSL_CAAM_RNG_API) += caamrng.o
 obj-$(CONFIG_CRYPTO_DEV_FSL_CAAM_PKC_API) += caam_pkc.o
 obj-$(CONFIG_CRYPTO_DEV_FSL_CAAM_SM) += sm_store.o
+ifeq ($(CONFIG_SONOS_SECBOOT), y)
+  obj-$(CONFIG_CRYPTO_DEV_FSL_CAAM_SM) += sonos_sm_access.o
+endif
 obj-$(CONFIG_CRYPTO_DEV_FSL_CAAM_SM_TEST) += sm_test.o
 obj-$(CONFIG_CRYPTO_DEV_FSL_CAAM_SECVIO) += secvio.o
 
