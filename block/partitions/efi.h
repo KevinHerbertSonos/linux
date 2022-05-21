@@ -43,7 +43,19 @@
 
 #define GPT_HEADER_SIGNATURE 0x5452415020494645ULL
 #define GPT_HEADER_REVISION_V1 0x00010000
+#ifdef CONFIG_SONOS
+/* Sonos - hard-limiting at both ends - GPT cover 3000-700000 to allow
+ * first image to support any eMMC 4GB or greater.
+ */
+#ifdef CONFIG_MACH_MT8518
+#define GPT_PRIMARY_PARTITION_TABLE_LBA 0x5001
+#else
+#define GPT_PRIMARY_PARTITION_TABLE_LBA 0x3001
+#endif
+#define GPT_ALTERNATE_PARTITION_TABLE_LBA 0x700000
+#else
 #define GPT_PRIMARY_PARTITION_TABLE_LBA 1
+#endif
 
 #define PARTITION_SYSTEM_GUID \
     EFI_GUID( 0xC12A7328, 0xF81F, 0x11d2, \
