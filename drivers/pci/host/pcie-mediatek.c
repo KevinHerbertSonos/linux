@@ -1322,6 +1322,9 @@ static int mtk_pcie_probe(struct platform_device *pdev)
 	if (err)
 		goto put_resources;
 
+	/* Add delay before scan to wait switch<->7615 link stable*/
+	mdelay(600);
+
 	err = mtk_pcie_register_host(host);
 	if (err)
 		goto put_resources;
