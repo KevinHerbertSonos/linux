@@ -21,6 +21,7 @@
 #include "../common/mtk-base-afe.h"
 #include <sound/soc.h>
 #include <linux/kernel.h>
+#include <linux/bitrev.h>
 
 #define ENUM_TO_STR(enum) #enum
 
@@ -1502,25 +1503,37 @@ static int mt8518_afe_spdif_in_iec958_get(struct snd_kcontrol *kcontrol,
 	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(plat);
 	struct mt8518_afe_private *afe_priv = afe->platform_priv;
 	struct mt8518_spdif_in_data *spdif_in = &afe_priv->spdif_in_data;
+	bool valid = 0;
 	int i;
 
 	if (spdif_in->port != SPDIF_IN_PORT_NONE) {
 		mt8518_afe_enable_main_clk(afe);
 
-		for (i = 0; i < 6; i++)
+		for (i = 0; i < 6; i++) {
 			regmap_read(afe->regmap,
 				    AFE_SPDIFIN_CHSTS1 + i * 4,
 				    &spdif_in->subdata.ch_status[i]);
 
+			/* Flip the bit endianness for every byte, 32 bits at a time */
+			spdif_in->subdata.ch_status[i] = htonl(bitrev32(spdif_in->subdata.ch_status[i]));
+
+			/* HW uses all FFs when CSB has not been accumulated */
+			if (spdif_in->subdata.ch_status[i] != 0xFFFFFFFF) {
+				valid = 1;
+			}
+		}
+
 		mt8518_afe_disable_main_clk(afe);
-	} else {
-		memset((void *)spdif_in->subdata.ch_status,
-		       0xff, sizeof(spdif_in->subdata.ch_status));
 	}
 
-	memcpy((void *)ucontrol->value.iec958.status,
-	       spdif_in->subdata.ch_status,
-	       sizeof(spdif_in->subdata.ch_status));
+	if (valid) {
+		memcpy((void *)ucontrol->value.iec958.status,
+		       spdif_in->subdata.ch_status,
+		       sizeof(spdif_in->subdata.ch_status));
+	} else {
+		memset((void *)ucontrol->value.iec958.status,
+		       0x00, sizeof(ucontrol->value.iec958.status));
+	}
 
 	return 0;
 }
