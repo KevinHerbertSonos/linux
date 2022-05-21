@@ -32,18 +32,18 @@ struct GLOBAL_SYSTEM g_sys;
 struct GLOBAL_HDCP g_hdcp;
 struct GLOBAL_EDID g_edid;
 // saved TPI Reg0x08/Reg0x09/Reg0x0A values.
-byte tpivmode[3];
+u8 tpivmode[3];
 
 /*The following functions are related with target system!!!*/
 
-byte siHdmiTx_HwResetPin;	// Connected to 9022A/4A pin C3 (CRST#)
+u8 siHdmiTx_HwResetPin;	// Connected to 9022A/4A pin C3 (CRST#)
 
 //byte I2CReadByte ( byte SlaveAddr, byte RegAddr );
 //void I2CWriteByte ( byte SlaveAddr, byte RegAddr, byte Data );
 //byte I2CReadBlock( byte SlaveAddr, byte RegAddr, byte NBytes, byte * Data );
 //byte I2CWriteBlock( byte SlaveAddr, byte RegAddr, byte NBytes, byte * Data );
-byte siiReadSegmentBlockEDID(byte SlaveAddr,
-byte Segment, byte Offset, byte *Buffer, byte Length)
+u8 siiReadSegmentBlockEDID(u8 SlaveAddr,
+u8 Segment, u8 Offset, u8 *Buffer, u8 Length)
 {
 	return 0;
 }
@@ -55,7 +55,7 @@ byte Segment, byte Offset, byte *Buffer, byte Length)
 //
 // Accepts: Length of required delay in milliseconds (max. 65535 ms)
 //------------------------------------------------------------------------------
-void DelayMS(word MS)
+void DelayMS(u32 MS)
 {
 	unsigned long i;
 
@@ -74,9 +74,9 @@ void DelayMS(word MS)
 //                  unchanged.
 //------------------------------------------------------------------------------
 
-void ReadSetWriteTPI(byte Offset, byte Pattern)
+void ReadSetWriteTPI(u8 Offset, u8 Pattern)
 {
-	byte Tmp;
+	u8 Tmp;
 
 	Tmp = ReadByteTPI(Offset);
 
@@ -91,9 +91,9 @@ void ReadSetWriteTPI(byte Offset, byte Pattern)
 //                  to "1" in "Pattern"; Leave all other bits in "Offset"
 //                  unchanged.
 //------------------------------------------------------------------------------
-void ReadClearWriteTPI(byte Offset, byte Pattern)
+void ReadClearWriteTPI(u8 Offset, u8 Pattern)
 {
-	byte Tmp;
+	u8 Tmp;
 
 	Tmp = ReadByteTPI(Offset);
 
@@ -108,9 +108,9 @@ void ReadClearWriteTPI(byte Offset, byte Pattern)
 //                  to "1" in "Mask"; Leave all other bits in "Offset"
 //                  unchanged.
 //------------------------------------------------------------------------------
-void ReadModifyWriteTPI(byte Offset, byte Mask, byte Value)
+void ReadModifyWriteTPI(u8 Offset, u8 Mask, u8 Value)
 {
-	byte Tmp;
+	u8 Tmp;
 
 	Tmp = ReadByteTPI(Offset);
 	Tmp &= ~Mask;
@@ -123,7 +123,7 @@ void ReadModifyWriteTPI(byte Offset, byte Mask, byte Value)
 // Function Description: Read NBytes from offset Addr of the TPI slave address
 //                      into a byte Buffer pointed to by Data
 //------------------------------------------------------------------------------
-void ReadBlockTPI(byte TPI_Offset, word NBytes, byte *pData)
+void ReadBlockTPI(u8 TPI_Offset, u32 NBytes, u8 *pData)
 {
 	I2CReadBlock(TX_SLAVE_ADDR, TPI_Offset, NBytes, pData);
 }
@@ -133,7 +133,7 @@ void ReadBlockTPI(byte TPI_Offset, word NBytes, byte *pData)
 // Function Description: Write NBytes from a byte Buffer pointed to by Data to
 //                      the TPI I2C slave starting at offset Addr
 //------------------------------------------------------------------------------
-void WriteBlockTPI(byte TPI_Offset, word NBytes, byte *pData)
+void WriteBlockTPI(u8 TPI_Offset, u32 NBytes, u8 *pData)
 {
 	I2CWriteBlock(TX_SLAVE_ADDR, TPI_Offset, NBytes, pData);
 }
@@ -149,7 +149,7 @@ void WriteBlockTPI(byte TPI_Offset, word NBytes, byte *pData)
 //                  Read:
 //                      3. 0xBE => Returns the indexed register value
 //------------------------------------------------------------------------------
-byte ReadIndexedRegister(byte PageNum, byte RegOffset)
+u8 ReadIndexedRegister(u8 PageNum, u8 RegOffset)
 {
 	WriteByteTPI(TPI_INTERNAL_PAGE_REG, PageNum);
 	WriteByteTPI(TPI_INDEXED_OFFSET_REG,
@@ -166,7 +166,7 @@ byte ReadIndexedRegister(byte PageNum, byte RegOffset)
 //                      2. 0xBD => Indexed register offset
 //                      3. 0xBE => Set the indexed register value
 //------------------------------------------------------------------------------
-void WriteIndexedRegister(byte PageNum, byte RegOffset, byte RegValue)
+void WriteIndexedRegister(u8 PageNum, u8 RegOffset, u8 RegValue)
 {
 	WriteByteTPI(TPI_INTERNAL_PAGE_REG, PageNum);	// Internal page
 	WriteByteTPI(TPI_INDEXED_OFFSET_REG,
@@ -183,10 +183,10 @@ void WriteIndexedRegister(byte PageNum, byte RegOffset, byte RegValue)
 //                  unchanged.
 //------------------------------------------------------------------------------
 void ReadModifyWriteIndexedRegister(
-byte PageNum, byte RegOffset,
-byte Mask, byte Value)
+u8 PageNum, u8 RegOffset,
+u8 Mask, u8 Value)
 {
-	byte Tmp;
+	u8 Tmp;
 
 	WriteByteTPI(TPI_INTERNAL_PAGE_REG, PageNum);
 	WriteByteTPI(TPI_INDEXED_OFFSET_REG, RegOffset);
@@ -275,7 +275,7 @@ void DisableTMDS(void)
 // Returns: TRUE
 // Globals: none
 //------------------------------------------------------------------------------
-byte EnableInterrupts(byte Interrupt_Pattern)
+u8 EnableInterrupts(u8 Interrupt_Pattern)
 {
 	TPI_TRACE_PRINT((">>EnableInterrupts()\n"));
 	ReadSetWriteTPI(TPI_INTERRUPT_ENABLE_REG, Interrupt_Pattern);
@@ -292,7 +292,7 @@ byte EnableInterrupts(byte Interrupt_Pattern)
 // Returns: TRUE
 // Globals: none
 //------------------------------------------------------------------------------
-byte DisableInterrupts(byte Interrupt_Pattern)
+u8 DisableInterrupts(u8 Interrupt_Pattern)
 {
 	TPI_TRACE_PRINT((">>DisableInterrupts()\n"));
 	ReadClearWriteTPI(TPI_INTERRUPT_ENABLE_REG, Interrupt_Pattern);
@@ -302,7 +302,7 @@ byte DisableInterrupts(byte Interrupt_Pattern)
 
 #ifdef DEV_SUPPORT_EDID
 
- /*EDID*/ byte g_CommData[EDID_BLOCK_SIZE];
+ /*EDID*/ u8 g_CommData[EDID_BLOCK_SIZE];
 
 #define ReadBlockEDID(a, b, c)	\
 	I2CReadBlock(EDID_ROM_ADDR, a, b, c)
@@ -319,11 +319,11 @@ byte DisableInterrupts(byte Interrupt_Pattern)
 //------------------------------------------------------------------------------
 #define T_DDC_ACCESS    50
 
-byte GetDDC_Access(byte *SysCtrlRegVal)
+u8 GetDDC_Access(u8 *SysCtrlRegVal)
 {
-	byte sysCtrl;
-	byte DDCReqTimeout = T_DDC_ACCESS;
-	byte TPI_ControlImage;
+	u8 sysCtrl;
+	u8 DDCReqTimeout = T_DDC_ACCESS;
+	u8 TPI_ControlImage;
 
 	TPI_TRACE_PRINT((">>GetDDC_Access()\n"));
 	// Read and store original value. Will be passed into ReleaseDDC()
@@ -359,10 +359,10 @@ byte GetDDC_Access(byte *SysCtrlRegVal)
 // Returns: TRUE if bus released successfully. FALSE if failed.
 // Globals: none
 //------------------------------------------------------------------------------
-byte ReleaseDDC(byte SysCtrlRegVal)
+u8 ReleaseDDC(u8 SysCtrlRegVal)
 {
-	byte DDCReqTimeout = T_DDC_ACCESS;
-	byte TPI_ControlImage;
+	u8 DDCReqTimeout = T_DDC_ACCESS;
+	u8 TPI_ControlImage;
 
 	TPI_TRACE_PRINT((">>ReleaseDDC()\n"));
 	// Just to be sure bits [2:1] are 0 before it is written
@@ -397,9 +397,9 @@ byte ReleaseDDC(byte SysCtrlRegVal)
 // Returns: TRUE or FLASE
 // Globals: EDID data
 //------------------------------------------------------------------------------
-byte CheckEDID_Header(byte *Block)
+u8 CheckEDID_Header(u8 *Block)
 {
-	byte i = 0;
+	u8 i = 0;
 
 	if (Block[i])		// byte 0 must be 0
 		return FALSE;
@@ -425,10 +425,10 @@ byte CheckEDID_Header(byte *Block)
 // Returns: TRUE or FLASE
 // Globals: EDID data
 //------------------------------------------------------------------------------
-byte DoEDID_Checksum(byte *Block)
+u8 DoEDID_Checksum(u8 *Block)
 {
-	byte i;
-	byte CheckSum = 0;
+	u8 i;
+	u8 CheckSum = 0;
 
 	for (i = 0; i < EDID_BLOCK_SIZE; i++)
 		CheckSum += Block[i];
@@ -451,7 +451,7 @@ byte DoEDID_Checksum(byte *Block)
 // Globals: EDID data
 //------------------------------------------------------------------------------
 #if (CONF__TPI_EDID_PRINT == ENABLE)
-void ParseEstablishedTiming(byte *Data)
+void ParseEstablishedTiming(u8 *Data)
 {
 	TPI_EDID_PRINT(("Parsing Established Timing:\n"));
 	TPI_EDID_PRINT(("===========================\n"));
@@ -510,10 +510,10 @@ void ParseEstablishedTiming(byte *Data)
 // Returns: none
 // Globals: EDID data
 //------------------------------------------------------------------------------
-void ParseStandardTiming(byte *Data)
+void ParseStandardTiming(u8 *Data)
 {
-	byte i;
-	byte AR_Code;
+	u8 i;
+	u8 AR_Code;
 
 	TPI_EDID_PRINT(("Parsing Standard Timing:\n"));
 	TPI_EDID_PRINT(("========================\n"));
@@ -564,11 +564,11 @@ void ParseStandardTiming(byte *Data)
 // Returns: none
 // Globals: EDID data
 //------------------------------------------------------------------------------
-byte ParseDetailedTiming(byte *Data, byte DetailedTimingOffset, byte Block)
+u8 ParseDetailedTiming(u8 *Data, u8 DetailedTimingOffset, u8 Block)
 {
-	byte TmpByte;
-	byte i;
-	word TmpWord;
+	u8 TmpByte;
+	u8 i;
+	u32 TmpWord;
 
 	TmpWord = Data[DetailedTimingOffset + PIX_CLK_OFFSET] +
 	    256 * Data[DetailedTimingOffset + PIX_CLK_OFFSET + 1];
@@ -693,10 +693,10 @@ byte ParseDetailedTiming(byte *Data, byte DetailedTimingOffset, byte Block)
 // Returns: none
 // Globals: EDID data
 //------------------------------------------------------------------------------
-void ParseBlock_0_TimingDescripors(byte *Data)
+void ParseBlock_0_TimingDescripors(u8 *Data)
 {
-	byte i;
-	byte Offset;
+	u8 i;
+	u8 Offset;
 
 	ParseEstablishedTiming(Data);
 	ParseStandardTiming(Data);
@@ -720,9 +720,9 @@ void ParseBlock_0_TimingDescripors(byte *Data)
 // NOTE: Fields that are not supported by the
 //9022/4 (such as deep color) were not parsed.
 //------------------------------------------------------------------------------
-byte ParseEDID(byte *pEdid, byte *numExt)
+u8 ParseEDID(u8 *pEdid, u8 *numExt)
 {
-	byte i, j, k;
+	u8 i, j, k;
 
 	TPI_EDID_PRINT(("\n"));
 	TPI_EDID_PRINT(("EDID DATA (Segment = 0 Block = 0 Offset = %d):\n",
@@ -779,20 +779,20 @@ byte ParseEDID(byte *pEdid, byte *numExt)
 // NOTE: Fields that are not supported by
 //the 9022/4 (such as deep color) were not parsed.
 //------------------------------------------------------------------------------
-byte Parse861ShortDescriptors(byte *Data)
+u8 Parse861ShortDescriptors(u8 *Data)
 {
-	byte LongDescriptorOffset;
-	byte DataBlockLength;
-	byte DataIndex;
-	byte ExtendedTagCode;
-	byte VSDB_BaseOffset = 0;
+	u8 LongDescriptorOffset;
+	u8 DataBlockLength;
+	u8 DataIndex;
+	u8 ExtendedTagCode;
+	u8 VSDB_BaseOffset = 0;
 
-	byte V_DescriptorIndex = 0;
-	byte A_DescriptorIndex = 0;
-	byte TagCode;
+	u8 V_DescriptorIndex = 0;
+	u8 A_DescriptorIndex = 0;
+	u8 TagCode;
 
-	byte i;
-	byte j;
+	u8 i;
+	u8 j;
 
 	if (Data[EDID_TAG_ADDR] != EDID_EXTENSION_TAG) {
 		TPI_EDID_PRINT(("EDID -> Extension Tag Error\n"));
@@ -891,10 +891,10 @@ byte Parse861ShortDescriptors(byte *Data)
 #ifdef DEV_SUPPORT_CEC
 		// to set the physical address for CEC.
 		{
-			word phyAddr;
+			u32 phyAddr;
 
-			phyAddr = (word)g_edid.CEC_C_D;
-			phyAddr |= ((word)g_edid.CEC_A_B << 8);
+			phyAddr = (u32)g_edid.CEC_C_D;
+			phyAddr |= ((u32)g_edid.CEC_A_B << 8);
 			if (phyAddr != SI_CecGetDevicePA()) {
 				// Yes!  So change the PA
 				SI_CecSetDevicePA(phyAddr);
@@ -935,10 +935,10 @@ return EDID_SHORT_DESCRIPTORS_OK;
 //descriptors found; EDID_PARSED_OK if descriptors found.
 // Globals: none
 //------------------------------------------------------------------------------
-byte Parse861LongDescriptors(byte *Data)
+u8 Parse861LongDescriptors(u8 *Data)
 {
-	byte LongDescriptorsOffset;
-	byte DescriptorNum = 1;
+	u8 LongDescriptorsOffset;
+	u8 DescriptorNum = 1;
 
 	LongDescriptorsOffset = Data[LONG_DESCR_PTR_IDX];
 
@@ -973,18 +973,18 @@ byte Parse861LongDescriptors(byte *Data)
 // NOTE: Fields that are not supported by
 //the 9022/4 (such as deep color) were not parsed.
 //------------------------------------------------------------------------------
-byte Parse861Extensions(byte NumOfExtensions)
+u8 Parse861Extensions(u8 NumOfExtensions)
 {
-	byte i, j, k;
+	u8 i, j, k;
 
-	byte ErrCode;
+	u8 ErrCode;
 
 	//byte V_DescriptorIndex = 0;
 	//byte A_DescriptorIndex = 0;
 
-	byte Segment = 0;
-	byte Block = 0;
-	byte Offset = 0;
+	u8 Segment = 0;
+	u8 Block = 0;
+	u8 Offset = 0;
 
 	g_edid.HDMI_Sink = FALSE;
 
@@ -995,7 +995,7 @@ byte Parse861Extensions(byte NumOfExtensions)
 		if ((Block % 2) > 0)
 			Offset = EDID_BLOCK_SIZE;
 
-		Segment = (byte)(Block / 2);
+		Segment = (u8)(Block / 2);
 
 		if (Block == 1)
 			ReadBlockEDID(EDID_BLOCK_1_OFFSET,
@@ -1043,11 +1043,11 @@ byte Parse861Extensions(byte NumOfExtensions)
 // Returns: TRUE or FLASE
 // Globals: none
 //------------------------------------------------------------------------------
-byte DoEdidRead(void)
+u8 DoEdidRead(void)
 {
-	byte SysCtrlReg;
-	byte Result;
-	byte NumOfExtensions;
+	u8 SysCtrlReg;
+	u8 Result;
+	u8 NumOfExtensions;
 
 	// If we already have valid EDID data, ship this whole thing
 	if (g_edid.edidDataValid == FALSE) {
@@ -1116,10 +1116,10 @@ byte DoEdidRead(void)
 // Returns: TRUE if Tx supports HDCP. FALSE if not.
 // Globals: none
 //------------------------------------------------------------------------------
-byte IsHDCP_Supported(void)
+u8 IsHDCP_Supported(void)
 {
-	byte HDCP_Rev;
-	byte HDCP_Supported;
+	u8 HDCP_Rev;
+	u8 HDCP_Supported;
 
 	TPI_TRACE_PRINT((">>IsHDCP_Supported()\n"));
 
@@ -1157,11 +1157,11 @@ byte IsHDCP_Supported(void)
 // Returns: TRUE if 20 zeros and 20 ones found in AKSV. FALSE OTHERWISE
 // Globals: none
 //------------------------------------------------------------------------------
-byte AreAKSV_OK(void)
+u8 AreAKSV_OK(void)
 {
-	byte B_Data[AKSV_SIZE];
-	byte NumOfOnes = 0;
-	byte i, j;
+	u8 B_Data[AKSV_SIZE];
+	u8 NumOfOnes = 0;
+	u8 i, j;
 
 	TPI_TRACE_PRINT((">>AreAKSV_OK()\n"));
 
@@ -1294,9 +1294,9 @@ void HDCP_Init(void)
 // Returns: TRUE if sink is a repeater. FALSE if not.
 // Globals: none
 //------------------------------------------------------------------------------
-byte IsRepeater(void)
+u8 IsRepeater(void)
 {
-	byte RegImage;
+	u8 RegImage;
 
 	TPI_TRACE_PRINT((">>IsRepeater()\n"));
 
@@ -1320,7 +1320,7 @@ byte IsRepeater(void)
 // Returns: none
 // Globals: none
 //------------------------------------------------------------------------------
-void ReadBlockHDCP(byte TPI_Offset, word NBytes, byte *pData)
+void ReadBlockHDCP(u8 TPI_Offset, u32 NBytes, u8 *pData)
 {
 	I2CReadBlock(HDCP_SLAVE_ADDR, TPI_Offset, NBytes, pData);
 }
@@ -1335,11 +1335,11 @@ void ReadBlockHDCP(byte TPI_Offset, word NBytes, byte *pData)
 //The buffer is limited to KSV_ARRAY_SIZE
 //due to the 8051 implementation.
 //------------------------------------------------------------------------------
-byte GetKSV(void)
+u8 GetKSV(void)
 {
-	byte i;
-	word KeyCount;
-	byte KSV_Array[KSV_ARRAY_SIZE];
+	u8 i;
+	u32 KeyCount;
+	u8 KSV_Array[KSV_ARRAY_SIZE];
 
 	TPI_TRACE_PRINT((">>GetKSV()\n"));
 	ReadBlockHDCP(DDC_BSTATUS_ADDR_L, 1, &i);
@@ -1359,18 +1359,18 @@ byte GetKSV(void)
 // Returns: none
 // Globals: none
 //------------------------------------------------------------------------------
-void HDCP_CheckStatus(byte InterruptStatusImage)
+void HDCP_CheckStatus(u8 InterruptStatusImage)
 {
-	byte QueryData;
-	byte LinkStatus;
-	byte RegImage;
-	byte NewLinkProtectionLevel;
+	u8 QueryData;
+	u8 LinkStatus;
+	u8 RegImage;
+	u8 NewLinkProtectionLevel;
 
 #ifdef READKSV
-	byte RiCnt;
+	u8 RiCnt;
 #endif
 #ifdef KSVFORWARD
-	byte ksv;
+	u8 ksv;
 #endif
 
 	if ((g_hdcp.HDCP_TxSupports == TRUE) &&
@@ -1519,49 +1519,49 @@ void HDCP_CheckStatus(byte InterruptStatusImage)
 // Video mode table
 //-----------------------------
 struct ModeIdType {
-	byte Mode_C1;
-	byte Mode_C2;
-	byte SubMode;
+	u8 Mode_C1;
+	u8 Mode_C2;
+	u8 SubMode;
 };
 
 struct PxlLnTotalType {
-	word Pixels;
-	word Lines;
+	u32 Pixels;
+	u32 Lines;
 };
 
 struct HVPositionType {
-	word H;
-	word V;
+	u32 H;
+	u32 V;
 };
 
 struct HVResolutionType {
-	word H;
-	word V;
+	u32 H;
+	u32 V;
 };
 
 struct TagType {
-	byte RefrTypeVHPol;
-	word VFreq;
+	u8 RefrTypeVHPol;
+	u32 VFreq;
 	struct PxlLnTotalType Total;
 };
 
 struct _656Type {
-	byte IntAdjMode;
-	word HLength;
-	byte VLength;
-	word Top;
-	word Dly;
-	word HBit2HSync;
-	byte VBit2VSync;
-	word Field2Offset;
+	u8 IntAdjMode;
+	u32 HLength;
+	u8 VLength;
+	u32 Top;
+	u32 Dly;
+	u32 HBit2HSync;
+	u8 VBit2VSync;
+	u32 Field2Offset;
 };
 
 struct Vspace_Vblank {
-	byte VactSpace1;
-	byte VactSpace2;
-	byte Vblank1;
-	byte Vblank2;
-	byte Vblank3;
+	u8 VactSpace1;
+	u8 VactSpace2;
+	u8 Vblank1;
+	u8 Vblank2;
+	u8 Vblank3;
 };
 
 //
@@ -1623,15 +1623,15 @@ enum PcModeCode_t {
 
 struct VModeInfoType {
 	struct ModeIdType ModeId;
-	word PixClk;
+	u32 PixClk;
 	struct TagType Tag;
 	struct HVPositionType Pos;
 	struct HVResolutionType Res;
-	byte AspectRatio;
+	u8 AspectRatio;
 	struct _656Type _656;
-	byte PixRep;
+	u8 PixRep;
 	struct Vspace_Vblank VsVb;
-	byte _3D_Struct;
+	u8 _3D_Struct;
 };
 
 #define NSM                     0	// No Sub-Mode
@@ -1685,7 +1685,7 @@ const struct VModeInfoType VModesTable[100] = {};
 //that differ only in their AR are grouped
 // together (e.g., formats 2 and 3).
 //------------------------------------------------------------------------------
-const byte AspectRatioTable[] = {
+const u8 AspectRatioTable[] = {
 	R_4, R_4, R_16, R_16, R_16, R_4, R_16, R_4, R_16, R_4,
 	R_16, R_4, R_16, R_4, R_16, R_16, R_4, R_16, R_16, R_16,
 	R_4, R_16, R_4, R_16, R_4, R_16, R_4, R_16, R_4, R_16,
@@ -1701,7 +1701,7 @@ const byte AspectRatioTable[] = {
 //codes in 861-D formats, NOT for HDMI_VIC codes
 // or 3D codes!
 //------------------------------------------------------------------------------
-const byte VIC2Index[] = {
+const u8 VIC2Index[] = {
 	0, 0, 1, 1, 2, 3, 4, 4, 5, 5,
 	7, 7, 8, 8, 10, 10, 11, 12, 12, 13,
 	14, 15, 15, 16, 16, 19, 19, 20, 20, 23,
@@ -1722,9 +1722,9 @@ const byte VIC2Index[] = {
 // Globals: VModesTable[] siHdmiTx
 // Note: Conversion is for 861-D formats, HDMI_VIC or 3D
 //------------------------------------------------------------------------------
-byte ConvertVIC_To_VM_Index(void)
+u8 ConvertVIC_To_VM_Index(void)
 {
-	byte index;
+	u8 index;
 
 	//
 	// The global VideoModeDescription contains
@@ -1895,7 +1895,7 @@ byte ConvertVIC_To_VM_Index(void)
 
 // Patches
 //========
-byte TPI_REG0x63_SAVED;
+u8 TPI_REG0x63_SAVED;
 
 //------------------------------------------------------------------------------
 // Function Name: SetEmbeddedSync()
@@ -1905,16 +1905,16 @@ byte TPI_REG0x63_SAVED;
 // Returns: TRUE
 // Globals: VModesTable[]
 //------------------------------------------------------------------------------
-byte SetEmbeddedSync(void)
+u8 SetEmbeddedSync(void)
 {
-	byte ModeTblIndex;
-	word H_Bit_2_H_Sync;
-	word Field2Offset;
-	word H_SyncWidth;
+	u8 ModeTblIndex;
+	u32 H_Bit_2_H_Sync;
+	u32 Field2Offset;
+	u32 H_SyncWidth;
 
-	byte V_Bit_2_V_Sync;
-	byte V_SyncWidth;
-	byte B_Data[8];
+	u8 V_Bit_2_V_Sync;
+	u8 V_SyncWidth;
+	u8 B_Data[8];
 
 	TPI_TRACE_PRINT((">>SetEmbeddedSync()\n"));
 
@@ -1984,17 +1984,17 @@ void EnableEmbeddedSync(void)
 //
 // NOTE: 0x60[7] must be set to "0" for the following settings to take effect
 //------------------------------------------------------------------------------
-byte SetDE(void)
+u8 SetDE(void)
 {
-	byte RegValue;
-	byte ModeTblIndex;
+	u8 RegValue;
+	u8 ModeTblIndex;
 
-	word H_StartPos, V_StartPos;
-	word Htotal, Vtotal;
-	word H_Res, V_Res;
+	u32 H_StartPos, V_StartPos;
+	u32 Htotal, Vtotal;
+	u32 H_Res, V_Res;
 
-	byte Polarity;
-	byte B_Data[12];
+	u8 Polarity;
+	u8 B_Data[12];
 
 	TPI_TRACE_PRINT((">>SetDE()\n"));
 
@@ -2057,7 +2057,7 @@ byte SetDE(void)
 // Returns: DE_SET_OK
 // Globals: none
 //------------------------------------------------------------------------------
-void SetFormat(byte *Data)
+void SetFormat(u8 *Data)
 {
 	ReadModifyWriteTPI(TPI_SYSTEM_CONTROL_DATA_REG,
 		OUTPUT_MODE_MASK, OUTPUT_MODE_HDMI);
@@ -2132,18 +2132,18 @@ void printVideoMode(void)
 // Returns: TRUE
 // Globals: VModesTable, VideoCommandImage
 //------------------------------------------------------------------------------
-byte InitVideo(byte TclkSel)
+u8 InitVideo(u8 TclkSel)
 {
-	byte ModeTblIndex;
+	u8 ModeTblIndex;
 
 #ifdef DEEP_COLOR
-	byte temp;
+	u8 temp;
 #endif
-	byte B_Data[8];
+	u8 B_Data[8];
 
-	byte EMB_Status;
-	byte DE_Status;
-	byte Pattern;
+	u8 EMB_Status;
+	u8 DE_Status;
+	u8 Pattern;
 
 	TPI_TRACE_PRINT((">>InitVideo()\n"));
 	printVideoMode();
@@ -2158,7 +2158,7 @@ byte InitVideo(byte TclkSel)
 	TPI_TRACE_PRINT((" 3D:%d", (int)siHdmiTx.ThreeDStructure));
 	TPI_TRACE_PRINT((" 3Dx:%d\n", (int)siHdmiTx.ThreeDExtData));
 
-	ModeTblIndex = (byte) ConvertVIC_To_VM_Index();
+	ModeTblIndex = (u8) ConvertVIC_To_VM_Index();
 
 	Pattern = (TclkSel << 6) & TWO_MSBITS;
 	ReadSetWriteTPI(TPI_PIX_REPETITION, Pattern);
@@ -2326,12 +2326,12 @@ byte InitVideo(byte TclkSel)
 // Note:          : Infoframe contents are from spec CEA-861-D
 //
 //------------------------------------------------------------------------------
-byte SetAVI_InfoFrames(void)
+u8 SetAVI_InfoFrames(void)
 {
-	byte B_Data[SIZE_AVI_INFOFRAME];
-	byte i;
-	byte TmpVal;
-	byte VModeTblIndex;
+	u8 B_Data[SIZE_AVI_INFOFRAME];
+	u8 i;
+	u8 TmpVal;
+	u8 VModeTblIndex;
 
 	TPI_TRACE_PRINT((">>SetAVI_InfoFrames()\n"));
 
@@ -2503,7 +2503,7 @@ void siHdmiTx_Init(void)
 //============================================================
 #define T_RES_CHANGE_DELAY      128
 
-byte siHdmiTx_VideoSet(void)
+u8 siHdmiTx_VideoSet(void)
 {
 	TPI_TRACE_PRINT((">>siHdmiTx_VideoSet()\n"));
 
@@ -2538,11 +2538,11 @@ byte siHdmiTx_VideoSet(void)
 // Returns: TRUE
 // Globals: none
 //------------------------------------------------------------------------------
-byte SetAudioInfoFrames(byte ChannelCount,
-byte CodingType, byte SS, byte Fs, byte SpeakerConfig)
+u8 SetAudioInfoFrames(u8 ChannelCount,
+u8 CodingType, u8 SS, u8 Fs, u8 SpeakerConfig)
 {
-	byte B_Data[SIZE_AUDIO_INFOFRAME];	// 14
-	byte i;
+	u8 B_Data[SIZE_AUDIO_INFOFRAME];	// 14
+	u8 i;
 	//byte TmpVal = 0;
 
 	TPI_TRACE_PRINT((">>SetAudioInfoFrames()\n"));
@@ -2589,7 +2589,7 @@ byte CodingType, byte SS, byte Fs, byte SpeakerConfig)
 // Returns: none
 // Globals: none
 //------------------------------------------------------------------------------
-void SetAudioMute(byte audioMute)
+void SetAudioMute(u8 audioMute)
 {
 	ReadModifyWriteTPI(TPI_AUDIO_INTERFACE_REG, AUDIO_MUTE_MASK, audioMute);
 }
@@ -2604,7 +2604,7 @@ void SetAudioMute(byte audioMute)
 // Returns: none
 // Globals: none
 //------------------------------------------------------------------------------
-void SetChannelLayout(byte Count)
+void SetChannelLayout(u8 Count)
 {
 	// Indexed register 0x7A:0x2F[1]:
 	WriteByteTPI(TPI_INTERNAL_PAGE_REG, 0x02);	// Internal page 2
@@ -2633,7 +2633,7 @@ void SetChannelLayout(byte Count)
 //                  Error Code if resolution change failed
 // Globals: siHdmiTx
 //------------------------------------------------------------------------------
-byte siHdmiTx_AudioSet(void)
+u8 siHdmiTx_AudioSet(void)
 {
 	TPI_TRACE_PRINT((">>siHdmiTx_AudioSet()\n"));
 
@@ -2715,9 +2715,9 @@ byte siHdmiTx_AudioSet(void)
 // NOTE: Currently this function is a place holder.
 //It always returns a Success message
 //------------------------------------------------------------------------------
-byte SetGBD_InfoFrame(void)
+u8 SetGBD_InfoFrame(void)
 {
-	byte CheckSum;
+	u8 CheckSum;
 
 	TPI_TRACE_PRINT((">>SetGBD_InfoFrame()\n"));
 
@@ -2763,8 +2763,8 @@ byte SetGBD_InfoFrame(void)
 
 void Set_VSIF(void)
 {
-	byte i;
-	byte Data[SIZE_MPEG_INFOFRAME];	//10
+	u8 i;
+	u8 Data[SIZE_MPEG_INFOFRAME];	//10
 
 	for (i = 0; i < SIZE_MPEG_INFOFRAME; i++)
 		Data[i] = 0;
@@ -2839,10 +2839,10 @@ void Set_VSIF(void)
 // Returns: TRUE if HW TPI started successfully. FALSE if failed to.
 // Globals: none
 //------------------------------------------------------------------------------
-byte StartTPI(void)
+u8 StartTPI(void)
 {
-	byte devID = 0x00;
-	word wID = 0x0000;
+	u8 devID = 0x00;
+	u32 wID = 0x0000;
 
 	TPI_TRACE_PRINT((">>StartTPI()\n"));
 
@@ -2874,7 +2874,7 @@ byte StartTPI(void)
 // Returns: TRUE or FLASE
 // Globals: none
 //------------------------------------------------------------------------------
-byte siHdmiTx_TPI_Init(void)
+u8 siHdmiTx_TPI_Init(void)
 {
 	TPI_TRACE_PRINT(("\n>>siHdmiTx_TPI_Init()\n"));
 	TPI_TRACE_PRINT(("\n%s\n", TPI_FW_VERSION));
@@ -3084,7 +3084,7 @@ void HotPlugService(void)
 //------------------------------------------------------------------------------
 void siHdmiTx_TPI_Poll(void)
 {
-	byte InterruptStatus;
+	u8 InterruptStatus;
 
 #ifdef HW_INT_ENABLE
 	if ((g_sys.txPowerState == TX_POWER_STATE_D0) && (!INT_PIN))
@@ -3153,7 +3153,7 @@ void siHdmiTx_TPI_Poll(void)
 }
 void sii9022_HdmiTx_TPI_Poll(void)
 {
-	byte InterruptStatus;
+	u8 InterruptStatus;
 
 	InterruptStatus =
 		ReadByteTPI(TPI_INTERRUPT_STATUS_REG);
@@ -3192,7 +3192,7 @@ void sii9022_HdmiTx_TPI_Poll(void)
 // Returns: none
 // Globals: none
 //------------------------------------------------------------------------------
-void siHdmiTx_VideoSel(byte vmode)
+void siHdmiTx_VideoSel(u8 vmode)
 {
 	siHdmiTx.HDMIVideoFormat = VMD_HDMIFORMAT_CEA_VIC;
 	siHdmiTx.ColorSpace = RGB;
@@ -3282,7 +3282,7 @@ void siHdmiTx_VideoSel(byte vmode)
 // Returns: none
 // Globals: none
 //------------------------------------------------------------------------------
-void siHdmiTx_AudioSel(byte Afs)
+void siHdmiTx_AudioSel(u8 Afs)
 {
 	siHdmiTx.AudioMode = AMODE_SPDIF;
 	siHdmiTx.AudioChannels = ACHANNEL_2CH;

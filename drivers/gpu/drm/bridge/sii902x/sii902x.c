@@ -357,7 +357,7 @@ void sii9022_cec_handler(void)
 }
 
 /*i2c api for hdmi audio*/
-byte ReadByteTPI(byte RegOffset)
+u8 ReadByteTPI(u8 RegOffset)
 {
 	int ret;
 
@@ -379,7 +379,7 @@ byte ReadByteTPI(byte RegOffset)
 // Function Name: WriteByteTPI()
 // Function Description: I2C write
 //------------------------------------------------------------------------------
-int WriteByteTPI(byte RegOffset, byte Data)
+int WriteByteTPI(u8 RegOffset, u8 Data)
 {
 	int ret;
 
@@ -395,7 +395,7 @@ int WriteByteTPI(byte RegOffset, byte Data)
 	return 0;
 }
 
-byte I2CWriteBlock(byte SlaveAddr, byte RegAddr, byte NBytes, byte *Data)
+u8 I2CWriteBlock(u8 SlaveAddr, u8 RegAddr, u8 NBytes, u8 *Data)
 {
 	int ret;
 
@@ -410,7 +410,7 @@ byte I2CWriteBlock(byte SlaveAddr, byte RegAddr, byte NBytes, byte *Data)
 	return 1;
 }
 
-byte I2CReadBlock(byte SlaveAddr, byte RegAddr, byte NBytes, byte *Data)
+u8 I2CReadBlock(u8 SlaveAddr, u8 RegAddr, u8 NBytes, u8 *Data)
 {
 	int ret;
 

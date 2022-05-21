@@ -28,15 +28,12 @@
 #include <linux/kernel.h>
 #include <linux/regmap.h>
 
-#define byte unsigned char
-#define word unsigned int
-
-byte ReadByteTPI(byte RegOffset);
-int WriteByteTPI(byte RegOffset, byte Data);
-byte I2CReadBlock(byte SlaveAddr, byte RegAddr, byte NBytes, byte *Data);
-byte I2CWriteBlock(byte SlaveAddr, byte RegAddr, byte NBytes, byte *Data);
-byte siHdmiTx_AudioSet(void);
-void siHdmiTx_AudioSel(byte Afs);
+u8 ReadByteTPI(u8 RegOffset);
+int WriteByteTPI(u8 RegOffset, u8 Data);
+u8 I2CReadBlock(u8 SlaveAddr, u8 RegAddr, u8 NBytes, u8 *Data);
+u8 I2CWriteBlock(u8 SlaveAddr, u8 RegAddr, u8 NBytes, u8 *Data);
+u8 siHdmiTx_AudioSet(void);
+void siHdmiTx_AudioSel(u8 Afs);
 void sii9022_HdmiTx_TPI_Poll(void);
 
 //--------------------------------------------------------------------
@@ -152,22 +149,22 @@ static const char TPI_FW_VERSION[] = "TPI Firmware v6.6.3_APP v1.3";
 
 //====================================================
 struct SIHDMITX_CONFIG {
-	byte HDMIVideoFormat;
-	byte VIC;		// VIC or the HDMI_VIC
-	byte AspectRatio;	// 4x3 or 16x9
-	byte ColorSpace;
-	byte ColorDepth;
-	byte Colorimetry;
-	byte SyncMode;
-	byte TclkSel;
-	byte ThreeDStructure;
-	byte ThreeDExtData;
+	u8 HDMIVideoFormat;
+	u8 VIC;		// VIC or the HDMI_VIC
+	u8 AspectRatio;	// 4x3 or 16x9
+	u8 ColorSpace;
+	u8 ColorDepth;
+	u8 Colorimetry;
+	u8 SyncMode;
+	u8 TclkSel;
+	u8 ThreeDStructure;
+	u8 ThreeDExtData;
 
-	byte AudioMode;
-	byte AudioChannels;
-	byte AudioFs;
-	byte AudioWordLength;
-	byte AudioI2SFormat;	// Please refer to TPI reg0x20 for detailed.
+	u8 AudioMode;
+	u8 AudioChannels;
+	u8 AudioFs;
+	u8 AudioWordLength;
+	u8 AudioI2SFormat;	// Please refer to TPI reg0x20 for detailed.
 	//[7]_SCK Sample Edge: 0 = Falling; 1 = Rising
 	//[6:4]_MCLK Multiplier: 000:
 	//MCLK=128Fs; 001:MCLK=256Fs;
@@ -184,39 +181,39 @@ struct SIHDMITX_CONFIG {
 
 //====================================================
 struct GLOBAL_SYSTEM {
-	byte txPowerState;
-	byte tmdsPoweredUp;
-	byte hdmiCableConnected;
-	byte dsRxPoweredUp;
+	u8 txPowerState;
+	u8 tmdsPoweredUp;
+	u8 hdmiCableConnected;
+	u8 dsRxPoweredUp;
 };
 
 //====================================================
 struct GLOBAL_HDCP {
-	byte HDCP_TxSupports;
-	byte HDCP_AksvValid;
-	byte HDCP_Started;
-	byte HDCP_LinkProtectionLevel;
-	byte HDCP_Override;
-	byte HDCPAuthenticated;
+	u8 HDCP_TxSupports;
+	u8 HDCP_AksvValid;
+	u8 HDCP_Started;
+	u8 HDCP_LinkProtectionLevel;
+	u8 HDCP_Override;
+	u8 HDCPAuthenticated;
 };
 
 //====================================================
 struct GLOBAL_EDID {
 	// for storing EDID parsed data
-	byte edidDataValid;
-	byte VideoDescriptor[MAX_V_DESCRIPTORS];
-	byte AudioDescriptor[MAX_A_DESCRIPTORS][3];
-	byte SpkrAlloc[MAX_SPEAKER_CONFIGURATIONS];
-	byte UnderScan;
-	byte BasicAudio;
-	byte YCbCr_4_4_4;
-	byte YCbCr_4_2_2;
-	byte HDMI_Sink;
-	byte CEC_A_B;
-	byte CEC_C_D;
-	byte ColorimetrySupportFlags;
-	byte MetadataProfile;
-	byte _3D_Supported;
+	u8 edidDataValid;
+	u8 VideoDescriptor[MAX_V_DESCRIPTORS];
+	u8 AudioDescriptor[MAX_A_DESCRIPTORS][3];
+	u8 SpkrAlloc[MAX_SPEAKER_CONFIGURATIONS];
+	u8 UnderScan;
+	u8 BasicAudio;
+	u8 YCbCr_4_4_4;
+	u8 YCbCr_4_2_2;
+	u8 HDMI_Sink;
+	u8 CEC_A_B;
+	u8 CEC_C_D;
+	u8 ColorimetrySupportFlags;
+	u8 MetadataProfile;
+	u8 _3D_Supported;
 };
 
 enum EDID_ErrorCodes {
@@ -1080,15 +1077,15 @@ enum AV_ConfigErrorCodes {
 //--------------------------------------------------------------------
 extern void HotPlugService(void);
 extern void siHdmiTx_PowerStateD0(void);
-extern void SetAudioMute(byte audioMute);
+extern void SetAudioMute(u8 audioMute);
 
 void siHdmiTx_PowerStateD2(void);
 void siHdmiTx_PowerStateD0fromD2(void);
 
-byte siHdmiTx_VideoSet(void);
-byte siHdmiTx_AudioSet(void);
-byte siHdmiTx_TPI_Init(void);
+u8 siHdmiTx_VideoSet(void);
+u8 siHdmiTx_AudioSet(void);
+u8 siHdmiTx_TPI_Init(void);
 void siHdmiTx_TPI_Poll(void);
-void siHdmiTx_VideoSel(byte vmode);
-void siHdmiTx_AudioSel(byte Afs);
+void siHdmiTx_VideoSel(u8 vmode);
+void siHdmiTx_AudioSel(u8 Afs);
 #endif
