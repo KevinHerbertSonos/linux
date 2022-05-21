@@ -199,7 +199,7 @@ static struct quota_format_type *find_quota_format(int id)
 			     module_names[qm].qm_fmt_id != id; qm++)
 			;
 		if (!module_names[qm].qm_fmt_id ||
-		    request_module(module_names[qm].qm_mod_name))
+		    request_module("%s", module_names[qm].qm_mod_name))  /* Sonos - format_security warning */
 			return NULL;
 
 		spin_lock(&dq_list_lock);

@@ -3268,7 +3268,7 @@ static int prism2_ioctl_siwencodeext(struct net_device *dev,
 
 	ops = lib80211_get_crypto_ops(alg);
 	if (ops == NULL) {
-		request_module(module);
+		request_module("%s", module);
 		ops = lib80211_get_crypto_ops(alg);
 	}
 	if (ops == NULL) {
