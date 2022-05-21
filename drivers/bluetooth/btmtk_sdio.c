@@ -2830,6 +2830,7 @@ out:
 	kfree(p_buf);
 }
 
+#if 0
 static void btmtk_set_power_limit(uint8_t *buf,
 						size_t buf_size,
 						bool is7668)
@@ -2886,6 +2887,7 @@ static void btmtk_requset_power_limit_callback(const struct firmware *pwr_fw, vo
 		BTMTK_INFO("pwr_fw is NULL");
 	}
 }
+#endif
 
 static void btmtk_eeprom_bin_file(struct btmtk_sdio_card *card)
 {
@@ -2961,12 +2963,22 @@ static void btmtk_eeprom_bin_file(struct btmtk_sdio_card *card)
 	card->bin_file_size = bin_fw->size;
 
 exit:
-	/* open power limit */
+#if 0	
+	/* open power limit
+	 * This driver uses request_firmware_nowait (asynchronous call) to
+	 * access TX_PWR_LIMIT ("BtTxPwrLimit.bin").  If the file does not exist
+	 * there is a 60s timer in Linux kernel to callback to btmtk_requset_power_limit_callback.
+	 * This delays this btmtk_requset_power_limit_callback log ~70s after boot.
+	 * The "BtTxPwrLimit.bin" is a customized feature, which is not required
+	 * and also not used on Monaco platform. This code should be commented out
+	 * to optimize boot operation and the ability of the driver to suspend.
+	 */
+
 	ret = request_firmware_nowait(THIS_MODULE, true, TX_PWR_LIMIT,
 		&card->func->dev, GFP_KERNEL, g_card, btmtk_requset_power_limit_callback);
 	if (ret < 0)
 		BTMTK_WARN("request power limit file fail(%d)", ret);
-
+#endif
 	if (cfg_fw)
 		release_firmware(cfg_fw);
 	if (bin_fw)
