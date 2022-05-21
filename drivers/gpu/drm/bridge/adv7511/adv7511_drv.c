@@ -178,6 +178,148 @@ static const struct regmap_config adv7533_regmap_config = {
 };
 
 /* -----------------------------------------------------------------------------
+ * Temporary Sonos debug stuff
+ */
+
+struct adv7511 *g_adv7511 = NULL;
+
+static int debugfs_test_mode_write(void *data, u64 uval)
+{
+	(void)data; /* Unused */
+
+	if (uval) {
+		/* Enable Test Pattern (1 = color bars, 2 = ramp) */
+		regmap_write(g_adv7511->regmap_cec,
+			     0x55,
+			     BIT(7) | (((uval - 1) & 0x1) << 5));
+	} else {
+		/* Disable Test Pattern */
+		regmap_write(g_adv7511->regmap_cec,
+			     0x55,
+			     0);
+	}
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debugfs_test_mode_ops, NULL, debugfs_test_mode_write, "%llu\n");
+
+static int debugfs_hpd_override_show(void *data, u64 *uval)
+{
+	int val;
+	(void)data; /* Unused */
+	regmap_read(g_adv7511->regmap, ADV7511_REG_POWER2, &val);
+	*uval = !!(val & BIT(6));
+	return 0;
+}
+
+static int debugfs_hpd_override_write(void *data, u64 uval)
+{
+	(void)data; /* Unused */
+	regmap_update_bits(g_adv7511->regmap, ADV7511_REG_POWER2, BIT(6), (!!uval) ? BIT(6) : 0);
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debugfs_hpd_override_ops, debugfs_hpd_override_show, debugfs_hpd_override_write, "%llu\n");
+
+static int debugfs_reg_write(void *data, u64 uval)
+{
+	struct regmap *map = (uval & 0x01000000) ? g_adv7511->regmap_cec : g_adv7511->regmap;
+	unsigned int reg   = (uval & 0x00ff0000) >> 16;
+	unsigned int mask  = (uval & 0x0000ff00) >> 8;
+	unsigned int val   = (uval & 0x000000ff);
+	(void)data; /* Unused */
+
+	regmap_update_bits(map, reg, mask, val);
+
+	dev_info(&(g_adv7511->i2c_main->dev), "register write: reg=%s-%02x mask=%02x val=%02x\n",
+		 (uval & 0x01000000) ? "cec" : "main",
+		 reg, mask, val);
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debugfs_reg_write_ops, NULL, debugfs_reg_write, "%llx\n");
+
+static void dump_regmap(struct seq_file *m, struct regmap *map)
+{
+	int reg;
+	unsigned int val;
+
+	regcache_cache_bypass(map, 1);
+	for (reg = 0; reg < 0x100; reg++) {
+		if (reg && ((reg % 16) == 0)) {
+			seq_printf(m, "\n");
+		}
+		regmap_read(map, reg, &val);
+		seq_printf(m, "%02x ", val);
+	}
+	regcache_cache_bypass(map, 0);
+	seq_printf(m, "\n");
+}
+
+static int debugfs_reg_dump_show(struct seq_file *m, void *v)
+{
+	(void)v; /* Unused */
+
+	seq_printf(m, "Main:\n");
+	dump_regmap(m, g_adv7511->regmap);
+	seq_printf(m, "\n");
+	seq_printf(m, "CEC/DSI:\n");
+	dump_regmap(m, g_adv7511->regmap_cec);
+
+	return 0;
+}
+
+struct dentry *debugfs_dir = NULL;
+
+static void debugfs_setup(struct adv7511 *adv7511)
+{
+	g_adv7511 = adv7511;
+
+	debugfs_dir = debugfs_create_dir("adv7511", NULL);
+	if (IS_ERR_OR_NULL(debugfs_dir)) {
+		dev_err(&(adv7511->i2c_main->dev), "failed %s:%d\n", __FUNCTION__, __LINE__);
+		return;
+	}
+
+	if (IS_ERR_OR_NULL(debugfs_create_devm_seqfile(&(adv7511->i2c_main->dev),
+						       "reg_dump",
+						       debugfs_dir,
+						       debugfs_reg_dump_show))) {
+		dev_err(&(adv7511->i2c_main->dev), "failed %s:%d\n", __FUNCTION__, __LINE__);
+		return;
+	}
+
+	if (IS_ERR_OR_NULL(debugfs_create_file("reg_write",
+					       S_IWUGO,
+					       debugfs_dir,
+					       NULL,
+					       &debugfs_reg_write_ops))) {
+		dev_err(&(adv7511->i2c_main->dev), "failed %s:%d\n", __FUNCTION__, __LINE__);
+		return;
+	}
+
+	if (IS_ERR_OR_NULL(debugfs_create_file("hpd_override",
+					       S_IRUGO|S_IWUGO,
+					       debugfs_dir,
+					       NULL,
+					       &debugfs_hpd_override_ops))) {
+		dev_err(&(adv7511->i2c_main->dev), "failed %s:%d\n", __FUNCTION__, __LINE__);
+		return;
+	}
+
+	if (IS_ERR_OR_NULL(debugfs_create_file("test_mode",
+					       S_IWUGO,
+					       debugfs_dir,
+					       NULL,
+					       &debugfs_test_mode_ops))) {
+		dev_err(&(adv7511->i2c_main->dev), "failed %s:%d\n", __FUNCTION__, __LINE__);
+		return;
+	}
+}
+
+/* -----------------------------------------------------------------------------
  * Hardware configuration
  */
 
@@ -1320,6 +1462,7 @@ static int adv7511_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 	drm_bridge_add(&adv7511->bridge);
 
 	adv7511_audio_init(dev, adv7511);
+	debugfs_setup(adv7511);
 	return 0;
 
 err_unregister_cec:
