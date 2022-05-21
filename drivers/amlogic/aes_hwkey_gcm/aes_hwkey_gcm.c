@@ -244,20 +244,25 @@ static void test_a(void)
 	struct aes_gcm_ctx ctx;
 	uint8_t iv[12] = { 0xca, 0xfe, 0xba, 0xbe, 0xfa, 0xce, 0xdb, 0xad,
 		0xde, 0xca, 0xf8, 0x88,};
-	uint8_t aad[16] = { 0xfe, 0xed, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef,
+	// use two aad values with 8 real bytes and 8 bytes of junk,
+	// to verify we can use < 16 bytes correctly
+	uint8_t aad1[16] = { 0xfe, 0xed, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef,
 		0xfe, 0xed, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef };
+	uint8_t aad2[16] = { 0xfe, 0xed, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef,
+		0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00 };
 	uint8_t tag[16] = { 0 };
 	// depending on chip:
 	uint8_t exptag[16] = { 0xb1, 0x36, 0xe8, 0xd5, 0xa9, 0x7e, 0x60, 0x28,
 		0xbe, 0x20, 0x99, 0x58, 0x38, 0xe1, 0x5f, 0xcf };
 	int r;
-	uint8_t *pt = NULL, *ct = NULL;
+	uint8_t *pt = NULL, *ct = NULL, *dt = NULL;
 	int i;
 	size_t len = 2048;
 
 	pt = kzalloc(len, GFP_KERNEL);
 	ct = kzalloc(len, GFP_KERNEL);
-	if (!pt || !ct)
+	dt = kzalloc(len, GFP_KERNEL);
+	if (!pt || !ct || !dt)
 		goto end;
 	for (i = 0; i < len; i++)
 		pt[i] = i % 256;
@@ -266,13 +271,15 @@ static void test_a(void)
 	pr_err("encrypt........\n");
 	pr_err("iv\n");
 	PRDUMP(iv, sizeof(iv));
-	pr_err("aad\n");
-	PRDUMP(aad, sizeof(aad));
+	pr_err("aad1\n");
+	PRDUMP(aad1, sizeof(aad1));
+	pr_err("aad2\n");
+	PRDUMP(aad2, sizeof(aad2));
 	pr_err("len=%zu\n", len);
 	pr_err("plaintext\n");
 	PRDUMP(pt, len);
 
-	r = aes_hwkey_gcm_init(&ctx, iv, aad, sizeof(aad), NULL, 1);
+	r = aes_hwkey_gcm_init(&ctx, iv, aad1, 8, NULL, 1);
 	pr_err("init returned r=%d\n", r);
 	if (r < 0)
 		goto end;
@@ -293,21 +300,26 @@ static void test_a(void)
 
 	/* decrypt */
 	pr_err("decrypt........\n");
-	r = aes_hwkey_gcm_init(&ctx, iv, aad, sizeof(aad), tag, 0);
+	r = aes_hwkey_gcm_init(&ctx, iv, aad2, 8, tag, 0);
 	pr_err("init returned r=%d\n", r);
 	if (r < 0)
 		goto end;
 
-	r = aes_hwkey_gcm_process(&ctx, ct, pt, len);
+	r = aes_hwkey_gcm_process(&ctx, ct, dt, len);
 	pr_err("process returned r=%d\n", r);
 
 	pr_err("ct\n");
 	PRDUMP(ct, len);
-	pr_err("pt\n");
-	PRDUMP(pt, len);
+	pr_err("dt\n");
+	PRDUMP(dt, len);
+
+	if (memcmp(pt, dt, len))
+		pr_err("decrypted value does not match plaintext!!!\n");
+
 end:
 	kfree(pt);
 	kfree(ct);
+	kfree(dt);
 }
 #endif //AHG_TEST
 
