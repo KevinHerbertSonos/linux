@@ -1,5 +1,3 @@
-if ARCH_MEDIATEK || COMPILE_TEST
-
 config PINCTRL_MTK
 	bool
 	depends on OF
@@ -8,6 +6,26 @@ config PINCTRL_MTK
 	select GPIOLIB
 	select OF_GPIO
 
+config PINCTRL_MT8518
+	bool "Mediatek MT8518 pin control"
+	default n
+	depends on MACH_MT8518
+	select PINCTRL_MTK
+	select PINCTRL_MTK_NO_UPSTREAM
+
+config PINCTRL_MTK_NO_UPSTREAM
+	bool "Mediatek pin control"
+	depends on OF
+	select PINCTRL_MTK
+	help
+	  Say yes here to enable support for MediaTek pinctrl debug command.
+	  It can provide gpio status debug shell command.
+	  We also can use these shell command to change gpio status.
+	  It is common for all ICs.
+	  We can use the command to debug gpio status issues.
+	  we also can use it in user space.
+
+if ARCH_MEDIATEK || COMPILE_TEST
 # For ARMv7 SoCs
 config PINCTRL_MT2701
 	bool "Mediatek MT2701 pin control" if COMPILE_TEST && !MACH_MT2701
