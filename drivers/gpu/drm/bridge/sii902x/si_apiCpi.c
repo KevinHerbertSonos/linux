@@ -185,7 +185,8 @@ BOOL SI_CpiWrite(struct SI_CpiData_t *pCpi)
 	SiIRegioWrite(REG_CEC_TX_DEST,
 	pCpi->srcDestAddr & 0x0F);
 	SiIRegioWrite(REG_CEC_TX_COMMAND, pCpi->opcode);
-	SiIRegioWriteBlock(REG_CEC_TX_OPERAND_0, pCpi->args, pCpi->argCount);
+	if (pCpi->argCount > 0)
+		SiIRegioWriteBlock(REG_CEC_TX_OPERAND_0, pCpi->args, pCpi->argCount);
 	SiIRegioWrite(REG_CEC_TRANSMIT_DATA,
 		BIT_TRANSMIT_CMD |
 		pCpi->argCount);

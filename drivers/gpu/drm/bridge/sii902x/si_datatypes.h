@@ -76,12 +76,16 @@ typedef signed long int32_t;
 #define MSG_ALWAYS              0x00
 #define MSG_STAT                0x01
 #define MSG_DBG                 0x02
+
+#if 0
 #define DEBUG_PRINT(l, x)      \
 	do {				\
 		if (l <= 5)			\
 			pr_info x;			\
 	} while (0)
-//#define DEBUG_PRINT(l,x)
+#else
+#define DEBUG_PRINT(l,x)
+#endif
 
 // see include/i2c_slave_addrs.h
 
