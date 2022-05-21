@@ -60,13 +60,6 @@ struct mtk_clock_event_device {
 	struct clock_event_device dev;
 };
 
-static void __iomem *gpt_sched_reg __read_mostly;
-
-static u64 notrace mtk_read_sched_clock(void)
-{
-	return readl_relaxed(gpt_sched_reg);
-}
-
 static inline struct mtk_clock_event_device *to_mtk_clk(
 				struct clock_event_device *c)
 {
@@ -149,19 +142,24 @@ static irqreturn_t mtk_timer_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static void
-mtk_timer_setup(struct mtk_clock_event_device *evt, u8 timer, u8 option)
+
+static void mtk_timer_setup(struct mtk_clock_event_device *evt, u8 timer,
+			    u8 option, u8 clk_src, bool enable)
 {
+	u32 val;
+
 	writel(TIMER_CTRL_CLEAR | TIMER_CTRL_DISABLE,
 		evt->gpt_base + TIMER_CTRL_REG(timer));
 
-	writel(TIMER_CLK_SRC(TIMER_CLK_SRC_SYS13M) | TIMER_CLK_DIV1,
+	writel(TIMER_CLK_SRC(clk_src) | TIMER_CLK_DIV1,
 			evt->gpt_base + TIMER_CLK_REG(timer));
 
 	writel(0x0, evt->gpt_base + TIMER_CMP_REG(timer));
 
-	writel(TIMER_CTRL_OP(option) | TIMER_CTRL_ENABLE,
-			evt->gpt_base + TIMER_CTRL_REG(timer));
+	val = TIMER_CTRL_OP(option);
+	if (enable)
+		val |= TIMER_CTRL_ENABLE;
+	writel(val, evt->gpt_base + TIMER_CTRL_REG(timer));
 }
 
 static void mtk_timer_enable_irq(struct mtk_clock_event_device *evt, u8 timer)
@@ -183,8 +181,8 @@ static void __init mtk_timer_init(struct device_node *node)
 {
 	struct mtk_clock_event_device *evt;
 	struct resource res;
-	unsigned long rate = 0;
-	struct clk *clk;
+	unsigned long rate_13m, rate_32k;
+	struct clk *clk_13m, *clk_32k;
 
 	evt = kzalloc(sizeof(*evt), GFP_KERNEL);
 	if (!evt) {
@@ -205,6 +203,7 @@ static void __init mtk_timer_init(struct device_node *node)
 	evt->gpt_base = of_io_request_and_map(node, 0, "mtk-timer");
 	if (IS_ERR(evt->gpt_base)) {
 		pr_warn("Can't get resource\n");
+		kfree(evt);
 		return;
 	}
 
@@ -214,51 +213,69 @@ static void __init mtk_timer_init(struct device_node *node)
 		goto err_mem;
 	}
 
-	clk = of_clk_get(node, 0);
-	if (IS_ERR(clk)) {
-		pr_warn("Can't get timer clock");
+	clk_13m = of_clk_get(node, 0);
+	if (IS_ERR(clk_13m)) {
+		pr_warn("Can't get timer clock_13m");
 		goto err_irq;
 	}
 
-	if (clk_prepare_enable(clk)) {
-		pr_warn("Can't prepare clock");
-		goto err_clk_put;
+	if (clk_prepare_enable(clk_13m)) {
+		pr_warn("Can't prepare clock_13m");
+		goto err_clk_put_13m;
 	}
-	rate = clk_get_rate(clk);
+	rate_13m = clk_get_rate(clk_13m);
+
+	clk_32k = of_clk_get(node, 1);
+	if (IS_ERR(clk_32k)) {
+		pr_warn("Can't get timer clock_32k");
+		goto err_clk_disable_13m;
+	}
+
+	if (clk_prepare_enable(clk_32k)) {
+		pr_warn("Can't prepare clock_32k");
+		goto err_clk_put_32k;
+	}
+	rate_32k = clk_get_rate(clk_32k);
 
 	if (request_irq(evt->dev.irq, mtk_timer_interrupt,
 			IRQF_TIMER | IRQF_IRQPOLL, "mtk_timer", evt)) {
 		pr_warn("failed to setup irq %d\n", evt->dev.irq);
-		goto err_clk_disable;
+		goto err_clk_disable_32k;
 	}
 
-	evt->ticks_per_jiffy = DIV_ROUND_UP(rate, HZ);
+	evt->ticks_per_jiffy = DIV_ROUND_UP(rate_32k, HZ);
 
 	/* Configure clock source */
-	mtk_timer_setup(evt, GPT_CLK_SRC, TIMER_CTRL_OP_FREERUN);
+	mtk_timer_setup(evt, GPT_CLK_SRC, TIMER_CTRL_OP_FREERUN, TIMER_CLK_SRC_SYS13M, true);
 	clocksource_mmio_init(evt->gpt_base + TIMER_CNT_REG(GPT_CLK_SRC),
-			node->name, rate, 300, 32, clocksource_mmio_readl_up);
-	gpt_sched_reg = evt->gpt_base + TIMER_CNT_REG(GPT_CLK_SRC);
-	sched_clock_register(mtk_read_sched_clock, 32, rate);
+			node->name, rate_13m, 300, 32, clocksource_mmio_readl_up);
 
 	/* Configure clock event */
-	mtk_timer_setup(evt, GPT_CLK_EVT, TIMER_CTRL_OP_REPEAT);
-	clockevents_config_and_register(&evt->dev, rate, 0x3,
+	mtk_timer_setup(evt, GPT_CLK_EVT, TIMER_CTRL_OP_REPEAT, TIMER_CLK_SRC_RTC32K, false);
+	clockevents_config_and_register(&evt->dev, rate_32k, 0x3,
 					0xffffffff);
 
 	mtk_timer_enable_irq(evt, GPT_CLK_EVT);
 
 	return;
 
-err_clk_disable:
-	clk_disable_unprepare(clk);
-err_clk_put:
-	clk_put(clk);
+err_clk_disable_32k:
+	clk_disable_unprepare(clk_32k);
+err_clk_put_32k:
+	clk_put(clk_32k);
+err_clk_disable_13m:
+	clk_disable_unprepare(clk_13m);
+err_clk_put_13m:
+	clk_put(clk_13m);
 err_irq:
 	irq_dispose_mapping(evt->dev.irq);
 err_mem:
 	iounmap(evt->gpt_base);
-	of_address_to_resource(node, 0, &res);
+	kfree(evt);
+	if (of_address_to_resource(node, 0, &res)) {
+		pr_warn("Failed to parse resource\n");
+		return;
+	}
 	release_mem_region(res.start, resource_size(&res));
 }
 CLOCKSOURCE_OF_DECLARE(mtk_mt6577, "mediatek,mt6577-timer", mtk_timer_init);

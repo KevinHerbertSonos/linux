@@ -498,4 +498,19 @@ config CRYPTO_DEV_SUN4I_SS
 	  To compile this driver as a module, choose M here: the module
 	  will be called sun4i-ss.
 
+config CRYPTO_DEV_MEDIATEK
+	bool "Support for MediaTek cryptographic accelerator"
+	depends on ARM && ARCH_MEDIATEK
+	select ARM_CRYPTO
+	select CRYPTO_AES
+	select CRYPTO_BLKCIPHER
+	select CRYPTO_SHA1_ARM_NEON
+	select CRYPTO_SHA256_ARM
+	select CRYPTO_SHA512_ARM
+	select CRYPTO_HMAC
+	help
+	  This driver allows you to utilize the cryptographic engines
+	  and security accelerator which can be found on the mt7623.
+	  Select this if you want to use it for AES/SHA1/SHA2 algorithms.
+
 endif # CRYPTO_HW
