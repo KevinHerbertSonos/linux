@@ -314,6 +314,13 @@ static void dev_watchdog(unsigned long arg)
 			if (some_queue_timedout) {
 				WARN_ONCE(1, KERN_INFO "NETDEV WATCHDOG: %s (%s): transmit queue %u timed out\n",
 				       dev->name, netdev_drivername(dev), i);
+#if defined(CONFIG_SONOS)
+				/* log state for HWFURY-20 */
+				{
+					struct netdev_queue *txq = netdev_get_tx_queue(dev, i);
+					WARN_ONCE(1, KERN_INFO "NETDEV WATCHDOG: netif state %lx\n", txq->state);
+				}
+#endif
 				dev->netdev_ops->ndo_tx_timeout(dev);
 			}
 			if (!mod_timer(&dev->watchdog_timer,
