@@ -30,6 +30,17 @@
 #define IMX_RPMSG_GPIO		5
 #define IMX_RPMSG_RTC		6
 #define IMX_RPMSG_SENSOR	7
+#define IMX_RPMSG_I2C		8
+#define IMX_RPMSG_PSOC		9
+#define IMX_RPMSG_PSY		10
+#define IMX_RPMSG_BLUETOOTH	11
+#define IMX_RPMSG_SNDCRD	12
+#define IMX_RPMSG_DSP		13
+#define IMX_RPMSG_PM		14
+#define IMX_RPMSG_SRFS		15
+#define IMX_RPMSG_LEDCTL	16
+#define IMX_RPMSG_NOTUSED4	17
+#define IMX_RPMSG_NOTUSED5	18
 /* rpmsg version */
 #define IMX_RMPSG_MAJOR		1
 #define IMX_RMPSG_MINOR		0

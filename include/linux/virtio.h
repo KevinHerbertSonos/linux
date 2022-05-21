@@ -80,6 +80,19 @@ dma_addr_t virtqueue_get_desc_addr(struct virtqueue *vq);
 dma_addr_t virtqueue_get_avail_addr(struct virtqueue *vq);
 dma_addr_t virtqueue_get_used_addr(struct virtqueue *vq);
 
+#ifdef CONFIG_SONOS_RPMSG_SPI
+bool spi_rx_virtqueue_kick(struct virtqueue *vq);
+void update_last_used_idx(struct virtqueue *_vq);
+void adjust_last_used_idx(struct virtqueue *_vq);
+void *virtqueue_get_tx_buf_spi(struct virtqueue *vq, uint16_t *avail_idx,
+		unsigned int *len);
+void *virtqueue_get_rx_buf_spi(struct virtqueue *vq, uint16_t * idx,
+		unsigned int *len);
+void virtqueue_add_consumed_tx_buffer(struct virtqueue *_vq,
+		uint16_t head_idx, uint32_t len);
+void virtqueue_add_consumed_rx_buffer(struct virtqueue *_vq,
+		uint16_t head_idx, uint32_t len);
+#endif
 /*
  * Legacy accessors -- in almost all cases, these are the wrong functions
  * to use.

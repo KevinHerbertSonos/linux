@@ -182,8 +182,13 @@ static int imx7ulp_cpufreq_probe(struct platform_device *pdev)
 
 	arm_reg = regulator_get(cpu_dev, "arm");
 	if (IS_ERR(arm_reg)) {
+#ifdef CONFIG_SONOS_RPMSG_SPI
+		dev_err(cpu_dev, "defer to get regulator\n");
+		ret = -EPROBE_DEFER;
+#else
 		dev_err(cpu_dev, "failed to get regulator\n");
 		ret = -ENOENT;
+#endif
 		goto put_reg;
 	}
 
