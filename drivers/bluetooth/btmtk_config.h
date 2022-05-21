@@ -39,7 +39,9 @@
  */
 /* #define BTMTK_LOG_PATH	"/data/misc/bluedroid/" */
 
-
+#ifndef LOWER_POWER_SINK
+#define LOWER_POWER_SINK 0
+#endif
 
 /**
  * Fixed STPBT Major Device Id
