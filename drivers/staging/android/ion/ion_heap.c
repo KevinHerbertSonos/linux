@@ -335,12 +335,19 @@ struct ion_heap *ion_heap_create(struct ion_platform_heap *heap_data)
 	case ION_HEAP_TYPE_DMA:
 		heap = ion_cma_heap_create(heap_data);
 		break;
+#ifdef CONFIG_AMLOGIC_MEDIA_CODEC_MM
 	case ION_HEAP_TYPE_CUSTOM:
 		if (heap_data->id == ION_HEAP_ID_SECURE)
 			heap = ion_secure_heap_create(heap_data);
 		else
 			heap = ion_codec_mm_heap_create(heap_data);
 		break;
+#endif
+#ifdef CONFIG_ION_UNMAPPED_HEAP
+	case ION_HEAP_TYPE_UNMAPPED:
+		heap = ion_unmapped_heap_create(heap_data);
+		break;
+#endif
 	default:
 		pr_err("%s: Invalid heap type %d\n", __func__,
 		       heap_data->type);
@@ -381,12 +388,19 @@ void ion_heap_destroy(struct ion_heap *heap)
 	case ION_HEAP_TYPE_DMA:
 		ion_cma_heap_destroy(heap);
 		break;
+#ifdef CONFIG_AMLOGIC_MEDIA_CODEC_MM
 	case ION_HEAP_TYPE_CUSTOM:
 		if (heap->id == ION_HEAP_ID_SECURE)
 			ion_secure_heap_destroy(heap);
 		else
 			ion_codec_mm_heap_destroy(heap);
 		break;
+#endif
+#ifdef CONFIG_ION_UNMAPPED_HEAP
+	case ION_HEAP_TYPE_UNMAPPED:
+		ion_unmapped_heap_destroy(heap);
+		break;
+#endif
 	default:
 		pr_err("%s: Invalid heap type %d\n", __func__,
 		       heap->type);
