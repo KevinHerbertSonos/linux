@@ -59,6 +59,9 @@
 struct spi_imx_config {
 	unsigned int speed_hz;
 	unsigned int bpw;
+#ifdef CONFIG_SONOS
+	unsigned int burst;
+#endif
 };
 
 enum spi_imx_devtype {
@@ -102,6 +105,11 @@ struct spi_imx_data {
 	void (*rx)(struct spi_imx_data *);
 	void *rx_buf;
 	const void *tx_buf;
+#ifdef CONFIG_SONOS
+	char endian_swap;
+	unsigned int rx_left;
+	unsigned int tx_left;
+#endif /* CONFIG_SONOS */
 	unsigned int txfifo; /* number of words pushed in tx FIFO */
 
 	/* DMA */
@@ -274,6 +282,58 @@ static bool spi_imx_can_dma(struct spi_master *master, struct spi_device *spi,
 #define MX51_ECSPI_TESTREG	0x20
 #define MX51_ECSPI_TESTREG_LBC	BIT(31)
 
+#ifdef CONFIG_SONOS
+static void spi_imx_buf_rx_sb(struct spi_imx_data *spi_imx)
+{
+	u32 val = readl(spi_imx->base + MXC_CSPIRXDATA);
+	if(spi_imx->rx_buf && (spi_imx->rx_left != 0)) {
+		if (spi_imx->rx_left >= 4) {
+			*(u8 *)(spi_imx->rx_buf++) = val >> (spi_imx->endian_swap ? 24 : 0);
+			spi_imx->rx_left--;
+		}
+		if (spi_imx->rx_left >= 3) {
+			*(u8 *)(spi_imx->rx_buf++) = val >> (spi_imx->endian_swap ? 16 : 8);
+			spi_imx->rx_left--;
+		}
+		if (spi_imx->rx_left >= 2) {
+			*(u8 *)(spi_imx->rx_buf++) = val >> (spi_imx->endian_swap ? 8 : 16);
+			spi_imx->rx_left--;
+		}
+		if (spi_imx->rx_left >= 1) {
+			*(u8 *)(spi_imx->rx_buf++) = val >> (spi_imx->endian_swap ? 0 : 24);
+			spi_imx->rx_left--;
+		}
+	}
+}
+
+static void spi_imx_buf_tx_sb(struct spi_imx_data *spi_imx)
+{
+	u32 val = 0;
+	if (spi_imx->tx_buf && (spi_imx->tx_left > 0)) {
+		u8 * pval = (u8 *)(&val);
+		if (spi_imx->tx_left >= 4) {
+			pval[(spi_imx->endian_swap ? 3 : 0)] = *(u8 *)(spi_imx->tx_buf++);
+			spi_imx->tx_left--;
+		}
+		if (spi_imx->tx_left >= 3) {
+			pval[(spi_imx->endian_swap ? 2 : 1)] = *(u8 *)(spi_imx->tx_buf++);
+			spi_imx->tx_left--;
+		}
+		if (spi_imx->tx_left >= 2) {
+			pval[(spi_imx->endian_swap ? 1 : 2)] = *(u8 *)(spi_imx->tx_buf++);
+			spi_imx->tx_left--;
+		}
+		if (spi_imx->tx_left >= 1) {
+			pval[(spi_imx->endian_swap ? 0 : 3)] = *(u8 *)(spi_imx->tx_buf++);
+			spi_imx->tx_left--;
+		}
+		/*leave legacy count in for right now, so as not to break older sb mode*/
+		spi_imx->count = spi_imx->tx_left;
+		writel(val, spi_imx->base + MXC_CSPITXDATA);
+	}
+}
+#endif /* CONFIG_SONOS */
+
 /* MX51 eCSPI */
 static unsigned int mx51_ecspi_clkdiv(struct spi_imx_data *spi_imx,
 				      unsigned int fspi, unsigned int *fres)
@@ -303,8 +363,10 @@ static unsigned int mx51_ecspi_clkdiv(struct spi_imx_data *spi_imx,
 
 	pre = DIV_ROUND_UP(fin, fspi << post) - 1;
 
+#ifndef CONFIG_SONOS
 	dev_dbg(spi_imx->dev, "%s: fin: %u, fspi: %u, post: %u, pre: %u\n",
 			__func__, fin, fspi, post, pre);
+#endif
 
 	/* Resulting frequency for the SCLK line. */
 	*fres = (fin / (pre + 1)) >> post;
@@ -367,9 +429,18 @@ static int mx51_ecspi_config(struct spi_device *spi,
 	/* set chip select to use */
 	ctrl |= MX51_ECSPI_CTRL_CS(spi->chip_select);
 
+#ifdef CONFIG_SONOS
+	if (config->burst != config->bpw) {
+		ctrl |= (config->burst - 1) << MX51_ECSPI_CTRL_BL_OFFSET;
+	} else {
+		ctrl |= (config->bpw - 1) << MX51_ECSPI_CTRL_BL_OFFSET;
+		cfg |= MX51_ECSPI_CONFIG_SBBCTRL(spi->cs_gpio);
+	}
+#else
 	ctrl |= (config->bpw - 1) << MX51_ECSPI_CTRL_BL_OFFSET;
 
 	cfg |= MX51_ECSPI_CONFIG_SBBCTRL(spi->chip_select);
+#endif
 
 	if (spi->mode & SPI_CPHA)
 		cfg |= MX51_ECSPI_CONFIG_SCLKPHA(spi->chip_select);
@@ -894,6 +965,9 @@ static int spi_imx_setupxfer(struct spi_device *spi,
 	int ret;
 
 	config.bpw = t ? t->bits_per_word : spi->bits_per_word;
+#ifdef CONFIG_SONOS
+	config.burst = t ? (t->len * 8) : spi->bits_per_word;
+#endif
 	config.speed_hz  = t ? t->speed_hz : spi->max_speed_hz;
 
 	if (!config.speed_hz)
@@ -902,6 +976,12 @@ static int spi_imx_setupxfer(struct spi_device *spi,
 		config.bpw = spi->bits_per_word;
 
 	/* Initialize the functions for transfer */
+#ifdef CONFIG_SONOS
+	if (config.burst >= 32 && config.bpw < 32) {	/* We're doing single burst mode */
+		spi_imx->rx = spi_imx_buf_rx_sb;
+		spi_imx->tx = spi_imx_buf_tx_sb;
+	} else
+#endif
 	if (config.bpw <= 8) {
 		spi_imx->rx = spi_imx_buf_rx_u8;
 		spi_imx->tx = spi_imx_buf_tx_u8;
@@ -1089,6 +1169,17 @@ static int spi_imx_pio_transfer(struct spi_device *spi,
 	spi_imx->rx_buf = transfer->rx_buf;
 	spi_imx->count = transfer->len;
 	spi_imx->txfifo = 0;
+#ifdef CONFIG_SONOS
+	spi_imx->tx_left = transfer->len + (transfer->len % 4);
+	spi_imx->rx_left = transfer->len + (transfer->len % 4);
+	spi_imx->endian_swap = 1;
+
+	/* If we're going to be doing burst mode, some additional setup needs to be done */
+	if (transfer->len > 4) {
+		memcpy((void *)(spi_imx->tx_buf + (transfer->len % 4)), transfer->tx_buf, transfer->len);
+	}
+	init_completion(&spi_imx->xfer_done);
+#endif /* CONFIG_SONOS */
 
 	reinit_completion(&spi_imx->xfer_done);
 
@@ -1105,6 +1196,12 @@ static int spi_imx_pio_transfer(struct spi_device *spi,
 		spi_imx->devtype_data->reset(spi_imx);
 		return -ETIMEDOUT;
 	}
+
+#ifdef CONFIG_SONOS
+	if (transfer->len > 4) {
+		transfer->rx_buf += (transfer->len % 4);
+	}
+#endif
 
 	return transfer->len;
 }
