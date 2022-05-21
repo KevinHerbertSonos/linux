@@ -1,5 +1,12 @@
 ifeq ($(CONFIG_OF),y)
 
+ifeq ($(CONFIG_SONOS),y)
+dtb-$(CONFIG_SOC_IMX6SX) += \
+	neptune.dtb titan.dtb vertigo_v0.dtb vertigo_v1.dtb vertigo_v2.dtb  \
+	chaplin_v4.dtb chaplin_v5.dtb gravity_v0.dtb gravity_v1.dtb
+dtb-$(CONFIG_SOC_IMX7ULP) += \
+	imx7ulp.dtb imx7ulp_v1.dtb imx7ulp_v2.dtb imx7ulp_v3.dtb imx7ulp_v4.dtb
+else
 dtb-$(CONFIG_ARCH_ALPINE) += \
 	alpine-db.dtb
 dtb-$(CONFIG_MACH_ARTPEC6) += \
@@ -955,6 +962,7 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += \
 dtb-$(CONFIG_ARCH_ZX) += zx296702-ad1.dtb
 dtb-$(CONFIG_ARCH_ASPEED) += aspeed-bmc-opp-palmetto.dtb \
 	aspeed-ast2500-evb.dtb
+endif
 endif
 
 dtstree		:= $(srctree)/$(src)
