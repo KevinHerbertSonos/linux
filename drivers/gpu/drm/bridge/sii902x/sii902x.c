@@ -109,6 +109,7 @@ struct sii902x {
 	struct drm_connector connector;
 	struct gpio_desc *reset_gpio;
 	struct gpio_desc *hdmi5v_gpio;
+	struct mutex mutex;
 };
 
 struct sii902x_cec {
@@ -127,6 +128,7 @@ atomic_t sii9022_timer_event = ATOMIC_INIT(0);
 
 static char debug_buffer[2048];
 struct sii902x *sii902x_debug;
+struct sii902x *sii902x_mutex;
 
 static void process_dbg_opt(const char *opt)
 {
@@ -399,7 +401,10 @@ byte ReadByteTPI(byte RegOffset)
 	unsigned int status = 0;
     //return I2CReadByte(TX_SLAVE_ADDR, RegOffset);
 
+	mutex_lock(&sii902x_mutex->mutex);
 	ret = regmap_read(sii902x_for_i2c->regmap, RegOffset, &status);
+	mutex_unlock(&sii902x_mutex->mutex);
+
 	if (ret) {
 		pr_info("i2c read err:%d\n", ret);
 		return 0;
@@ -416,7 +421,10 @@ int WriteByteTPI(byte RegOffset, byte Data)
 	int ret;
 
     //I2CWriteByte(TX_SLAVE_ADDR, RegOffset, Data);
+	mutex_lock(&sii902x_mutex->mutex);
 	ret = regmap_write(sii902x_for_i2c->regmap, RegOffset, Data);
+	mutex_unlock(&sii902x_mutex->mutex);
+
 	if (ret) {
 		pr_info("i2c write err:%d\n", ret);
 		return ret;
@@ -428,7 +436,10 @@ byte I2CWriteBlock(byte SlaveAddr, byte RegAddr, byte NBytes, byte *Data)
 {
 	int ret;
 
+	mutex_lock(&sii902x_mutex->mutex);
 	ret = regmap_bulk_write(sii902x_for_i2c->regmap, RegAddr, Data, NBytes);
+	mutex_unlock(&sii902x_mutex->mutex);
+
 	if (ret) {
 		pr_info("I2CWriteBlock err:%d\n", ret);
 		return 0;
@@ -440,10 +451,13 @@ byte I2CReadBlock(byte SlaveAddr, byte RegAddr, byte NBytes, byte *Data)
 {
 	int ret;
 
+	mutex_lock(&sii902x_mutex->mutex);
 	ret =
 		regmap_bulk_read(sii902x_for_i2c->regmap,
 		RegAddr, Data,
 		NBytes);
+	mutex_unlock(&sii902x_mutex->mutex);
+
 	if (ret) {
 		pr_info("I2CWriteBlock err:%d\n", ret);
 		return 0;
@@ -459,10 +473,13 @@ unsigned char *buffer, unsigned short length)
 	int retry_cnt = 0;
 
 	do {
+		mutex_lock(&sii902x_mutex->mutex);
 		ret =
 			regmap_bulk_read(sii902x_cec_regmap,
 			(unsigned char)regAddr,
 			buffer, length);
+		mutex_unlock(&sii902x_mutex->mutex);
+
 		if (ret) {
 			retry_cnt++;
 			if (retry_cnt >= 5)
@@ -481,10 +498,13 @@ void SiIRegioWriteBlock(unsigned short regAddr,
 	int retry_cnt = 0;
 
 	do {
+		mutex_lock(&sii902x_mutex->mutex);
 		ret =
 			regmap_bulk_write(sii902x_cec_regmap,
 			(unsigned char)regAddr,
 			buffer, length);
+		mutex_unlock(&sii902x_mutex->mutex);
+
 		if (ret) {
 			retry_cnt++;
 			if (retry_cnt >= 5)
@@ -501,7 +521,10 @@ unsigned char SiIRegioRead(unsigned short regAddr)
 	int ret;
 	unsigned int status = 0;
 
+	mutex_lock(&sii902x_mutex->mutex);
 	ret = regmap_read(sii902x_cec_regmap, (unsigned char)regAddr, &status);
+	mutex_unlock(&sii902x_mutex->mutex);
+
 	if (ret) {
 		pr_info("cec i2c read err:%d\n", ret);
 		return 0;
@@ -513,9 +536,12 @@ void SiIRegioWrite(unsigned short regAddr, unsigned char value)
 {
 	int ret;
 
+	mutex_lock(&sii902x_mutex->mutex);
 	ret =
 		regmap_write(sii902x_cec_regmap,
 		(unsigned char)regAddr, value);
+	mutex_unlock(&sii902x_mutex->mutex);
+
 	if (ret)
 		pr_info("cec i2c write err:%d\n", ret);
 }
@@ -550,7 +576,9 @@ sii902x_connector_detect(struct drm_connector *connector, bool force)
 	struct sii902x *sii902x = connector_to_sii902x(connector);
 	unsigned int status;
 
+	mutex_lock(&sii902x->mutex);
 	regmap_read(sii902x->regmap, SII902X_INT_STATUS, &status);
+	mutex_unlock(&sii902x->mutex);
 
 	return (status & SII902X_PLUGGED_STATUS) ?
 	    connector_status_connected : connector_status_disconnected;
@@ -579,29 +607,37 @@ static int sii902x_get_modes(struct drm_connector *connector)
 	int i = 0;
 	int ret;
 
+	mutex_lock(&sii902x->mutex);
 	ret = regmap_update_bits(regmap, SII902X_SYS_CTRL_DATA,
 				 SII902X_SYS_CTRL_DDC_BUS_REQ,
 				 SII902X_SYS_CTRL_DDC_BUS_REQ);
-	if (ret)
+	if (ret) {
+		mutex_unlock(&sii902x->mutex);
 		return ret;
+	}
 
 	timeout = jiffies + msecs_to_jiffies(
 		SII902X_I2C_BUS_ACQUISITION_TIMEOUT_MS);
 	do {
 		ret = regmap_read(regmap, SII902X_SYS_CTRL_DATA, &status);
-		if (ret)
+		if (ret) {
+			mutex_unlock(&sii902x->mutex);
 			return ret;
+		}
 	} while (!(status & SII902X_SYS_CTRL_DDC_BUS_GRTD) &&
 	time_before(jiffies, timeout));
 
 	if (!(status & SII902X_SYS_CTRL_DDC_BUS_GRTD)) {
 		dev_info(&sii902x->i2c->dev, "failed to acquire the i2c bus");
+		mutex_unlock(&sii902x->mutex);
 		return -ETIMEDOUT;
 	}
 
 	ret = regmap_write(regmap, SII902X_SYS_CTRL_DATA, status);
-	if (ret)
+	if (ret) {
+		mutex_unlock(&sii902x->mutex);
 		return ret;
+	}
 
 	edid = drm_get_edid(connector, sii902x->i2c->adapter);
 	drm_mode_connector_update_edid_property(connector, edid);
@@ -641,26 +677,34 @@ static int sii902x_get_modes(struct drm_connector *connector)
 		ret = regmap_write(regmap, SII902X_SYS_CTRL_DATA, status);
 	ret = drm_display_info_set_bus_formats(
 		&connector->display_info, &bus_format, 1);
-	if (ret)
+	if (ret) {
+		mutex_unlock(&sii902x->mutex);
 		return ret;
+	}
 
 	for (i = 0; i < 2; i++)
 		ret = regmap_read(regmap, SII902X_SYS_CTRL_DATA, &status);
-	if (ret)
+	if (ret) {
+		mutex_unlock(&sii902x->mutex);
 		return ret;
+	}
 
 	ret = regmap_update_bits(regmap, SII902X_SYS_CTRL_DATA,
 				 SII902X_SYS_CTRL_DDC_BUS_REQ |
 				 SII902X_SYS_CTRL_DDC_BUS_GRTD, 0);
-	if (ret)
+	if (ret) {
+		mutex_unlock(&sii902x->mutex);
 		return ret;
+	}
 
 	timeout = jiffies + msecs_to_jiffies(
 		SII902X_I2C_BUS_ACQUISITION_TIMEOUT_MS);
 	do {
 		ret = regmap_read(regmap, SII902X_SYS_CTRL_DATA, &status);
-		if (ret)
+		if (ret) {
+			mutex_unlock(&sii902x->mutex);
 			return ret;
+		}
 	} while (status & (SII902X_SYS_CTRL_DDC_BUS_REQ |
 			   SII902X_SYS_CTRL_DDC_BUS_GRTD) &&
 			   time_before(jiffies, timeout));
@@ -668,8 +712,13 @@ static int sii902x_get_modes(struct drm_connector *connector)
 	if (status & (SII902X_SYS_CTRL_DDC_BUS_REQ |
 		SII902X_SYS_CTRL_DDC_BUS_GRTD)) {
 		dev_info(&sii902x->i2c->dev, "failed to release the i2c bus");
+		mutex_unlock(&sii902x->mutex);
 		return -ETIMEDOUT;
 	}
+
+	ret = regmap_update_bits(sii902x->regmap, SII902X_SYS_CTRL_DATA,
+				 SII902X_SYS_CTRL_OUTPUT_MODE, output_mode);
+	mutex_unlock(&sii902x->mutex);
 
 	return num;
 }
@@ -692,8 +741,10 @@ static void sii902x_bridge_disable(struct drm_bridge *bridge)
 {
 	struct sii902x *sii902x = bridge_to_sii902x(bridge);
 
+	mutex_lock(&sii902x->mutex);
 	regmap_update_bits(sii902x->regmap, SII902X_SYS_CTRL_DATA,
 			   SII902X_SYS_CTRL_PWR_DWN, SII902X_SYS_CTRL_PWR_DWN);
+	mutex_unlock(&sii902x->mutex);
 }
 
 static void sii902x_bridge_enable(struct drm_bridge *bridge)
@@ -702,6 +753,7 @@ static void sii902x_bridge_enable(struct drm_bridge *bridge)
 	int ret = 0;
 	int i = 0;
 
+	mutex_lock(&sii902x->mutex);
 	regmap_update_bits(sii902x->regmap, SII902X_PWR_STATE_CTRL,
 			   SII902X_AVI_POWER_STATE_MSK,
 			   SII902X_AVI_POWER_STATE_D(0));
@@ -709,6 +761,7 @@ static void sii902x_bridge_enable(struct drm_bridge *bridge)
 		SII902X_SYS_CTRL_PWR_DWN, 0);
 	for (i = 0; i < 2; i++)
 		ret = regmap_write(sii902x->regmap, 0x19, 0);
+	mutex_unlock(&sii902x->mutex);
 }
 
 static void sii902x_bridge_mode_set(struct drm_bridge *bridge,
@@ -736,21 +789,26 @@ static void sii902x_bridge_mode_set(struct drm_bridge *bridge,
 	buf[9] = SII902X_TPI_AVI_INPUT_RANGE_AUTO |
 		SII902X_TPI_AVI_INPUT_COLORSPACE_RGB;
 
+	mutex_lock(&sii902x->mutex);
 	for (i = 0; i < 2; i++)
 		ret = regmap_bulk_write(regmap,
 			SII902X_TPI_VIDEO_DATA, buf, 10);
-	if (ret)
+	if (ret) {
+		mutex_unlock(&sii902x->mutex);
 		return;
+	}
 
 	ret = drm_hdmi_avi_infoframe_from_display_mode(&frame, adj);
 
 	if (ret < 0) {
 		DRM_ERROR("couldn't fill AVI infoframe\n");
+		mutex_unlock(&sii902x->mutex);
 		return;
 	}
 	ret = hdmi_avi_infoframe_pack(&frame, buf, sizeof(buf));
 	if (ret < 0) {
 		DRM_ERROR("failed to pack AVI infoframe: %d\n", ret);
+		mutex_unlock(&sii902x->mutex);
 		return;
 	}
 
@@ -759,7 +817,7 @@ static void sii902x_bridge_mode_set(struct drm_bridge *bridge,
 		ret = regmap_bulk_write(regmap, SII902X_TPI_AVI_INFOFRAME,
 					buf + HDMI_INFOFRAME_HEADER_SIZE - 1,
 					HDMI_AVI_INFOFRAME_SIZE + 1);
-
+	mutex_unlock(&sii902x->mutex);
 	siHdmiTx_AudioSet();
 }
 
@@ -837,8 +895,10 @@ static irqreturn_t sii902x_interrupt(int irq, void *data)
 	struct sii902x *sii902x = data;
 	unsigned int status = 0;
 
+	//mutex_lock(&sii902x->mutex);
 	regmap_read(sii902x->regmap, SII902X_INT_STATUS, &status);
 	regmap_write(sii902x->regmap, SII902X_INT_STATUS, status);
+	//mutex_unlock(&sii902x->mutex);
 
 	if ((status & SII902X_HOTPLUG_EVENT) && sii902x->bridge.dev)
 		drm_helper_hpd_irq_event(sii902x->bridge.dev);
@@ -933,6 +993,7 @@ static int sii902x_probe(struct i2c_client *client,
 			return -ENOMEM;
 
 		sii902x_debug = sii902x;
+		sii902x_mutex = sii902x;
 		sii902x_for_i2c = sii902x;
 
 		sii902x->i2c = client;
@@ -959,6 +1020,9 @@ static int sii902x_probe(struct i2c_client *client,
 			return PTR_ERR(sii902x->hdmi5v_gpio);
 		}
 		gpiod_set_value(sii902x->hdmi5v_gpio, 1);
+
+		/*9022 mutex init*/
+		mutex_init(&sii902x->mutex);
 
 		sii902x_reset(sii902x);
 
