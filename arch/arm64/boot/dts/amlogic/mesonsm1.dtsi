@@ -2562,7 +2562,7 @@
 		mux {
 			groups = "spi1_mosi",
 				 "spi1_miso",
-				 //"spi1_ss0",
+				 "spi1_ss0",
 				 "spi1_clk";
 			function = "spi1";
 			drive-strength = <1>;
