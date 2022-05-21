@@ -150,6 +150,12 @@ int aml_spdifin_status_check(struct aml_audio_controller *actrl)
 	return val;
 }
 
+int aml_spdifin_irq_mask(struct aml_audio_controller *actrl)
+{
+	unsigned int val = aml_audiobus_read(actrl, EE_AUDIO_SPDIFIN_CTRL0);
+	return (val & 0x0FF00000) >> 20;
+}
+
 void aml_spdifin_clr_irq(struct aml_audio_controller *actrl,
 	bool is_all_bits, int clr_bits_val)
 {
