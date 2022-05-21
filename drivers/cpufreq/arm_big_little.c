@@ -164,6 +164,27 @@ bL_cpufreq_set_rate(u32 cpu, u32 old_cluster, u32 new_cluster, u32 rate)
 			ret = -EIO;
 	}
 
+#if defined(CONFIG_SONOS)
+	/* The kernel code goes through WARN_ON here.  But we've only seen this on
+	 * reboots and while it triggers our HWV scripts, it doesn't appear to
+	 * actually impact our behavior.  Given that, and given that the warning is
+	 * in the kernel based on what appears to be a known bad (or at least problematic)
+	 * clk core level, we're going to remove the WARN_ON call and just print the
+	 * single failed message, with the expectation that that will clean things up
+	 * sufficiently.
+	 */
+	if (ret < 0) {
+		pr_err("clk_set_rate failed: %d, new cluster: %d\n", ret,
+				new_cluster);
+		if (bLs) {
+			per_cpu(cpu_last_req_freq, cpu) = prev_rate;
+			per_cpu(physical_cluster, cpu) = old_cluster;
+		}
+
+		mutex_unlock(&cluster_lock[new_cluster]);
+		return ret;
+	}
+#else
 	if (WARN_ON(ret)) {
 		pr_err("clk_set_rate failed: %d, new cluster: %d\n", ret,
 				new_cluster);
@@ -176,6 +197,7 @@ bL_cpufreq_set_rate(u32 cpu, u32 old_cluster, u32 new_cluster, u32 rate)
 
 		return ret;
 	}
+#endif
 
 	mutex_unlock(&cluster_lock[new_cluster]);
 
