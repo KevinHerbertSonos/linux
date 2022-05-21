@@ -11,7 +11,7 @@ ccflags-y += -I$(srctree)/drivers/misc/mediatek/asrc \
 endif
 snd-soc-mt8518-pcm-objs := \
     mt8518-afe-pcm.o mt8518-afe-utils.o mt8518-snd-utils.o \
-    mt8518-afe-controls.o mt8518-afe-debug.o
+    mt8518-afe-controls.o mt8518-afe-debug.o mt8518-afe-procfs.o
 
 # MTK Platform Support
 obj-$(CONFIG_SND_SOC_MT8518) += snd-soc-mt8518-pcm.o
