@@ -56,7 +56,7 @@
 
 int cifsFYI = 0;
 bool traceSMB;
-bool enable_oplocks = true;
+bool enable_oplocks = false;	/* Sonos */
 bool linuxExtEnabled = true;
 bool lookupCacheEnabled = true;
 unsigned int global_secflags = CIFSSEC_DEF;

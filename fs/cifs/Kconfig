@@ -209,3 +209,14 @@ config CIFS_FSCACHE
 	    to be cached locally on disk through the general filesystem cache
 	    manager. If unsure, say N.
 
+config CIFS_NTLMSSP_SONOS
+	  bool "CIFS NTLMSSP Support for Sonos Products"
+	  depends on CIFS && SONOS
+	  default n
+	  help
+		Enables cifs NTLMSSP support on Sonos products. Use this if
+		a) require NTLMSSP b) building for a Sonos device. The other
+		way to enable NTLMSSP support is to enable CIFS_EXPERIMENTAL,
+		but this brings in extra features not related to NTLMSSP.
+		If building for a Sonos device say Y, otherwise N.
+
