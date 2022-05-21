@@ -983,11 +983,19 @@ static const struct mtk_gate top_clks[] = {
 	GATE_TOP7(CLK_TOP_DISP_DPI, "disp_dpi", "disp_dpi_ck_sel", 0),
 };
 
+
 #define MT8518_PLL_FMAX		(3000UL * MHZ)
+#define MT8518_PLL_ARMPLL_FMAX	(1800UL * MHZ)
+#define MT8518_PLL_MAINPLL_FMAX	(1501500000UL)
+#define MT8518_PLL_UNIVPLL_FMAX	(1248UL * MHZ)
+#define MT8518_PLL_APLL1_FMAX	(180633600UL)
+#define MT8518_PLL_APLL2_FMAX	(196608000UL)
+#define MT8518_PLL_TVDPLL_FMAX	(594UL * MHZ)
+#define MT8518_PLL_MMPLL_FMAX	(730UL * MHZ)
 
 #define CON0_MT8518_RST_BAR	BIT(27)
 
-#define PLL_B(_id, _name, _reg, _pwr_reg, _en_mask, _flags, _pcwbits,	\
+#define PLL_B(_id, _name, _reg, _pwr_reg, _en_mask, _flags, _fmax, _pcwbits,	\
 			_pd_reg, _pd_shift, _tuner_reg, _pcw_reg,	\
 			_pcw_shift, _div_table) {			\
 		.id = _id,						\
@@ -997,7 +1005,7 @@ static const struct mtk_gate top_clks[] = {
 		.en_mask = _en_mask,					\
 		.flags = _flags,					\
 		.rst_bar_mask = CON0_MT8518_RST_BAR,			\
-		.fmax = MT8518_PLL_FMAX,				\
+		.fmax = _fmax,				\
 		.pcwbits = _pcwbits,					\
 		.pd_reg = _pd_reg,					\
 		.pd_shift = _pd_shift,					\
@@ -1010,12 +1018,12 @@ static const struct mtk_gate top_clks[] = {
 #define PLL(_id, _name, _reg, _pwr_reg, _en_mask, _flags, _pcwbits,	\
 			_pd_reg, _pd_shift, _tuner_reg, _pcw_reg,	\
 			_pcw_shift)					\
-		PLL_B(_id, _name, _reg, _pwr_reg, _en_mask, _flags, _pcwbits, \
+		PLL_B(_id, _name, _reg, _pwr_reg, _en_mask, _flags, MT8518_PLL_FMAX, _pcwbits, \
 			_pd_reg, _pd_shift, _tuner_reg, _pcw_reg, _pcw_shift, \
 			NULL)
 
 static const struct mtk_pll_div_table armpll_div_table[] = {
-	{ .div = 0, .freq = MT8518_PLL_FMAX },
+	{ .div = 0, .freq = MT8518_PLL_ARMPLL_FMAX },
 	{ .div = 1, .freq = 1013500000 },
 	{ .div = 2, .freq = 506500000 },
 	{ .div = 3, .freq = 253500000 },
@@ -1025,19 +1033,19 @@ static const struct mtk_pll_div_table armpll_div_table[] = {
 
 static const struct mtk_pll_data plls[] = {
 	PLL_B(CLK_APMIXED_ARMPLL, "armpll", 0x0100, 0x0110, 0x00000001,
-	    0, 21, 0x0104, 24, 0, 0x0104, 0, armpll_div_table),
-	PLL(CLK_APMIXED_MAINPLL, "mainpll", 0x0120, 0x0130, 0x00000001,
-	    HAVE_RST_BAR, 21, 0x0124, 24, 0, 0x0124, 0),
-	PLL(CLK_APMIXED_UNIVPLL, "univpll", 0x0140, 0x0150, 0x30000001,
-	    HAVE_RST_BAR, 7, 0x0144, 24, 0, 0x0144, 0),
-	PLL(CLK_APMIXED_MMPLL, "mmpll", 0x0160, 0x0170, 0x00000001,
-	    0, 21, 0x0164, 24, 0, 0x0164, 0),
-	PLL(CLK_APMIXED_APLL1, "apll1", 0x0180, 0x0190, 0x00000001,
-	    0, 31, 0x0180, 1, 0x0194, 0x0184, 0),
-	PLL(CLK_APMIXED_APLL2, "apll2", 0x01A0, 0x01B0, 0x00000001,
-	    0, 31, 0x01A0, 1, 0x01B4, 0x01A4, 0),
-	PLL(CLK_APMIXED_TVDPLL, "tvdpll", 0x01C0, 0x01D0, 0x00000001,
-	    0, 21, 0x01C4, 24, 0, 0x01C4, 0),
+	    0, MT8518_PLL_ARMPLL_FMAX, 21, 0x0104, 24, 0, 0x0104, 0, armpll_div_table),
+	PLL_B(CLK_APMIXED_MAINPLL, "mainpll", 0x0120, 0x0130, 0x00000001,
+	    HAVE_RST_BAR, MT8518_PLL_MAINPLL_FMAX, 21, 0x0124, 24, 0, 0x0124, 0, NULL),
+	PLL_B(CLK_APMIXED_UNIVPLL, "univpll", 0x0140, 0x0150, 0x30000001,
+	    HAVE_RST_BAR, MT8518_PLL_UNIVPLL_FMAX, 7, 0x0144, 24, 0, 0x0144, 0, NULL),
+	PLL_B(CLK_APMIXED_MMPLL, "mmpll", 0x0160, 0x0170, 0x00000001,
+	    0, MT8518_PLL_MMPLL_FMAX, 21, 0x0164, 24, 0, 0x0164, 0, NULL),
+	PLL_B(CLK_APMIXED_APLL1, "apll1", 0x0180, 0x0190, 0x00000001,
+	    0, MT8518_PLL_APLL1_FMAX, 31, 0x0180, 1, 0x0194, 0x0184, 0, NULL),
+	PLL_B(CLK_APMIXED_APLL2, "apll2", 0x01A0, 0x01B0, 0x00000001,
+	    0, MT8518_PLL_APLL2_FMAX, 31, 0x01A0, 1, 0x01B4, 0x01A4, 0, NULL),
+	PLL_B(CLK_APMIXED_TVDPLL, "tvdpll", 0x01C0, 0x01D0, 0x00000001,
+	    0, MT8518_PLL_TVDPLL_FMAX, 21, 0x01C4, 24, 0, 0x01C4, 0, NULL),
 };
 
 static int clk_mt8518_apmixed_probe(struct platform_device *pdev)
