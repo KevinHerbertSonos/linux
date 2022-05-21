@@ -54,7 +54,7 @@
 static int aml_dai_set_tdm_sysclk(struct snd_soc_dai *cpu_dai,
 				int clk_id, unsigned int freq, int dir);
 
-static void dump_pcm_setting(struct pcm_setting *setting)
+__maybe_unused static void dump_pcm_setting(struct pcm_setting *setting)
 {
 	if (setting == NULL)
 		return;
@@ -695,7 +695,7 @@ static int aml_dai_tdm_prepare(struct snd_pcm_substream *substream,
 			return -EINVAL;
 		}
 
-		dev_info(substream->pcm->card->dev, "tdm prepare capture\n");
+		dev_dbg(substream->pcm->card->dev, "tdm prepare capture\n");
 		switch (p_tdm->id) {
 		case 0:
 			src = TDMIN_A;
@@ -778,7 +778,7 @@ static int aml_dai_tdm_trigger(struct snd_pcm_substream *substream, int cmd,
 			 * 4. SPDIFOUT enable
 			 * 5. FRDDR enable
 			 */
-			dev_info(substream->pcm->card->dev, "tdm playback enable\n");
+			dev_dbg(substream->pcm->card->dev, "tdm playback enable\n");
 			/*don't change this flow*/
 			aml_aed_top_enable(p_tdm->fddr, true);
 			aml_tdm_enable(p_tdm->actrl,
@@ -805,7 +805,7 @@ static int aml_dai_tdm_trigger(struct snd_pcm_substream *substream, int cmd,
 				aml_spdifout_mute_without_actrl(0, false);
 			}
 		} else {
-			dev_info(substream->pcm->card->dev, "tdm capture enable\n");
+			dev_dbg(substream->pcm->card->dev, "tdm capture enable\n");
 			aml_toddr_enable(p_tdm->tddr, 1);
 			aml_tdm_enable(p_tdm->actrl,
 				substream->stream, p_tdm->id, true);
@@ -829,7 +829,7 @@ static int aml_dai_tdm_trigger(struct snd_pcm_substream *substream, int cmd,
 			 * 3. TDMOUT/SPDIF Disable
 			 * 4. FRDDR Disable
 			 */
-			dev_info(substream->pcm->card->dev, "tdm playback stop\n");
+			dev_dbg(substream->pcm->card->dev, "tdm playback stop\n");
 			/*don't change this flow*/
 			aml_tdmout_enable_gain(p_tdm->id, true);
 			if (p_tdm->chipinfo
@@ -862,7 +862,7 @@ static int aml_dai_tdm_trigger(struct snd_pcm_substream *substream, int cmd,
 
 			aml_tdm_enable(p_tdm->actrl,
 				substream->stream, p_tdm->id, false);
-			dev_info(substream->pcm->card->dev, "tdm capture stop\n");
+			dev_dbg(substream->pcm->card->dev, "tdm capture stop\n");
 
 			toddr_stopped = aml_toddr_burst_finished(p_tdm->tddr);
 			if (toddr_stopped)
@@ -1070,7 +1070,7 @@ static int aml_dai_tdm_hw_params(struct snd_pcm_substream *substream,
 	if (ret)
 		return ret;
 
-	dump_pcm_setting(setting);
+	//dump_pcm_setting(setting);
 
 	/* set pcm dai hw params */
 	// TODO: add clk_id
@@ -1711,7 +1711,7 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 		p_chipinfo->lane_cnt = LANE_MAX1;
 
 	p_tdm->lane_cnt = p_chipinfo->lane_cnt;
-	pr_info("%s, tdm ID = %u, lane_cnt = %d\n", __func__,
+	pr_debug("%s, tdm ID = %u, lane_cnt = %d\n", __func__,
 			p_tdm->id, p_tdm->lane_cnt);
 
 	/* get audio controller */
@@ -1762,7 +1762,7 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 				dev_err(dev, "can't set samesource clock\n");
 				return ret;
 			}
-			pr_info("TDM id %d samesource_sel:%d\n",
+			pr_debug("TDM id %d samesource_sel:%d\n",
 				p_tdm->id,
 				p_tdm->samesource_sel);
 		}
@@ -1784,7 +1784,7 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 	if (ret < 0)
 		p_tdm->i2s2hdmitx = 0;
 	else
-		pr_info("TDM id %d i2s2hdmi:%d\n",
+		pr_debug("TDM id %d i2s2hdmi:%d\n",
 			p_tdm->id,
 			p_tdm->i2s2hdmitx);
 

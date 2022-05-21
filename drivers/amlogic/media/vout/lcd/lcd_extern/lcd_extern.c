@@ -94,13 +94,13 @@ struct aml_lcd_extern_driver_s *aml_lcd_extern_get_driver(int index)
 	}
 
 	if (index >= LCD_EXTERN_INDEX_INVALID) {
-		EXTERR("invalid driver index: %d\n", index);
+		EXTDBG("invalid driver index: %d\n", index);
 		return NULL;
 	}
 	if (lcd_ext_driver->config->index == index)
 		return lcd_ext_driver;
 
-	EXTERR("invalid driver index: %d\n", index);
+	EXTDBG("invalid driver index: %d\n", index);
 	return NULL;
 }
 

@@ -22,6 +22,7 @@
 
 #define VOUTPR(fmt, args...)     pr_info("vout: "fmt"", ## args)
 #define VOUTERR(fmt, args...)    pr_err("vout: error: "fmt"", ## args)
+#define VOUTDBG(fmt, args...)    pr_debug("vout: debug: "fmt"", ## args)
 
 /* [3: 2] cntl_viu2_sel_venc:
  *         0=ENCL, 1=ENCI, 2=ENCP, 3=ENCT.

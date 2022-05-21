@@ -749,7 +749,7 @@ static void lcd_tablet_vbyone_wait_stable(void)
 		udelay(50);
 		i--;
 	}
-	LCDPR("%s status: 0x%x, i=%d\n",
+	LCDDBG("%s status: 0x%x, i=%d\n",
 		__func__, lcd_vcbus_read(VBO_STATUS_L), (5000 - i));
 }
 
@@ -923,7 +923,7 @@ void lcd_tablet_driver_init_pre(void)
 	int ret;
 
 	pconf = lcd_drv->lcd_config;
-	LCDPR("tablet driver init(ver %s): %s\n", lcd_drv->version,
+	LCDDBG("tablet driver init(ver %s): %s\n", lcd_drv->version,
 		lcd_type_type_to_str(pconf->lcd_basic.lcd_type));
 	ret = lcd_type_supported(pconf);
 	if (ret)
