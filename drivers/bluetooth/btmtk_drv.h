@@ -78,39 +78,15 @@ struct btmtk_device {
 	void *card;
 	/* struct hci_dev *hcidev; */
 
-	u8 dev_type;
 	u8 reset_progress;
 	u8 reset_dongle;
 	u8 tx_dnld_rdy;
-
-	u8 psmode;
-	u8 pscmd;
-	u8 hsmode;
-	u8 hscmd;
-
-	/* Low byte is gap, high byte is GPIO */
-	u16 gpio_gap;
-
-	u8 hscfgcmd;
-	u8 sendcmdflag;
 };
 
 struct btmtk_adapter {
 	void *hw_regs_buf;
 	u8 *hw_regs;
 	u32 int_count;
-	struct sk_buff_head tx_queue;
-	struct sk_buff_head fops_queue;
-	struct sk_buff_head fwlog_fops_queue;
-	struct sk_buff_head fwlog_tx_queue;
-	u8 fops_mode;
-	u8 psmode;
-	u8 hs_state;
-	u8 wakeup_tries;
-	wait_queue_head_t cmd_wait_q;
-	wait_queue_head_t event_hs_wait_q;
-	u8 cmd_complete;
-	bool is_suspended;
 };
 
 struct btmtk_private {
@@ -216,7 +192,6 @@ int btmtk_pscan_window_reporting(struct btmtk_private *priv, u8 subcmd);
 int btmtk_send_hscfg_cmd(struct btmtk_private *priv);
 int btmtk_enable_ps(struct btmtk_private *priv);
 int btmtk_prepare_command(struct btmtk_private *priv);
-int btmtk_enable_hs(struct btmtk_private *priv);
 void btmtk_firmware_dump(struct btmtk_private *priv);
 
 #define META_BUFFER_SIZE (1024*50)

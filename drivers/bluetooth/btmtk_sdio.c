@@ -82,10 +82,16 @@ const u8 READ_ADDRESS_EVENT[] = { 0x0e, 0x0a, 0x01, 0x09, 0x10, 0x00 };
 
 static struct ring_buffer metabuffer;
 static struct ring_buffer fwlog_metabuffer;
+
 u8 probe_ready;
 /* record firmware version */
 static char fw_version_str[FW_VERSION_BUF_SIZE];
 static struct proc_dir_entry *g_proc_dir;
+
+static int btmtk_fops_state = BTMTK_FOPS_STATE_UNKNOWN;
+static DEFINE_MUTEX(btmtk_fops_state_mutex);
+#define FOPS_MUTEX_LOCK()	mutex_lock(&btmtk_fops_state_mutex)
+#define FOPS_MUTEX_UNLOCK()	mutex_unlock(&btmtk_fops_state_mutex)
 
 /** read_write for proc */
 static int btmtk_proc_show(struct seq_file *m, void *v);
@@ -95,6 +101,7 @@ static int btmtk_sdio_trigger_fw_assert(void);
 
 static int btmtk_sdio_RegisterBTIrq(struct btmtk_sdio_card *data);
 static int btmtk_sdio_woble_input_init(struct btmtk_sdio_card *data);
+static void btmtk_sdio_woble_input_deinit(struct btmtk_sdio_card *data);
 /* bluetooth KPI feautre, bperf */
 u8 btmtk_bluetooth_kpi;
 u8 btmtk_log_lvl = BTMTK_LOG_LEVEL_DEFAULT;
@@ -408,6 +415,20 @@ void btmtk_sdio_timestamp(enum BTMTK_SDIO_RX_CHECKPOINT type)
 	}
 }
 
+static int btmtk_fops_get_state(void)
+{
+	return btmtk_fops_state;
+}
+
+static void btmtk_fops_set_state(int new_state)
+{
+	static const char * const fstate_msg[BTMTK_FOPS_STATE_MAX] = {"UNKNOWN", "INIT", "OPENING", "OPENED", "CLOSING", "CLOSED"};
+
+	BTMTK_INFO("%s: FOPS_%s(%d) -> FOPS_%s(%d)", __func__, fstate_msg[btmtk_fops_state],
+			btmtk_fops_state, fstate_msg[new_state], new_state);
+	btmtk_fops_state = new_state;
+}
+
 void btmtk_sdio_stop_wait_wlan_remove_tsk(void)
 {
 	if (wait_wlan_remove_tsk == NULL)
@@ -627,6 +648,8 @@ static void btmtk_sdio_woble_free_setting(void)
 	btmtk_sdio_free_fw_cfg_struct(g_card->woble_setting_radio_on, WOBLE_SETTING_COUNT);
 	btmtk_sdio_free_fw_cfg_struct(g_card->woble_setting_radio_on_status_event, WOBLE_SETTING_COUNT);
 	btmtk_sdio_free_fw_cfg_struct(g_card->woble_setting_radio_on_comp_event, WOBLE_SETTING_COUNT);
+	btmtk_sdio_free_fw_cfg_struct(g_card->woble_setting_apcf_resume, WOBLE_SETTING_COUNT);
+	btmtk_sdio_free_fw_cfg_struct(g_card->woble_setting_apcf_resume_event, WOBLE_SETTING_COUNT);
 
 	kfree(g_card->woble_setting_file_name);
 	g_card->woble_setting_file_name = NULL;
@@ -1117,8 +1140,10 @@ static void btmtk_sdio_load_woble_setting_callback(const struct firmware *fw_dat
 			card->woble_setting_apcf_resume_event, WOBLE_SETTING_COUNT, image, FW_CFG_INX_LEN_2);
 
 LOAD_END:
-	kfree(image);
-	image = NULL;
+	if (image) {
+		kfree(image);
+		image = NULL;
+	}
 	release_firmware(fw_data);
 	if (err)
 		BTMTK_WARN("result fail");
@@ -1217,10 +1242,8 @@ static inline void btmtk_sdio_woble_wake_lock(struct btmtk_sdio_card *data)
 		return;
 
 	if (data->bt_cfg.support_unify_woble && data->bt_cfg.support_woble_wakelock) {
-		if (data->woble_ws->active == 0) {
-			BTMTK_INFO("wake lock");
-			__pm_stay_awake(data->woble_ws);
-		}
+		BTMTK_INFO("wake lock");
+		__pm_stay_awake(data->woble_ws);
 	}
 }
 
@@ -1230,10 +1253,8 @@ static inline void btmtk_sdio_woble_wake_unlock(struct btmtk_sdio_card *data)
 		return;
 
 	if (data->bt_cfg.support_unify_woble && data->bt_cfg.support_woble_wakelock) {
-		if (data->woble_ws->active > 0) {
-			BTMTK_INFO("wake unlock");
-			__pm_relax(data->woble_ws);
-		}
+		BTMTK_INFO("wake unlock");
+		__pm_relax(data->woble_ws);
 	}
 }
 
@@ -2309,30 +2330,32 @@ static int btmtk_efuse_read(u16 addr, u8 *value)
 	return ret;
 }
 
-static void btmtk_check_auto_mode(struct btmtk_sdio_card *card)
+static int btmtk_check_auto_mode(struct btmtk_sdio_card *card)
 {
 	u16 addr = 1;
 	u8 value = 0;
 
 	if (card->efuse_mode != EFUSE_AUTO_MODE)
-		return;
+		return 0;
 
 	if (btmtk_efuse_read(addr, &value)) {
 		BTMTK_WARN("read fail");
 		BTMTK_WARN("Use EEPROM Bin file mode");
 		card->efuse_mode = EFUSE_BIN_FILE_MODE;
-	} else {
-		if (value == 0x76) {
-			BTMTK_WARN("get efuse[1]: 0x%02x", value);
-			BTMTK_WARN("use efuse mode");
-			card->efuse_mode = EFUSE_MODE;
-		} else {
-			BTMTK_WARN("get efuse[1]: 0x%02x", value);
-			BTMTK_WARN("Use EEPROM Bin file mode");
-			card->efuse_mode = EFUSE_BIN_FILE_MODE;
-		}
+		return -EIO;
 	}
-	return;
+
+	if (value == 0x76) {
+		BTMTK_WARN("get efuse[1]: 0x%02x", value);
+		BTMTK_WARN("use efuse mode");
+		card->efuse_mode = EFUSE_MODE;
+	} else {
+		BTMTK_WARN("get efuse[1]: 0x%02x", value);
+		BTMTK_WARN("Use EEPROM Bin file mode");
+		card->efuse_mode = EFUSE_BIN_FILE_MODE;
+	}
+
+	return 0;
 }
 
 static int btmtk_sdio_send_init_cmds(struct btmtk_sdio_card *card)
@@ -2342,7 +2365,10 @@ static int btmtk_sdio_send_init_cmds(struct btmtk_sdio_card *card)
 		return -EIO;
 	}
 
-	btmtk_check_auto_mode(card);
+	if (btmtk_check_auto_mode(card)) {
+		BTMTK_ERR("check auto mode failed");
+		return -EIO;
+	}
 
 	if (btmtk_sdio_set_sleep()) {
 		BTMTK_ERR("set sleep failed");
@@ -2359,8 +2385,12 @@ static int btmtk_sdio_send_init_cmds(struct btmtk_sdio_card *card)
 		return -EIO;
 	}
 
-	if (g_card->bt_cfg.support_auto_picus == true)
-		btmtk_sdio_setup_picus_param(&g_card->bt_cfg.picus_filter);
+	if (g_card->bt_cfg.support_auto_picus == true) {
+		if (btmtk_sdio_setup_picus_param(&g_card->bt_cfg.picus_filter)) {
+			BTMTK_ERR("send setup_picus_param cmd failed");
+			return -EIO;
+		}
+	}
 
 	return 0;
 }
@@ -2988,9 +3018,9 @@ static int btmtk_sdio_dispatch_fwlog(u8 *buf, int len)
 
 	if ((buf[0] == 0xFF && buf[2] == 0x50) ||
 		(buf[0] == 0xFF && buf[1] == 0x05)) {
-		if (skb_queue_len(&g_priv->adapter->fwlog_fops_queue) < FWLOG_QUEUE_COUNT) {
+		if (skb_queue_len(&g_card->fwlog_fops_queue) < FWLOG_QUEUE_COUNT) {
 			BTMTK_DBG("This is picus data");
-			if (btmtk_sdio_skb_enq_fwlog(buf, len, 0, &g_priv->adapter->fwlog_fops_queue) == 0)
+			if (btmtk_sdio_skb_enq_fwlog(buf, len, 0, &g_card->fwlog_fops_queue) == 0)
 				wake_up_interruptible(&fw_log_inq);
 
 			fwlog_picus_blocking_warn = 0;
@@ -3002,11 +3032,10 @@ static int btmtk_sdio_dispatch_fwlog(u8 *buf, int len)
 		}
 	} else if (buf[0] == 0x6f && buf[1] == 0xfc) {
 		/* Coredump */
-		if (skb_queue_len(&g_priv->adapter->fwlog_fops_queue) < FWLOG_ASSERT_QUEUE_COUNT) {
+		if (skb_queue_len(&g_card->fwlog_fops_queue) < FWLOG_ASSERT_QUEUE_COUNT) {
 			BTMTK_DBG("Receive coredump, move data to fwlogqueue for picus");
-			if (btmtk_sdio_skb_enq_fwlog(buf, len, 0, &g_priv->adapter->fwlog_fops_queue) == 0)
+			if (btmtk_sdio_skb_enq_fwlog(buf, len, 0, &g_card->fwlog_fops_queue) == 0)
 				wake_up_interruptible(&fw_log_inq);
-
 			fwlog_fwdump_blocking_warn = 0;
 		} else {
 			if (fwlog_fwdump_blocking_warn == 0) {
@@ -3026,9 +3055,9 @@ static int btmtk_sdio_dispatch_data_bluetooth_kpi(u8 *buf, int len, u8 type)
 	if (!btmtk_bluetooth_kpi)
 		return ret;
 
-	if (skb_queue_len(&g_priv->adapter->fwlog_fops_queue) < FWLOG_BLUETOOTH_KPI_QUEUE_COUNT) {
+	if (skb_queue_len(&g_card->fwlog_fops_queue) < FWLOG_BLUETOOTH_KPI_QUEUE_COUNT) {
 		/* sent event to queue, picus tool will log it for bluetooth KPI feature */
-		if (btmtk_sdio_skb_enq_fwlog(buf, len, type, &g_priv->adapter->fwlog_fops_queue) == 0) {
+		if (btmtk_sdio_skb_enq_fwlog(buf, len, type, &g_card->fwlog_fops_queue) == 0) {
 			wake_up_interruptible(&fw_log_inq);
 			fwlog_blocking_warn = 0;
 		}
@@ -3791,6 +3820,7 @@ static int btmtk_sdio_card_to_host(struct btmtk_private *priv, const u8 *event, 
 	u16 retry = 0;
 	u32 u32ReadCRValue = 0;
 	u8 is_fwdump = 0, tail_len = 0;
+	int fops_state = 0;
 	static u8 picus_blocking_warn;
 	static u8 fwdump_blocking_warn;
 
@@ -3844,6 +3874,7 @@ static int btmtk_sdio_card_to_host(struct btmtk_private *priv, const u8 *event, 
 		}
 
 		if (dump_data_counter == 1) {
+			g_card->dongle_state = BT_SDIO_DONGLE_STATE_FW_DUMP;
 			btmtk_sdio_hci_snoop_print();
 			BTMTK_INFO("create btmtk_sdio_wait_dump_complete_thread");
 			wait_dump_complete_tsk = kthread_run(btmtk_sdio_wait_dump_complete_thread,
@@ -3891,7 +3922,7 @@ static int btmtk_sdio_card_to_host(struct btmtk_private *priv, const u8 *event, 
 			fw_dump_file->f_op->write(fw_dump_file, &rxbuf[COREDUMP_PACKET_HEADER_LEN],
 				dump_len, &fw_dump_file->f_pos);
 
-		if (skb_queue_len(&g_priv->adapter->fwlog_fops_queue) < FWLOG_ASSERT_QUEUE_COUNT) {
+		if (skb_queue_len(&g_card->fwlog_fops_queue) < FWLOG_ASSERT_QUEUE_COUNT) {
 			/* This is coredump data, save coredump data to picus_queue */
 			BTMTK_DBG("Receive coredump data, move data to fwlog queue for picus");
 			/* Save coredump data to picus_queue from 6F FC, minus ACL header */
@@ -4060,7 +4091,10 @@ static int btmtk_sdio_card_to_host(struct btmtk_private *priv, const u8 *event, 
 		btmtk_sdio_print_debug_sr();
 
 		/* trigger fw core dump */
-		if (g_priv->adapter->fops_mode == true)
+		FOPS_MUTEX_LOCK();
+		fops_state = btmtk_fops_get_state();
+		FOPS_MUTEX_UNLOCK();
+		if (fops_state == BTMTK_FOPS_STATE_OPENED)
 			btmtk_sdio_trigger_fw_assert();
 		ret = -EINVAL;
 		goto exit;
@@ -4113,6 +4147,15 @@ static int btmtk_sdio_card_to_host(struct btmtk_private *priv, const u8 *event, 
 		btmtk_sdio_dispatch_data_bluetooth_kpi(&rxbuf[MTK_SDIO_PACKET_HEADER_SIZE], buf_len + 1, 0);
 	}
 
+	/* to drop picus related event after save event, don't send picus event to host,
+	 * because host will trace this event as other host cmd's event,
+	 * it will cause command timeout
+	 */
+	if ((skb->data[3] == 0x5F || skb->data[3] == 0xBE) && skb->data[4] == 0xFC) {
+		BTSDIO_INFO_RAW(skb->data, buf_len, "%s: discard picus related event:", __func__);
+		goto exit;
+	}
+
 	fops_skb = bt_skb_alloc(buf_len, GFP_ATOMIC);
 	if (fops_skb == NULL) {
 		BTMTK_WARN("No free fops_skb");
@@ -4125,8 +4168,8 @@ static int btmtk_sdio_card_to_host(struct btmtk_private *priv, const u8 *event, 
 
 	fops_skb->len = buf_len;
 	LOCK_UNSLEEPABLE_LOCK(&(metabuffer.spin_lock));
-	skb_queue_tail(&g_priv->adapter->fops_queue, fops_skb);
-	if (skb_queue_empty(&g_priv->adapter->fops_queue))
+	skb_queue_tail(&g_card->fops_queue, fops_skb);
+	if (skb_queue_empty(&g_card->fops_queue))
 		BTMTK_INFO("fops_queue is empty");
 	UNLOCK_UNSLEEPABLE_LOCK(&(metabuffer.spin_lock));
 
@@ -4797,7 +4840,7 @@ int btmtk_sdio_bt_trigger_core_dump(int trigger_dump)
 		bt_cb(skb)->pkt_type = HCI_COMMAND_PKT;
 		memcpy(&skb->data[0], &coredump_cmd[0], sizeof(coredump_cmd));
 		skb->len = sizeof(coredump_cmd);
-		skb_queue_tail(&g_priv->adapter->tx_queue, skb);
+		skb_queue_tail(&g_card->tx_queue, skb);
 		wake_up_interruptible(&g_priv->main_thread.wait_q);
 	} else {
 		if (g_card->bt_cfg.support_dongle_reset == 1) {
@@ -4806,7 +4849,7 @@ int btmtk_sdio_bt_trigger_core_dump(int trigger_dump)
 			wait_wlan_remove_tsk =
 				kthread_run(btmtk_sdio_wait_wlan_remove_thread,
 					NULL,
-					"btmtk_sdio_wait_dump_complete_thread");
+					"btmtk_sdio_wait_wlan_remove_thread");
 
 			msleep(100);
 			btmtk_sdio_notify_wlan_remove_start();
@@ -4946,7 +4989,6 @@ static int btmtk_sdio_L0_debug_probe(struct sdio_func *func,
 {
 	int ret = 0;
 	struct task_struct *task = NULL;
-	struct btmtk_sdio_card *card = NULL;
 	struct btmtk_sdio_device *data = (void *) id->driver_data;
 	u32 u32ReadCRValue = 0;
 	u8 fw_download_fail = 0;
@@ -4963,34 +5005,29 @@ static int btmtk_sdio_L0_debug_probe(struct sdio_func *func,
 		return -ENODEV;
 		}
 
-	card = devm_kzalloc(&func->dev, sizeof(*card), GFP_KERNEL);
-	if (!card)
-		return -ENOMEM;
-
-	card->func = func;
-	g_card = card;
+	g_card->func = func;
 
 	if (id->driver_data) {
-		card->helper = data->helper;
-		card->reg = data->reg;
-		card->sd_blksz_fw_dl = data->sd_blksz_fw_dl;
-		card->support_pscan_win_report = data->support_pscan_win_report;
-		card->supports_fw_dump = data->supports_fw_dump;
-		card->chip_id = data->reg->chip_id;
-		card->suspend_count = 0;
+		g_card->helper = data->helper;
+		g_card->reg = data->reg;
+		g_card->sd_blksz_fw_dl = data->sd_blksz_fw_dl;
+		g_card->support_pscan_win_report = data->support_pscan_win_report;
+		g_card->supports_fw_dump = data->supports_fw_dump;
+		g_card->chip_id = data->reg->chip_id;
+		g_card->suspend_count = 0;
 		BTMTK_INFO(L0_RESET_TAG "chip_id %x", data->reg->chip_id);
 	}
 
-	if (btmtk_sdio_register_dev(card) < 0) {
+	if (btmtk_sdio_register_dev(g_card) < 0) {
 		BTMTK_ERR(L0_RESET_TAG "Failed to register BT device!");
 		return -ENODEV;
 	}
 	BTMTK_INFO("btmtk_sdio_register_dev success");
 
 	/* Disable the interrupts on the card */
-	btmtk_sdio_enable_host_int(card);
+	btmtk_sdio_enable_host_int(g_card);
 	BTMTK_DBG(L0_RESET_TAG "call btmtk_sdio_enable_host_int done");
-	if (btmtk_sdio_download_fw(card)) {
+	if (btmtk_sdio_download_fw(g_card)) {
 		BTMTK_ERR(L0_RESET_TAG "Downloading firmware failed!");
 		fw_download_fail = 1;
 	}
@@ -5013,7 +5050,7 @@ static int btmtk_sdio_L0_debug_probe(struct sdio_func *func,
 	return 0;
 
 unreg_dev:
-	btmtk_sdio_unregister_dev(card);
+	btmtk_sdio_unregister_dev(g_card);
 
 	BTMTK_ERR(L0_RESET_TAG "fail end");
 	return ret;
@@ -5022,11 +5059,16 @@ unreg_dev:
 static int btmtk_sdio_L0_probe(struct sdio_func *func,
 					const struct sdio_device_id *id)
 {
+	int ret = 0;
 	/* Set flags/functions here to leave HW reset mark before probe. */
-	need_reset_stack = 1;
 
 	/* Now, ready to branch onto true sdio card probe. */
-	return btmtk_sdio_probe(func, id);
+	ret = btmtk_sdio_probe(func, id);
+
+	need_reset_stack = 1;
+	BTMTK_INFO("need_reset_stack %d probe_ret %d", need_reset_stack, ret);
+	wake_up_interruptible(&inq);
+	return ret;
 }
 #endif
 
@@ -5102,7 +5144,6 @@ int btmtk_sdio_host_reset_dongle(void)
 		goto rst_dongle_done;
 	}
 
-	need_reset_stack = 1;
 	wlan_remove_done = 0;
 
 	ret = btmtk_sdio_L0_reset(g_card->func->card);
@@ -5206,11 +5247,21 @@ static int btmtk_sdio_woble_input_init(struct btmtk_sdio_card *data)
 	ret = input_register_device(data->WoBLEInputDev);
 	if (ret < 0) {
 		input_free_device(data->WoBLEInputDev);
+		data->WoBLEInputDev = NULL;
 		BTMTK_ERR("input_register_device %d", ret);
 		return ret;
 	}
 
 	return ret;
+}
+
+static void btmtk_sdio_woble_input_deinit(struct btmtk_sdio_card *data)
+{
+	if (data->WoBLEInputDev) {
+		input_unregister_device(data->WoBLEInputDev);
+		input_free_device(data->WoBLEInputDev);
+		data->WoBLEInputDev = NULL;
+	}
 }
 
 static int btmtk_stereo_irq_handler(int irq, void *dev)
@@ -5270,7 +5321,6 @@ static int btmtk_sdio_probe(struct sdio_func *func,
 {
 	int ret = 0;
 	struct btmtk_private *priv = NULL;
-	struct btmtk_sdio_card *card = NULL;
 	struct btmtk_sdio_device *data = (void *) id->driver_data;
 	u32 u32ReadCRValue = 0;
 	u8 fw_download_fail = 0;
@@ -5286,22 +5336,17 @@ static int btmtk_sdio_probe(struct sdio_func *func,
 		return -ENODEV;
 	}
 
-	card = devm_kzalloc(&func->dev, sizeof(*card), GFP_KERNEL);
-	if (!card)
-		return -ENOMEM;
-
-	card->func = func;
-	card->bin_file_buffer = NULL;
-	g_card = card;
+	g_card->func = func;
+	g_card->bin_file_buffer = NULL;
 
 	if (id->driver_data) {
-		card->helper = data->helper;
-		card->reg = data->reg;
-		card->sd_blksz_fw_dl = data->sd_blksz_fw_dl;
-		card->support_pscan_win_report = data->support_pscan_win_report;
-		card->supports_fw_dump = data->supports_fw_dump;
-		card->chip_id = data->reg->chip_id;
-		card->suspend_count = 0;
+		g_card->helper = data->helper;
+		g_card->reg = data->reg;
+		g_card->sd_blksz_fw_dl = data->sd_blksz_fw_dl;
+		g_card->support_pscan_win_report = data->support_pscan_win_report;
+		g_card->supports_fw_dump = data->supports_fw_dump;
+		g_card->chip_id = data->reg->chip_id;
+		g_card->suspend_count = 0;
 		BTMTK_INFO("chip_id is %x", data->reg->chip_id);
 		/*allocate memory for woble_setting_file*/
 		g_card->woble_setting_file_name = kzalloc(MAX_BIN_FILE_NAME_LEN, GFP_KERNEL);
@@ -5335,8 +5380,8 @@ static int btmtk_sdio_probe(struct sdio_func *func,
 	btmtk_sdio_initialize_cfg_items();
 	btmtk_sdio_load_setting_files(g_card->bt_cfg_file_name, &g_card->func->dev, g_card);
 
-	BTMTK_DBG("func device %X, call btmtk_sdio_register_dev", card->func->device);
-	if (btmtk_sdio_register_dev(card) < 0) {
+	BTMTK_DBG("func device %X, call btmtk_sdio_register_dev", g_card->func->device);
+	if (btmtk_sdio_register_dev(g_card) < 0) {
 		BTMTK_ERR("Failed to register BT device!");
 		return -ENODEV;
 	}
@@ -5344,16 +5389,16 @@ static int btmtk_sdio_probe(struct sdio_func *func,
 	BTMTK_DBG("btmtk_sdio_register_dev success");
 
 	/* Disable the interrupts on the card */
-	btmtk_sdio_enable_host_int(card);
+	btmtk_sdio_enable_host_int(g_card);
 	BTMTK_DBG("call btmtk_sdio_enable_host_int done");
 
-	if (btmtk_sdio_download_fw(card)) {
+	if (btmtk_sdio_download_fw(g_card)) {
 		BTMTK_ERR("Downloading firmware failed!");
 		fw_download_fail = 1;
 	}
 
 	/* check buffer mode */
-	btmtk_eeprom_bin_file(card);
+	btmtk_eeprom_bin_file(g_card);
 
 	/* Move from btmtk_fops_open() */
 	spin_lock_init(&(metabuffer.spin_lock.lock));
@@ -5363,14 +5408,13 @@ static int btmtk_sdio_probe(struct sdio_func *func,
 
 	BTMTK_DBG("spin_lock_init end");
 
-	priv = btmtk_add_card(card);
+	priv = btmtk_add_card(g_card);
 	if (!priv) {
 		BTMTK_ERR("Initializing card failed!");
 		ret = -ENODEV;
 		goto unreg_dev;
 	}
 	BTMTK_DBG("btmtk_add_card success");
-	card->priv = priv;
 	BTMTK_DBG("assign priv done");
 	/* Initialize the interface specific function pointers */
 	pf_sdio_reset = (sdio_reset_func) btmtk_kallsyms_lookup_name("sdio_reset_comm");
@@ -5378,13 +5422,12 @@ static int btmtk_sdio_probe(struct sdio_func *func,
 		BTMTK_WARN("no sdio_reset_comm() api, can't support chip reset!");
 		g_card->bt_cfg.support_dongle_reset = 0;
 	}
-	priv->hw_host_to_card = btmtk_sdio_host_to_card;
-	priv->hw_process_int_status = btmtk_sdio_process_int_status;
-	priv->hw_set_own_back =  btmtk_sdio_set_own_back;
-	priv->hw_sdio_reset_dongle = btmtk_sdio_reset_dongle;
-	priv->start_reset_dongle_progress = btmtk_sdio_start_reset_dongle_progress;
-	priv->hci_snoop_save = btmtk_sdio_hci_snoop_save;
-	g_priv = priv;
+	g_priv->hw_host_to_card = btmtk_sdio_host_to_card;
+	g_priv->hw_process_int_status = btmtk_sdio_process_int_status;
+	g_priv->hw_set_own_back =  btmtk_sdio_set_own_back;
+	g_priv->hw_sdio_reset_dongle = btmtk_sdio_reset_dongle;
+	g_priv->start_reset_dongle_progress = btmtk_sdio_start_reset_dongle_progress;
+	g_priv->hci_snoop_save = btmtk_sdio_hci_snoop_save;
 	btmtk_sdio_set_no_fw_own(g_priv, g_card->is_KeepFullPwr);
 
 	memset(&metabuffer.buffer, 0, META_BUFFER_SIZE);
@@ -5401,24 +5444,33 @@ static int btmtk_sdio_probe(struct sdio_func *func,
 			g_card);
 	}
 
-	if (g_card->bt_cfg.support_woble_by_eint) {
-		btmtk_sdio_RegisterBTIrq(card);
-		btmtk_sdio_woble_input_init(card);
-	}
-
-	if (g_card->bt_cfg.support_unify_woble && g_card->bt_cfg.support_woble_wakelock)
+	if (g_card->bt_cfg.support_unify_woble && g_card->bt_cfg.support_woble_wakelock) {
 #ifdef CONFIG_MP_WAKEUP_SOURCE_SYSFS_STAT
 		g_card->woble_ws = wakeup_source_register(NULL, "btevent_woble");
 #else
 		g_card->woble_ws = wakeup_source_register("btevent_woble");
 #endif
+		if (!g_card->woble_ws) {
+			BTMTK_WARN("woble_ws register fail!");
+			goto unreg_dev;
+		}
+	}
 
-	if (g_card->bt_cfg.support_woble_by_eint)
+	if (g_card->bt_cfg.support_woble_by_eint) {
 #ifdef CONFIG_MP_WAKEUP_SOURCE_SYSFS_STAT
 		g_card->eint_ws = wakeup_source_register(NULL, "btevent_eint");
 #else
 		g_card->eint_ws = wakeup_source_register("btevent_eint");
 #endif
+		if (!g_card->eint_ws) {
+			wakeup_source_unregister(g_card->woble_ws);
+			BTMTK_WARN("eint_ws register fail!");
+			goto unreg_dev;
+		}
+
+		btmtk_sdio_RegisterBTIrq(g_card);
+		btmtk_sdio_woble_input_init(g_card);
+	}
 
 	sema_init(&g_priv->wr_mtx, 1);
 	sema_init(&g_priv->rd_mtx, 1);
@@ -5431,7 +5483,7 @@ static int btmtk_sdio_probe(struct sdio_func *func,
 	return 0;
 
 unreg_dev:
-	btmtk_sdio_unregister_dev(card);
+	btmtk_sdio_unregister_dev(g_card);
 
 	BTMTK_ERR("fail end");
 	return ret;
@@ -5462,8 +5514,10 @@ static void btmtk_sdio_remove(struct sdio_func *func)
 			if (card->bt_cfg.support_unify_woble && card->bt_cfg.support_woble_wakelock)
 				wakeup_source_unregister(card->woble_ws);
 
-			if (card->bt_cfg.support_woble_by_eint)
+			if (card->bt_cfg.support_woble_by_eint) {
 				wakeup_source_unregister(card->eint_ws);
+				btmtk_sdio_woble_input_deinit(g_card);
+			}
 
 			btmtk_sdio_woble_free_setting();
 			btmtk_sdio_free_bt_cfg();
@@ -5524,7 +5578,7 @@ static int btmtk_sdio_send_hci_cmd(u8 cmd_type,
 		memcpy(event_need_compare, event, event_len);
 		event_need_compare_len = event_len;
 	}
-	skb_queue_tail(&g_priv->adapter->tx_queue, skb);
+	skb_queue_tail(&g_card->tx_queue, skb);
 	wake_up_interruptible(&g_priv->main_thread.wait_q);
 
 
@@ -5824,26 +5878,48 @@ static int btmtk_sdio_set_Woble_radio_off(u8 is_suspend)
 
 static int btmtk_sdio_handle_entering_WoBLE_state(u8 is_suspend)
 {
-	int ret = -1;
+	int ret = 0;
+	u8 radio_off_cmd[] = { 0xC9, 0xFC, 0x05, 0x01, 0x20, 0x02, 0x00, 0x00 };
+	u8 radio_off_evt[] = { 0xE6, 0x02, 0x08, 0x00 };
+	int fops_state = 0;
 
 	BTMTK_DBG("begin");
 
-	if (g_card->dongle_state != BT_SDIO_DONGLE_STATE_POWER_ON) {
-		if (!g_card->bt_cfg.support_woble_for_bt_disable) {
-			BTMTK_INFO("BT is off, not support WoBLE");
-			return 0;
-		}
+	FOPS_MUTEX_LOCK();
+	fops_state = btmtk_fops_get_state();
+	FOPS_MUTEX_UNLOCK();
 
-		if (btmtk_sdio_bt_set_power(1)) {
-			BTMTK_ERR("power on failed");
-			return -EIO;
-		}
-		g_card->dongle_state = BT_SDIO_DONGLE_STATE_POWER_ON_FOR_WOBLE;
+	if (!is_support_unify_woble(g_card)) {
+		if (fops_state == BTMTK_FOPS_STATE_OPENED) {
+			BTMTK_ERR("not support, send radio off");
+
+			BTSDIO_DEBUG_RAW(radio_off_cmd, (unsigned int)sizeof(radio_off_cmd),
+				"%s: send radio_off_cmd is:", __func__);
+			ret = btmtk_sdio_send_hci_cmd(HCI_COMMAND_PKT,
+					radio_off_cmd, sizeof(radio_off_cmd),
+					radio_off_evt, sizeof(radio_off_evt),
+					WOBLE_COMP_EVENT_TIMO);
+
+			BTMTK_DBG("ret %d", ret);
+		} else
+			BTMTK_WARN("when not support woble, in bt off state, do nothing!");
 	} else {
-		g_card->dongle_state = BT_SDIO_DONGLE_STATE_WOBLE;
-	}
+		if (g_card->dongle_state != BT_SDIO_DONGLE_STATE_POWER_ON) {
+			if (!g_card->bt_cfg.support_woble_for_bt_disable) {
+				BTMTK_INFO("BT is off, not support WoBLE");
+				goto Finish;
+			}
 
-	if (is_support_unify_woble(g_card)) {
+			if (btmtk_sdio_bt_set_power(1)) {
+				BTMTK_ERR("power on failed");
+				ret = -EIO;
+				goto Finish;
+			}
+			g_card->dongle_state = BT_SDIO_DONGLE_STATE_POWER_ON_FOR_WOBLE;
+		} else {
+			g_card->dongle_state = BT_SDIO_DONGLE_STATE_WOBLE;
+		}
+
 		if (is_suspend) {
 			ret = btmtk_sdio_send_get_vendor_cap();
 			if (ret < 0) {
@@ -5869,7 +5945,6 @@ static int btmtk_sdio_handle_entering_WoBLE_state(u8 is_suspend)
 			goto Finish;
 		}
 	}
-
 Finish:
 	if (ret)
 		btmtk_sdio_woble_wake_lock(g_card);
@@ -5970,18 +6045,43 @@ static void btmtk_sdio_check_wobx_debug_log(void)
 
 static int btmtk_sdio_handle_leaving_WoBLE_state(void)
 {
-	int ret = -1;
+	int ret = 0;
+	u8 radio_on_cmd[] = { 0xC9, 0xFC, 0x05, 0x01, 0x21, 0x02, 0x00, 0x00 };
+	u8 radio_on_evt[] = { 0xE6, 0x02, 0x08, 0x01 };
+	int fops_state = 0;
 
 	BTMTK_DBG("begin");
 
 	if (g_card == NULL) {
 		BTMTK_ERR("g_card is NULL return");
-		return 0;
+		goto exit;
 	}
 
+	FOPS_MUTEX_LOCK();
+	fops_state = btmtk_fops_get_state();
+	FOPS_MUTEX_UNLOCK();
+
 	if (!is_support_unify_woble(g_card)) {
-		BTMTK_ERR("do nothing");
-		return 0;
+		if (fops_state == BTMTK_FOPS_STATE_OPENED) {
+			BTMTK_ERR("not support, send radio on");
+			BTSDIO_DEBUG_RAW(radio_on_cmd, (unsigned int)sizeof(radio_on_cmd),
+				"%s: send radio_on_cmd is:", __func__);
+			ret = btmtk_sdio_send_hci_cmd(HCI_COMMAND_PKT,
+					radio_on_cmd, sizeof(radio_on_cmd),
+					radio_on_evt, sizeof(radio_on_evt),
+					WOBLE_COMP_EVENT_TIMO);
+			BTMTK_DBG("ret %d", ret);
+			goto exit;
+		} else {
+			BTMTK_WARN("when not support woble, in bt off state, do nothing!");
+			goto exit;
+		}
+	}
+
+	if ((g_card->dongle_state != BT_SDIO_DONGLE_STATE_POWER_ON_FOR_WOBLE)
+		&& (g_card->dongle_state != BT_SDIO_DONGLE_STATE_WOBLE)) {
+		BTMTK_ERR("Not in woble mode");
+		goto exit;
 	}
 
 	if (g_card->woble_setting_radio_on[0].length &&
@@ -6028,6 +6128,7 @@ finish:
 		g_card->dongle_state = BT_SDIO_DONGLE_STATE_POWER_ON;
 	}
 
+exit:
 	BTMTK_INFO("end");
 	return ret;
 }
@@ -6065,6 +6166,7 @@ static int btmtk_sdio_send_apcf_reserved(void)
 static int btmtk_sdio_suspend(struct device *dev)
 {
 	struct sdio_func *func = dev_to_sdio_func(dev);
+	int fops_state = 0;
 	int ret = 0;
 	mmc_pm_flag_t pm_flags;
 
@@ -6080,12 +6182,17 @@ static int btmtk_sdio_suspend(struct device *dev)
 		return 0;
 	}
 
-	if (!is_support_unify_woble(g_card))
-		BTMTK_WARN("no support");
-	else
-		btmtk_sdio_handle_entering_WoBLE_state(1);
+	FOPS_MUTEX_LOCK();
+	fops_state = btmtk_fops_get_state();
+	FOPS_MUTEX_UNLOCK();
+	if ((fops_state == BTMTK_FOPS_STATE_OPENING) || (fops_state == BTMTK_FOPS_STATE_CLOSING)) {
+		BTMTK_WARN("fops state is %d, suspend abort", fops_state);
+		return -ENOSYS;
+	}
 
-	if (g_card->bt_cfg.support_woble_by_eint) {
+	btmtk_sdio_handle_entering_WoBLE_state(1);
+
+	if (g_card->bt_cfg.support_unify_woble && g_card->bt_cfg.support_woble_by_eint) {
 		if (g_card->wobt_irq != 0 && atomic_read(&(g_card->irq_enable_count)) == 0) {
 			BTMTK_INFO("enable BT IRQ:%d", g_card->wobt_irq);
 			irq_set_irq_wake(g_card->wobt_irq, 1);
@@ -6119,6 +6226,7 @@ static int btmtk_sdio_suspend(struct device *dev)
 static int btmtk_sdio_resume(struct device *dev)
 {
 	u8 ret = 0;
+	int fops_state = 0;
 
 	if (g_card == NULL) {
 		BTMTK_ERR("g_card is NULL return");
@@ -6131,7 +6239,7 @@ static int btmtk_sdio_resume(struct device *dev)
 		return 0;
 	}
 
-	if (g_card->bt_cfg.support_woble_by_eint) {
+	if (g_card->bt_cfg.support_unify_woble && g_card->bt_cfg.support_woble_by_eint) {
 		if (g_card->wobt_irq != 0 && atomic_read(&(g_card->irq_enable_count)) == 1) {
 			BTMTK_INFO("disable BT IRQ:%d", g_card->wobt_irq);
 			atomic_dec(&(g_card->irq_enable_count));
@@ -6144,9 +6252,12 @@ static int btmtk_sdio_resume(struct device *dev)
 	if (ret)
 		BTMTK_ERR("btmtk_sdio_handle_leaving_WoBLE_state return fail  %d", ret);
 
+	FOPS_MUTEX_LOCK();
+	fops_state = btmtk_fops_get_state();
+	FOPS_MUTEX_UNLOCK();
 	if (g_card->bt_cfg.reset_stack_after_woble
 		&& need_reset_stack == 0
-		&& g_priv->adapter->fops_mode == true)
+		&& fops_state == BTMTK_FOPS_STATE_OPENED)
 		need_reset_stack = 1;
 
 	BTMTK_INFO("end");
@@ -6180,27 +6291,19 @@ static void btmtk_sdio_L0_hook_new_probe(sdio_card_probe pFn_Probe)
 
 static int btmtk_clean_queue(void)
 {
-	struct sk_buff *skb = NULL;
-
+	BTMTK_INFO("enter");
 	LOCK_UNSLEEPABLE_LOCK(&(metabuffer.spin_lock));
-	if (!skb_queue_empty(&g_priv->adapter->fops_queue)) {
-		BTMTK_INFO("clean data in fops_queue");
-		do {
-			skb = skb_dequeue(&g_priv->adapter->fops_queue);
-			if (skb == NULL) {
-				BTMTK_INFO("skb=NULL error break");
-				break;
-			}
-
-			kfree_skb(skb);
-		} while (!skb_queue_empty(&g_priv->adapter->fops_queue));
-	}
+	skb_queue_purge(&g_card->tx_queue);
+	skb_queue_purge(&g_card->fops_queue);
 	UNLOCK_UNSLEEPABLE_LOCK(&(metabuffer.spin_lock));
+	BTMTK_INFO("end");
 	return 0;
 }
 
 static int btmtk_fops_open(struct inode *inode, struct file *file)
 {
+	int fops_state = 0;
+
 	BTMTK_INFO("begin");
 
 	BTMTK_INFO("Mediatek Bluetooth SDIO driver ver %s", VERSION);
@@ -6212,15 +6315,8 @@ static int btmtk_fops_open(struct inode *inode, struct file *file)
 		return -EFAULT;
 	}
 
-	metabuffer.read_p = 0;
-	metabuffer.write_p = 0;
 	if (g_priv == NULL) {
 		BTMTK_ERR("g_priv is NULL");
-		return -ENOENT;
-	}
-
-	if (g_priv->btmtk_dev.reset_progress) {
-		BTMTK_ERR("reset_progress is %d", g_priv->btmtk_dev.reset_progress);
 		return -ENOENT;
 	}
 
@@ -6229,30 +6325,57 @@ static int btmtk_fops_open(struct inode *inode, struct file *file)
 		return -ENOENT;
 	}
 
+	FOPS_MUTEX_LOCK();
+	fops_state = btmtk_fops_get_state();
+	FOPS_MUTEX_UNLOCK();
+	if (fops_state == BTMTK_FOPS_STATE_CLOSING) {
+		BTMTK_ERR("mode is %d", fops_state);
+		return -EAGAIN;
+	}
+
+	if (fops_state == BTMTK_FOPS_STATE_OPENING || fops_state == BTMTK_FOPS_STATE_OPENED) {
+		BTMTK_ERR("mode is %d", fops_state);
+		return -ENOENT;
+	}
+
+	FOPS_MUTEX_LOCK();
+	btmtk_fops_set_state(BTMTK_FOPS_STATE_OPENING);
+	FOPS_MUTEX_UNLOCK();
+
+	metabuffer.read_p = 0;
+	metabuffer.write_p = 0;
+
 	btmtk_sdio_hci_snoop_init();
 
-	btmtk_sdio_send_init_cmds(g_card);
+	if (btmtk_sdio_send_init_cmds(g_card)) {
+		BTMTK_ERR("send init failed");
+		return -EIO;
+	}
 
-	if (g_card) {
-		if (is_support_unify_woble(g_card))
-			btmtk_sdio_send_apcf_reserved();
-	} else
-		BTMTK_ERR("g_card is NULL");
+	if (is_support_unify_woble(g_card)) {
+		if (btmtk_sdio_send_apcf_reserved()) {
+			BTMTK_ERR("send apcf failed");
+			return -EIO;
+		}
+	}
 
 	btmtk_clean_queue();
 
-	if (g_priv)
-		g_priv->adapter->fops_mode = true;
+	FOPS_MUTEX_LOCK();
+	btmtk_fops_set_state(BTMTK_FOPS_STATE_OPENED);
+	FOPS_MUTEX_UNLOCK();
 
 	need_reset_stack = 0;
 	need_reopen = 0;
 	stereo_irq = -1;
-	BTMTK_INFO("fops_mode=%d end", g_priv->adapter->fops_mode);
+	BTMTK_INFO("end");
 	return 0;
 }
 
 static int btmtk_fops_close(struct inode *inode, struct file *file)
 {
+	int fops_state = 0;
+
 	BTMTK_INFO("begin");
 
 	BTMTK_INFO("Mediatek Bluetooth SDIO driver ver %s", VERSION);
@@ -6264,23 +6387,50 @@ static int btmtk_fops_close(struct inode *inode, struct file *file)
 		return -EFAULT;
 	}
 
-	if (g_priv && g_priv->adapter)
-		g_priv->adapter->fops_mode = false;
+	if (g_priv == NULL) {
+		pr_info("%s g_priv is NULL\n", __func__);
+		return -ENOENT;
+	}
+
+	if (g_priv->adapter == NULL) {
+		pr_info("%s g_priv->adapter is NULL\n", __func__);
+		return -ENOENT;
+	}
+
+	if (g_card->dongle_state != BT_SDIO_DONGLE_STATE_POWER_ON) {
+		BTMTK_ERR("dongle_state is %d", g_card->dongle_state);
+		goto exit;
+	}
+
+	FOPS_MUTEX_LOCK();
+	fops_state = btmtk_fops_get_state();
+	FOPS_MUTEX_UNLOCK();
+	if (fops_state != BTMTK_FOPS_STATE_OPENED) {
+		BTMTK_ERR("mode is %d", fops_state);
+		goto exit;
+	}
+
+	FOPS_MUTEX_LOCK();
+	btmtk_fops_set_state(BTMTK_FOPS_STATE_CLOSING);
+	FOPS_MUTEX_UNLOCK();
 
 	if (g_card->bt_cfg.support_auto_picus == true)
 		btmtk_sdio_picus_operation(false);
 
-	if (g_card->dongle_state != BT_SDIO_DONGLE_STATE_WOBLE) {
-		btmtk_sdio_send_hci_reset(true);
-		btmtk_sdio_send_deinit_cmds();
-	}
+	btmtk_sdio_send_hci_reset(true);
+	btmtk_sdio_send_deinit_cmds();
 
+exit:
 	btmtk_stereo_unreg_irq();
 	btmtk_clean_queue();
 	need_reopen = 0;
 
+	FOPS_MUTEX_LOCK();
+	btmtk_fops_set_state(BTMTK_FOPS_STATE_CLOSED);
+	FOPS_MUTEX_UNLOCK();
+
 	if (g_priv && g_priv->adapter)
-		BTMTK_INFO("fops_mode=%d end", g_priv->adapter->fops_mode);
+		BTMTK_INFO("end");
 	else
 		BTMTK_INFO("end g_priv or adapter is null");
 	return 0;
@@ -6298,6 +6448,7 @@ ssize_t btmtk_fops_write(struct file *filp, const char __user *buf,
 	u8 pkt_type = 0xff;
 	u32 pkt_len = 0;
 	unsigned char *pkt_data = NULL;
+	int fops_state = 0;
 #if SUPPORT_CR_WR
 	u32 crAddr = 0, crValue = 0, crMask = 0;
 #endif
@@ -6312,9 +6463,17 @@ ssize_t btmtk_fops_write(struct file *filp, const char __user *buf,
 		return -EFAULT;
 	}
 
-	if (g_priv->adapter->fops_mode == 0) {
-		BTMTK_ERR("fops_mode is 0");
+	FOPS_MUTEX_LOCK();
+	fops_state = btmtk_fops_get_state();
+	FOPS_MUTEX_UNLOCK();
+	if (fops_state != BTMTK_FOPS_STATE_OPENED) {
+		BTMTK_ERR("fops_state is %d", fops_state);
 		return -EFAULT;
+	}
+
+	if (g_card->dongle_state != BT_SDIO_DONGLE_STATE_POWER_ON) {
+		BTMTK_ERR("dongle_state is %d return", g_card->dongle_state);
+		return 0;
 	}
 
 	if (need_reopen) {
@@ -6453,7 +6612,7 @@ ssize_t btmtk_fops_write(struct file *filp, const char __user *buf,
 	memcpy(&skb->data[0], pkt_data, copy_size - 1);
 
 	skb->len = copy_size - 1;
-	skb_queue_tail(&g_priv->adapter->tx_queue, skb);
+	skb_queue_tail(&g_card->tx_queue, skb);
 
 	if (bt_cb(skb)->pkt_type == HCI_COMMAND_PKT) {
 		u8 fw_assert_cmd[] = { 0x6F, 0xFC, 0x05, 0x01, 0x02, 0x01, 0x00, 0x08 };
@@ -6495,14 +6654,23 @@ ssize_t btmtk_fops_read(struct file *filp, char __user *buf,
 	int copyLen = 0;
 	u8 hwerr_event[] = { 0x04, 0x10, 0x01, 0xff };
 	static int send_hw_err_event_count;
+	int fops_state = 0;
+
+	if (!probe_ready) {
+		BTMTK_ERR("probe_ready is %d return", probe_ready);
+		return -EFAULT;
+	}
 
 	if (g_priv == NULL) {
 		BTMTK_ERR("g_priv is NULL");
 		return -EFAULT;
 	}
 
-	if ((g_priv->adapter->fops_mode == 0) && (need_reset_stack == 0)) {
-		BTMTK_ERR("fops_mode is 0");
+	FOPS_MUTEX_LOCK();
+	fops_state = btmtk_fops_get_state();
+	FOPS_MUTEX_UNLOCK();
+	if ((fops_state != BTMTK_FOPS_STATE_OPENED) && (need_reset_stack == 0)) {
+		BTMTK_ERR("fops_state is %d", fops_state);
 		return -EFAULT;
 	}
 
@@ -6565,7 +6733,7 @@ ssize_t btmtk_fops_read(struct file *filp, char __user *buf,
 	}
 
 	LOCK_UNSLEEPABLE_LOCK(&(metabuffer.spin_lock));
-	if (skb_queue_empty(&g_priv->adapter->fops_queue)) {
+	if (skb_queue_empty(&g_card->fops_queue)) {
 		/* if (filp->f_flags & O_NONBLOCK) { */
 		if (metabuffer.write_p == metabuffer.read_p) {
 			UNLOCK_UNSLEEPABLE_LOCK(&(metabuffer.spin_lock));
@@ -6584,7 +6752,7 @@ ssize_t btmtk_fops_read(struct file *filp, char __user *buf,
 	}
 
 	do {
-		skb = skb_dequeue(&g_priv->adapter->fops_queue);
+		skb = skb_dequeue(&g_card->fops_queue);
 		if (skb == NULL) {
 			BTMTK_DBG("skb=NULL break");
 			break;
@@ -6594,11 +6762,11 @@ ssize_t btmtk_fops_read(struct file *filp, char __user *buf,
 
 		if (btmtk_sdio_push_data_to_metabuffer(&metabuffer, skb->data,
 				skb->len, bt_cb(skb)->pkt_type, true) < 0) {
-			skb_queue_head(&g_priv->adapter->fops_queue, skb);
+			skb_queue_head(&g_card->fops_queue, skb);
 			break;
 		}
 		kfree_skb(skb);
-	} while (!skb_queue_empty(&g_priv->adapter->fops_queue));
+	} while (!skb_queue_empty(&g_card->fops_queue));
 	UNLOCK_UNSLEEPABLE_LOCK(&(metabuffer.spin_lock));
 
 	up(&g_priv->rd_mtx);
@@ -6619,9 +6787,15 @@ unsigned int btmtk_fops_poll(struct file *filp, poll_table *wait)
 {
 	unsigned int mask = 0;
 
+	if (!probe_ready) {
+		printk_ratelimited(KERN_WARNING
+			"%s probe_ready is %d return\n", __func__, probe_ready);
+		return 0;
+	}
+
 	if (g_priv == NULL) {
 		BTMTK_ERR("g_priv is NULL");
-		return -ENODEV;
+		return 0;
 	}
 
 	poll_wait(filp, &inq, wait);
@@ -6629,8 +6803,9 @@ unsigned int btmtk_fops_poll(struct file *filp, poll_table *wait)
 	if (metabuffer.write_p != metabuffer.read_p || need_reset_stack)
 		mask |= (POLLIN | POLLRDNORM);
 
-	if (!skb_queue_empty(&g_priv->adapter->fops_queue)) {
-		mask |= (POLLIN | POLLRDNORM);
+	if (!skb_queue_empty(&g_card->fops_queue)) {
+		if (skb_queue_len(&g_card->fops_queue))
+			mask |= (POLLIN | POLLRDNORM);
 		/* BTMTK_INFO("poll done"); */
 	}
 
@@ -6694,7 +6869,7 @@ static long btmtk_fops_unlocked_ioctl(struct file *filp,
 		memcpy(&skb->data[0], &set_btclk[1], sizeof(set_btclk) - 1);
 
 		skb->len = sizeof(set_btclk) - 1;
-		skb_queue_tail(&g_priv->adapter->tx_queue, skb);
+		skb_queue_tail(&g_card->tx_queue, skb);
 		wake_up_interruptible(&g_priv->main_thread.wait_q);
 
 		if (stereo_para.period == 0)
@@ -6739,7 +6914,7 @@ static ssize_t btmtk_fops_readfwlog(struct file *filp,
 	struct sk_buff *skb = NULL;
 	int copyLen = 0;
 
-	if (g_priv == NULL) {
+	if (g_priv == NULL || g_priv->adapter == NULL) {
 		BTMTK_ERR("g_priv is NULL");
 		return -EFAULT;
 	}
@@ -6751,8 +6926,8 @@ static ssize_t btmtk_fops_readfwlog(struct file *filp,
 
 	/* picus read a queue, it may occur performace issue */
 	LOCK_UNSLEEPABLE_LOCK(&(fwlog_metabuffer.spin_lock));
-	if (skb_queue_len(&g_priv->adapter->fwlog_fops_queue))
-		skb = skb_dequeue(&g_priv->adapter->fwlog_fops_queue);
+	if (skb_queue_len(&g_card->fwlog_fops_queue))
+		skb = skb_dequeue(&g_card->fwlog_fops_queue);
 	UNLOCK_UNSLEEPABLE_LOCK(&(fwlog_metabuffer.spin_lock));
 
 	if (skb == NULL)
@@ -6762,7 +6937,7 @@ static ssize_t btmtk_fops_readfwlog(struct file *filp,
 		if (copy_to_user(buf, skb->data, skb->len)) {
 			BTMTK_ERR("copy_to_user failed!");
 			/* copy_to_user failed, add skb to fwlog_fops_queue */
-			skb_queue_head(&g_priv->adapter->fwlog_fops_queue, skb);
+			skb_queue_head(&g_card->fwlog_fops_queue, skb);
 			copyLen = -EFAULT;
 			goto OUT;
 		}
@@ -6783,19 +6958,23 @@ static ssize_t btmtk_fops_writefwlog(
 	int i = 0, len = 0, val = 0, ret = -1;
 	/*+1 is for i_fwlog_buf[count] = 0, end string byte*/
 	int i_fwlog_buf_size = HCI_MAX_COMMAND_BUF_SIZE + 1;
-	u8 *i_fwlog_buf = kmalloc(i_fwlog_buf_size, GFP_KERNEL);
-	u8 *o_fwlog_buf = kmalloc(HCI_MAX_COMMAND_SIZE, GFP_KERNEL);
+	u8 *i_fwlog_buf = NULL;
+	u8 *o_fwlog_buf = NULL;
+	int fops_state = 0;
 	u32 crAddr = 0, crValue = 0;
 
-	down(&g_priv->wr_fwlog_mtx);
-
-	if (g_priv == NULL) {
+	if (g_priv == NULL || g_priv->adapter == NULL) {
 		BTMTK_ERR("g_priv is NULL");
 		goto exit;
 	}
 
-	if (g_priv->adapter->fops_mode == 0) {
-		BTMTK_ERR("fops_mode is 0");
+	down(&g_priv->wr_fwlog_mtx);
+
+	FOPS_MUTEX_LOCK();
+	fops_state = btmtk_fops_get_state();
+	FOPS_MUTEX_UNLOCK();
+	if (fops_state != BTMTK_FOPS_STATE_OPENED) {
+		BTMTK_ERR("fops_state is %d", fops_state);
 		count = -EFAULT;
 		goto exit;
 	}
@@ -6805,6 +6984,9 @@ static ssize_t btmtk_fops_writefwlog(
 		count = -EAGAIN;
 		goto exit;
 	}
+
+	i_fwlog_buf = kmalloc(i_fwlog_buf_size, GFP_KERNEL);
+	o_fwlog_buf = kmalloc(HCI_MAX_COMMAND_SIZE, GFP_KERNEL);
 
 	if (i_fwlog_buf == NULL || o_fwlog_buf == NULL) {
 		BTMTK_ERR("buf alloc fail");
@@ -6922,7 +7104,7 @@ static ssize_t btmtk_fops_writefwlog(
 
 		if (val > BTMTK_LOG_LEVEL_MAX || val <= 0) {
 			BTMTK_ERR("Got incorrect value for log level(%d)", val);
-			count =  -EINVAL;
+			count = -EINVAL;
 			goto exit;
 		}
 		btmtk_log_lvl = val;
@@ -7035,7 +7217,7 @@ static ssize_t btmtk_fops_writefwlog(
 		bt_cb(skb)->pkt_type = o_fwlog_buf[0];
 		memcpy(&skb->data[0], &o_fwlog_buf[1], len - 1);
 		skb->len = len - 1;
-		skb_queue_tail(&g_priv->adapter->tx_queue, skb);
+		skb_queue_tail(&g_card->tx_queue, skb);
 		wake_up_interruptible(&g_priv->main_thread.wait_q);
 		break;
 	}
@@ -7049,7 +7231,8 @@ exit:
 		kfree(i_fwlog_buf);
 	if (o_fwlog_buf)
 		kfree(o_fwlog_buf);
-	up(&g_priv->wr_fwlog_mtx);
+	if (g_priv)
+		up(&g_priv->wr_fwlog_mtx);
 	return count;
 }
 
@@ -7060,16 +7243,14 @@ static unsigned int btmtk_fops_pollfwlog(
 
 	if (g_priv == NULL) {
 		BTMTK_ERR("g_priv is NULL");
-		return -ENODEV;
+		return 0;
 	}
 
 	poll_wait(file, &fw_log_inq, wait);
 
-	if (fwlog_metabuffer.write_p != fwlog_metabuffer.read_p)
-		mask |= (POLLIN | POLLRDNORM);
-
-	if (!skb_queue_empty(&g_priv->adapter->fwlog_fops_queue)) {
-		mask |= (POLLIN | POLLRDNORM);
+	if (!skb_queue_empty(&g_card->fwlog_fops_queue)) {
+		if (skb_queue_len(&g_card->fwlog_fops_queue))
+			mask |= (POLLIN | POLLRDNORM);
 		/* BTMTK_INFO("poll done"); */
 	}
 
@@ -7233,6 +7414,10 @@ static int BTMTK_init(void)
 	BTMTK_INFO("BT_major %d, BT_majorfwlog %d", BTMTK_major, BT_majorfwlog);
 	BTMTK_INFO("devID %d, devIDfwlog %d", devID, devIDfwlog);
 
+	FOPS_MUTEX_LOCK();
+	btmtk_fops_set_state(BTMTK_FOPS_STATE_INIT);
+	FOPS_MUTEX_UNLOCK();
+
 	/* init wait queue */
 	g_devIDfwlog = devIDfwlog;
 	init_waitqueue_head(&(fw_log_inq));
@@ -7295,38 +7480,63 @@ static void BTMTK_exit(void)
 
 static int btmtk_sdio_allocate_memory(void)
 {
-	if (txbuf == NULL) {
-		txbuf = kmalloc(MTK_TXDATA_SIZE, GFP_ATOMIC);
-		memset(txbuf, 0, MTK_TXDATA_SIZE);
-	}
+	txbuf = kmalloc(MTK_TXDATA_SIZE, GFP_ATOMIC);
+	memset(txbuf, 0, MTK_TXDATA_SIZE);
 
-	if (rxbuf == NULL) {
-		rxbuf = kmalloc(MTK_RXDATA_SIZE, GFP_ATOMIC);
-		memset(rxbuf, 0, MTK_RXDATA_SIZE);
-	}
+	rxbuf = kmalloc(MTK_RXDATA_SIZE, GFP_ATOMIC);
+	memset(rxbuf, 0, MTK_RXDATA_SIZE);
 
-	if (userbuf == NULL) {
-		userbuf = kmalloc(MTK_TXDATA_SIZE, GFP_ATOMIC);
-		memset(userbuf, 0, MTK_TXDATA_SIZE);
-	}
+	userbuf = kmalloc(MTK_TXDATA_SIZE, GFP_ATOMIC);
+	memset(userbuf, 0, MTK_TXDATA_SIZE);
 
-	if (userbuf_fwlog == NULL) {
-		userbuf_fwlog = kmalloc(MTK_TXDATA_SIZE, GFP_ATOMIC);
-		memset(userbuf_fwlog, 0, MTK_TXDATA_SIZE);
-	}
+	userbuf_fwlog = kmalloc(MTK_TXDATA_SIZE, GFP_ATOMIC);
+	memset(userbuf_fwlog, 0, MTK_TXDATA_SIZE);
+
+	g_card = kzalloc(sizeof(*g_card), GFP_KERNEL);
+	memset(g_card, 0, sizeof(*g_card));
+
+	g_priv = kzalloc(sizeof(*g_priv), GFP_KERNEL);
+	memset(g_priv, 0, sizeof(*g_priv));
+
+	g_priv->adapter = kzalloc(sizeof(*g_priv->adapter), GFP_KERNEL);
+	memset(g_priv->adapter, 0, sizeof(*g_priv->adapter));
+
+	g_card->priv = g_priv;
+
+	skb_queue_head_init(&g_card->tx_queue);
+	skb_queue_head_init(&g_card->fops_queue);
+	skb_queue_head_init(&g_card->fwlog_fops_queue);
 
 	return 0;
 }
 
 static int btmtk_sdio_free_memory(void)
 {
+	skb_queue_purge(&g_card->tx_queue);
+	skb_queue_purge(&g_card->fops_queue);
+	skb_queue_purge(&g_card->fwlog_fops_queue);
+
 	kfree(txbuf);
+	txbuf = NULL;
 
 	kfree(rxbuf);
+	rxbuf = NULL;
 
 	kfree(userbuf);
+	userbuf = NULL;
 
 	kfree(userbuf_fwlog);
+	userbuf_fwlog = NULL;
+
+	kfree(g_card->priv->adapter);
+	g_card->priv->adapter = NULL;
+
+	kfree(g_card->priv);
+	g_card->priv = NULL;
+	g_priv = NULL;
+
+	kfree(g_card);
+	g_card = NULL;
 
 	return 0;
 }
