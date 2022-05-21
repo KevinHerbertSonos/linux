@@ -51,6 +51,22 @@ struct br_ip_list {
 
 extern void brioctl_set(int (*ioctl_hook)(struct net *, unsigned int, void __user *));
 
+#ifdef CONFIG_SONOS
+extern rx_handler_func_t *br_handle_frame_hook;
+
+struct __add_p2p_entry {
+	__u16 stp_weight;
+	__u8 is_satellite:1;
+};
+
+struct __add_p2p_leaf_entry {
+    __u8 is_unencap:1;
+    __u8 is_satellite:1;
+    __u8 unicast:1;
+    __u16 unused1:13;
+    __u16 unused2;
+};
+#endif
 typedef int br_should_route_hook_t(struct sk_buff *skb);
 extern br_should_route_hook_t __rcu *br_should_route_hook;
 

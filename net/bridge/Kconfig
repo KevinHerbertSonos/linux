@@ -60,3 +60,11 @@ config BRIDGE_VLAN_FILTERING
 	  Say N to exclude this support and reduce the binary size.
 
 	  If unsure, say Y.
+
+config SONOS_BRIDGE_PROXY
+	bool
+	depends on BRIDGE
+	depends on SONOS
+	---help---
+	Sonos bridge proxy support for NATting frames across a bridge,
+	initially to support satellites in station mode.

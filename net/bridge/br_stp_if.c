@@ -20,6 +20,10 @@
 #include "br_private.h"
 #include "br_private_stp.h"
 
+#if defined(CONFIG_SONOS)
+#include "br_sonos.h"
+#include "br_mcast.h"
+#endif
 
 /* Port id is composed of priority and port number.
  * NB: some bits of priority are dropped to
@@ -36,6 +40,7 @@ static inline port_id br_make_port_id(__u8 priority, __u16 port_no)
 /* called under bridge lock */
 void br_init_port(struct net_bridge_port *p)
 {
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	struct switchdev_attr attr = {
 		.orig_dev = p->dev,
 		.id = SWITCHDEV_ATTR_ID_BRIDGE_AGEING_TIME,
@@ -43,16 +48,21 @@ void br_init_port(struct net_bridge_port *p)
 		.u.ageing_time = jiffies_to_clock_t(p->br->ageing_time),
 	};
 	int err;
+#endif
 
 	p->port_id = br_make_port_id(p->priority, p->port_no);
 	br_become_designated_port(p);
 	br_set_state(p, BR_STATE_BLOCKING);
 	p->topology_change_ack = 0;
 	p->config_pending = 0;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	sonos_init_port(p);
+#else
 
 	err = switchdev_port_attr_set(p->dev, &attr);
 	if (err && err != -EOPNOTSUPP)
 		netdev_err(p->dev, "failed to set HW ageing time\n");
+#endif
 }
 
 /* NO locks held */
@@ -63,15 +73,31 @@ void br_stp_enable_bridge(struct net_bridge *br)
 	spin_lock_bh(&br->lock);
 	if (br->stp_enabled == BR_KERNEL_STP)
 		mod_timer(&br->hello_timer, jiffies + br->hello_time);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	mod_timer(&br->gc_timer, jiffies + HZ * 4);
+	mod_timer(&br->mcast_timer, jiffies + br->mcast_advertise_time);
+#else
 	mod_timer(&br->gc_timer, jiffies + HZ/10);
+#endif
 
 	br_config_bpdu_generation(br);
 
 	list_for_each_entry(p, &br->port_list, list) {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		int bUp      = (p->dev->flags & IFF_UP) ? 1 : 0;
+		int bCarrier = netif_carrier_ok(p->dev);
+
+		if (bUp && bCarrier)
+			br_stp_enable_port(p);
+#else
 		if (netif_running(p->dev) && netif_oper_up(p->dev))
 			br_stp_enable_port(p);
+#endif
 
 	}
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	sonos_enable_leaf_ports(br, p);
+#endif
 	spin_unlock_bh(&br->lock);
 }
 
@@ -87,6 +113,11 @@ void br_stp_disable_bridge(struct net_bridge *br)
 
 	}
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	sonos_disable_leaf_ports(br, p);
+	br_mcast_destroy_list(br);
+#endif
+
 	br->topology_change = 0;
 	br->topology_change_detected = 0;
 	spin_unlock_bh(&br->lock);
@@ -95,6 +126,9 @@ void br_stp_disable_bridge(struct net_bridge *br)
 	del_timer_sync(&br->topology_change_timer);
 	del_timer_sync(&br->tcn_timer);
 	del_timer_sync(&br->gc_timer);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	del_timer_sync(&br->mcast_timer);
+#endif
 }
 
 /* called under bridge lock */
@@ -102,7 +136,9 @@ void br_stp_enable_port(struct net_bridge_port *p)
 {
 	br_init_port(p);
 	br_port_state_selection(p->br);
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	br_ifinfo_notify(RTM_NEWLINK, p);
+#endif
 }
 
 /* called under bridge lock */
@@ -111,19 +147,28 @@ void br_stp_disable_port(struct net_bridge_port *p)
 	struct net_bridge *br = p->br;
 	int wasroot;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	printk(KERN_INFO "%s: port %i(%s) entering %s state\n",
+	       br->dev->name, p->port_no, p->dev->name, "disabled");
+#endif
+
 	wasroot = br_is_root_bridge(br);
 	br_become_designated_port(p);
 	br_set_state(p, BR_STATE_DISABLED);
 	p->topology_change_ack = 0;
 	p->config_pending = 0;
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	br_ifinfo_notify(RTM_NEWLINK, p);
+#endif
 
 	del_timer(&p->message_age_timer);
 	del_timer(&p->forward_delay_timer);
 	del_timer(&p->hold_timer);
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	br_fdb_delete_by_port(br, p, 0, 0);
+#endif
 	br_multicast_disable_port(p);
 
 	br_configuration_update(br);
@@ -134,6 +179,7 @@ void br_stp_disable_port(struct net_bridge_port *p)
 		br_become_root_bridge(br);
 }
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 static int br_stp_call_user(struct net_bridge *br, char *arg)
 {
 	char *argv[] = { BR_STP_PROG, br->dev->name, arg, NULL };
@@ -215,9 +261,13 @@ static void br_stp_stop(struct net_bridge *br)
 
 	br->stp_enabled = BR_NO_STP;
 }
+#endif
 
 void br_stp_set_enabled(struct net_bridge *br, unsigned long val)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	br->stp_enabled = val?BR_KERNEL_STP:BR_NO_STP;
+#else
 	ASSERT_RTNL();
 
 	if (val) {
@@ -227,6 +277,7 @@ void br_stp_set_enabled(struct net_bridge *br, unsigned long val)
 		if (br->stp_enabled != BR_NO_STP)
 			br_stp_stop(br);
 	}
+#endif
 }
 
 /* called under bridge lock */
@@ -240,7 +291,9 @@ void br_stp_change_bridge_id(struct net_bridge *br, const unsigned char *addr)
 
 	wasroot = br_is_root_bridge(br);
 
+#if !defined(CONFIG_SONOS)
 	br_fdb_change_mac_address(br, addr);
+#endif
 
 	memcpy(oldaddr, br->bridge_id.addr, ETH_ALEN);
 	memcpy(br->bridge_id.addr, addr, ETH_ALEN);
@@ -271,9 +324,19 @@ bool br_stp_recalculate_bridge_id(struct net_bridge *br)
 	const unsigned char *addr = br_mac_zero;
 	struct net_bridge_port *p;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	/* SONOS: Allow setting of bridge MAC without funky heuristics below.
+	 *        We don't always have a valid port in the bridge to use for
+	 *        the MAC, sadly.
+	 */
+	if (br->use_static_mac) {
+		return change_bridge_id_static_mac(br);
+	}
+#else
 	/* user has chosen a value so keep it */
 	if (br->dev->addr_assign_type == NET_ADDR_SET)
 		return false;
+#endif
 
 	list_for_each_entry(p, &br->port_list, list) {
 		if (addr == br_mac_zero ||
@@ -321,8 +384,10 @@ int br_stp_set_port_priority(struct net_bridge_port *p, unsigned long newprio)
 {
 	port_id new_port_id;
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	if (newprio > BR_MAX_PORT_PRIORITY)
 		return -ERANGE;
+#endif
 
 	new_port_id = br_make_port_id(newprio, p->port_no);
 	if (br_is_designated_port(p))
@@ -342,11 +407,13 @@ int br_stp_set_port_priority(struct net_bridge_port *p, unsigned long newprio)
 /* called under bridge lock */
 int br_stp_set_path_cost(struct net_bridge_port *p, unsigned long path_cost)
 {
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	if (path_cost < BR_MIN_PATH_COST ||
 	    path_cost > BR_MAX_PATH_COST)
 		return -ERANGE;
 
 	p->flags |= BR_ADMIN_COST;
+#endif
 	p->path_cost = path_cost;
 	br_configuration_update(p->br);
 	br_port_state_selection(p->br);
