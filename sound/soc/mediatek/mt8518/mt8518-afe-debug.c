@@ -137,6 +137,7 @@ static const struct afe_dump_reg_attr memif_dump_regs[] = {
 	DUMP_REG_ENTRY(AFE_MEMIF_AGENT_FS_CON3),
 	DUMP_REG_ENTRY(AFE_I2S_UL9_REORDER),
 	DUMP_REG_ENTRY(AFE_I2S_UL2_REORDER),
+	DUMP_REG_ENTRY(AFE_MEMIF_BURST_CFG),
 };
 
 static const struct afe_dump_reg_attr irq_dump_regs[] = {

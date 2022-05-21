@@ -264,6 +264,7 @@ struct mt8518_fe_dai_data {
 	unsigned int sram_size;
 	unsigned int prealloc_size;
 	unsigned int pbuf_size_conf;
+	unsigned int pbuf_req_min_len;
 	unsigned int min_hw_irq_period_us;
 };
 
@@ -439,6 +440,9 @@ enum {
 	PBUF_SIZE_CONF_NUM,
 };
 
+#define PBUF_AXI_REQ_MINLEN_MAX_NUM (15)
+#define PBUF_AXI_REQ_MINLEN_DEFAULT (0x9)
+
 enum {
 	EN_IN_PREP_DIS_IN_SD = 0,
 	EN_DIS_IN_TRIGGER,
@@ -537,6 +541,7 @@ struct mt8518_afe_private {
 	u32 be_active_status;
 	bool dl8_enable_24ch_output;
 	u32 dl8_max_main_channels;
+	bool ul_agent_burst_config_disable;
 	/* locks */
 	spinlock_t afe_ctrl_lock;
 	spinlock_t spdifin_ctrl_lock;
