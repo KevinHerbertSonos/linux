@@ -16,5 +16,10 @@
 struct mtk_chip_config {
 	u32 tx_mlsb;
 	u32 rx_mlsb;
+	u32 cs_pol;
+	u32 sample_sel;
+	u32 command_cnt;
+	u32 dummy_cnt;
+	u32 get_tick_dly;
 };
 #endif
