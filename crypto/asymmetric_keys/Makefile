@@ -67,3 +67,10 @@ $(obj)/mscode_parser.o: $(obj)/mscode-asn1.h $(obj)/mscode-asn1.h
 $(obj)/mscode-asn1.o: $(obj)/mscode-asn1.c $(obj)/mscode-asn1.h
 
 clean-files	+= mscode-asn1.c mscode-asn1.h
+
+obj-$(CONFIG_SONOS) += sonos_signature_common_linux.o
+obj-$(CONFIG_SONOS) += sonos_signature_keys.o
+obj-$(CONFIG_SONOS) += sonos_signature_keys_$(SONOS_KEY_SOC_ARCH).o
+obj-$(CONFIG_SONOS) += \
+  $(foreach a,$(SONOS_KEY_ARCHES),sonos_signature_keys_$(a).o)
+obj-$(CONFIG_SONOS) += sonos_signature_verify_linux.o
