@@ -122,6 +122,36 @@ void adv7533_mode_set(struct adv7511 *adv, struct drm_display_mode *mode)
 	else
 		lanes = 3;
 
+#ifdef CONFIG_SONOS
+	/*
+	 * HACK: AML DRM driver's mipi_dsi_attach() and mipi_dsi_detach()
+	 * callbacks are no-ops.  We must hardcode these lane settings
+	 * based on existing DTB settings for the MIPI PHY.  See
+	 * arch/arm64/boot/dts/amlogic/mesonaxg_ad7535-panel.dtsi mipi_attr
+	 * entries.
+	 */
+	switch (mode->vdisplay) {
+		case 1080:
+			lanes = 4;
+			break;
+		case 720:
+			lanes = 4;
+			break;
+		case 480:
+			lanes = 2;
+			break;
+		default:
+			/*
+			 * This function cannot fail so leave the lane settings
+			 * at whatever the clock check earlier decided and hope
+			 * for the best.
+			 */
+			dev_err(&(adv->i2c_main->dev), "ASSERT: resolution %dx%d@%dHz (clock=%d) not supported!\n",
+				mode->hdisplay, mode->vdisplay, mode->vrefresh, mode->clock);
+			break;
+	}
+#endif
+
 	if (lanes != dsi->lanes) {
 		mipi_dsi_detach(dsi);
 		dsi->lanes = lanes;
