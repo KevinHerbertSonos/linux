@@ -86,6 +86,8 @@ static bool adv7511_register_volatile(struct device *dev, unsigned int reg)
 	case ADV7511_REG_AUX_VIC_DETECTED:
 	case ADV7511_REG_STATUS:
 	case ADV7511_REG_GC(1):
+	case ADV7511_REG_INT_ENABLE(0):
+	case ADV7511_REG_INT_ENABLE(1):
 	case ADV7511_REG_INT(0):
 	case ADV7511_REG_INT(1):
 	case ADV7511_REG_PLL_STATUS:
@@ -526,7 +528,9 @@ static int adv7511_irq_process(struct adv7511 *adv7511, bool process_hpd)
 	}
 
 #ifdef CONFIG_DRM_I2C_ADV7511_CEC
-	adv7511_cec_irq_process(adv7511, irq1);
+	if (adv7511->cec_enabled_adap) {
+		adv7511_cec_irq_process(adv7511, irq1);
+	}
 #endif
 
 	return 0;
@@ -1262,9 +1266,13 @@ static int adv7511_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 	if (i2c->irq) {
 		init_waitqueue_head(&adv7511->wq);
 
+		/* ADV7533/35 does not reset interrupt enable bits to default after power down */
+		regmap_write(adv7511->regmap, ADV7511_REG_INT_ENABLE(0), adv7533_register_defaults[ADV7511_REG_INT_ENABLE(0)]);
+		regmap_write(adv7511->regmap, ADV7511_REG_INT_ENABLE(1), adv7533_register_defaults[ADV7511_REG_INT_ENABLE(1)]);
+
 		ret = devm_request_threaded_irq(dev, i2c->irq, NULL,
 						adv7511_irq_handler,
-						IRQF_ONESHOT, dev_name(dev),
+						IRQF_TRIGGER_LOW | IRQF_ONESHOT, dev_name(dev),
 						adv7511);
 		if (ret)
 			goto err_unregister_cec;
