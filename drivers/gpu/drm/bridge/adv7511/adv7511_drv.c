@@ -580,11 +580,12 @@ static int adv7511_get_edid_block(void *data, u8 *buf, unsigned int block,
 	uint8_t offset;
 	unsigned int i;
 	int ret;
+	unsigned int segment = block / 2;
 
 	if (len > 128)
 		return -EINVAL;
 
-	if (adv7511->current_edid_segment != block / 2) {
+	if (adv7511->current_edid_segment != segment) {
 		unsigned int status;
 
 		ret = regmap_read(adv7511->regmap, ADV7511_REG_DDC_STATUS,
@@ -592,10 +593,31 @@ static int adv7511_get_edid_block(void *data, u8 *buf, unsigned int block,
 		if (ret < 0)
 			return ret;
 
-		if (status != 2) {
+		/* DDC is in reset (no HPD?) */
+		if (status == 0) {
+			return -EIO;
+		}
+
+		/* If an EDID is already being read, wait for it to complete */
+		if (status == 1) {
+			adv7511->edid_read = false;
+			ret = adv7511_wait_for_edid(adv7511, 200);
+			if (ret < 0)
+				return ret;
+		}
+
+		/* Get current segment */
+		ret = regmap_read(adv7511->regmap, ADV7511_REG_EDID_SEGMENT,
+				  &(adv7511->current_edid_segment));
+		if (ret < 0)
+			return ret;
+
+		/* If the current segment is not the desired segment move */
+		if (adv7511->current_edid_segment != segment) {
 			adv7511->edid_read = false;
 			regmap_write(adv7511->regmap, ADV7511_REG_EDID_SEGMENT,
-				     block);
+				     segment);
+
 			ret = adv7511_wait_for_edid(adv7511, 200);
 			if (ret < 0)
 				return ret;
@@ -628,7 +650,7 @@ static int adv7511_get_edid_block(void *data, u8 *buf, unsigned int block,
 			offset += 64;
 		}
 
-		adv7511->current_edid_segment = block / 2;
+		adv7511->current_edid_segment = segment;
 	}
 
 	if (block % 2 == 0)
