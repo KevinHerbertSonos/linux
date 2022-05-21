@@ -28,6 +28,10 @@
 #include <linux/suspend.h>
 #include <linux/acpi.h>
 
+#ifdef CONFIG_SONOS
+#include "mdp.h"
+#endif
+
 /* Information for net-next */
 #define NETNEXT_VERSION		"08"
 
@@ -1124,6 +1128,10 @@ static int set_ethernet_addr(struct r8152 *tp)
 		if (ret < 0)
 			ret = pla_ocp_read(tp, PLA_BACKUP, 8, sa.sa_data);
 	}
+
+#ifdef CONFIG_SONOS
+	memcpy(sa.sa_data, sys_mdp.mdp_serial, ETH_ALEN);
+#endif
 
 	if (ret < 0) {
 		netif_err(tp, probe, dev, "Get ether addr fail\n");
