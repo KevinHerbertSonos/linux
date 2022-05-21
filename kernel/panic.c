@@ -25,6 +25,9 @@
 #include <linux/nmi.h>
 #include <linux/console.h>
 #include <linux/bug.h>
+#ifdef CONFIG_AMLOGIC_RAMDUMP
+#include <linux/amlogic/ramdump.h>
+#endif
 
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
@@ -144,6 +147,14 @@ void panic(const char *fmt, ...)
 	 */
 	local_irq_disable();
 
+#ifdef CONFIG_AMLOGIC_DEBUG_FTRACE_PSTORE
+	ramoops_io_en = 0;
+#endif
+#ifdef CONFIG_AMLOGIC_MODIFY
+	trace_printk("panic: tracing_off()\n");
+	tracing_off();
+#endif
+
 	/*
 	 * It's possible to come here directly from a panic-assertion and
 	 * not have preempt disabled. Some functions called from here want
@@ -211,6 +222,9 @@ void panic(const char *fmt, ...)
 	 * add information to the kmsg dump output.
 	 */
 	atomic_notifier_call_chain(&panic_notifier_list, 0, buf);
+#ifdef CONFIG_AMLOGIC_RAMDUMP
+	ramdump_sync_data();
+#endif
 
 	/* Call flush even twice. It tries harder with a single online CPU */
 	printk_nmi_flush_on_panic();

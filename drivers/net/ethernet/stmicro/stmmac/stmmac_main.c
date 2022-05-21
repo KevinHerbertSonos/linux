@@ -54,6 +54,15 @@
 #include <linux/reset.h>
 #include <linux/of_mdio.h>
 #include "dwmac1000.h"
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+#include "stmmac_platform.h"
+#endif
+#ifdef CONFIG_DWMAC_MESON
+#include <phy_debug.h>
+#endif
+
+#include <linux/suspend.h>
+#define PM_SUSPEND_PREPARE      0x0003 /* Going to suspend the system */
 
 #define STMMAC_ALIGN(x)	L1_CACHE_ALIGN(x)
 #define	TSO_MAX_BUFF_SIZE	(SZ_16K - 1)
@@ -121,6 +130,15 @@ static void stmmac_exit_fs(struct net_device *dev);
 
 #define STMMAC_COAL_TIMER(x) (jiffies + usecs_to_jiffies(x))
 
+/*won't be valid unless enable amlogic priv code*/
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+#define TX_MONITOR
+#endif
+
+#ifdef TX_MONITOR
+static struct workqueue_struct *moniter_tx_wq;
+static struct delayed_work moniter_tx_worker;
+#endif
 /**
  * stmmac_verify_args - verify the driver parameters.
  * Description: it checks the driver parameters and set a default in case of
@@ -956,11 +974,13 @@ static void stmmac_clear_descriptors(struct stmmac_priv *priv)
 		if (priv->extend_desc)
 			priv->hw->desc->init_rx_desc(&priv->dma_erx[i].basic,
 						     priv->use_riwt, priv->mode,
-						     (i == DMA_RX_SIZE - 1));
+						     (i == DMA_RX_SIZE - 1),
+						     priv->dma_buf_sz);
 		else
 			priv->hw->desc->init_rx_desc(&priv->dma_rx[i],
 						     priv->use_riwt, priv->mode,
-						     (i == DMA_RX_SIZE - 1));
+						     (i == DMA_RX_SIZE - 1),
+						     priv->dma_buf_sz);
 	for (i = 0; i < DMA_TX_SIZE; i++)
 		if (priv->extend_desc)
 			priv->hw->desc->init_tx_desc(&priv->dma_etx[i].basic,
@@ -1777,6 +1797,26 @@ static int stmmac_hw_setup(struct net_device *dev, bool init_ptp)
 	return 0;
 }
 
+#ifdef TX_MONITOR
+static int suspend_pm_notify(struct notifier_block *nb,
+			     unsigned long mode, void *_unused)
+{
+	switch (mode) {
+	case PM_SUSPEND_PREPARE:
+		cancel_delayed_work_sync(&moniter_tx_worker);
+		flush_scheduled_work();
+		pr_info("receive suspend notify\n");
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
+static struct notifier_block suspend_pm_nb = {
+	.notifier_call = suspend_pm_notify,
+};
+#endif
 /**
  *  stmmac_open - open entry point of the driver
  *  @dev : pointer to the device structure.
@@ -1868,7 +1908,9 @@ static int stmmac_open(struct net_device *dev)
 
 	napi_enable(&priv->napi);
 	netif_start_queue(dev);
-
+#ifdef TX_MONITOR
+	queue_delayed_work(moniter_tx_wq, &moniter_tx_worker, HZ);
+#endif
 	return 0;
 
 lpiirq_error:
@@ -2472,7 +2514,8 @@ static inline void stmmac_rx_refill(struct stmmac_priv *priv)
 		wmb();
 
 		if (unlikely(priv->synopsys_id >= DWMAC_CORE_4_00))
-			priv->hw->desc->init_rx_desc(p, priv->use_riwt, 0, 0);
+			priv->hw->desc->init_rx_desc(p, priv->use_riwt, 0, 0,
+						     priv->dma_buf_sz);
 		else
 			priv->hw->desc->set_rx_owner(p);
 
@@ -2492,8 +2535,7 @@ static inline void stmmac_rx_refill(struct stmmac_priv *priv)
  */
 static int stmmac_rx(struct stmmac_priv *priv, int limit)
 {
-	unsigned int entry = priv->cur_rx;
-	unsigned int next_entry;
+	unsigned int next_entry = priv->cur_rx;
 	unsigned int count = 0;
 	int coe = priv->hw->rx_csum;
 
@@ -2509,9 +2551,11 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit)
 		priv->hw->desc->display_ring(rx_head, DMA_RX_SIZE, true);
 	}
 	while (count < limit) {
-		int status;
+		int entry, status;
 		struct dma_desc *p;
 		struct dma_desc *np;
+
+		entry = next_entry;
 
 		if (priv->extend_desc)
 			p = (struct dma_desc *)(priv->dma_erx + entry);
@@ -2577,7 +2621,7 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit)
 				       priv->dev->name, frame_len,
 				       priv->dma_buf_sz);
 				priv->dev->stats.rx_length_errors++;
-				break;
+				continue;
 			}
 
 			/* ACS is set; GMAC core strips PAD/FCS for IEEE 802.3
@@ -2608,7 +2652,7 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit)
 						dev_warn(priv->device,
 							 "packet dropped\n");
 					priv->dev->stats.rx_dropped++;
-					break;
+					continue;
 				}
 
 				dma_sync_single_for_cpu(priv->device,
@@ -2631,7 +2675,7 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit)
 					pr_err("%s: Inconsistent Rx chain\n",
 					       priv->dev->name);
 					priv->dev->stats.rx_dropped++;
-					break;
+					continue;
 				}
 				prefetch(skb->data - NET_IP_ALIGN);
 				priv->rx_skbuff[entry] = NULL;
@@ -2665,7 +2709,6 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit)
 			priv->dev->stats.rx_packets++;
 			priv->dev->stats.rx_bytes += frame_len;
 		}
-		entry = next_entry;
 	}
 
 	stmmac_rx_refill(priv);
@@ -2707,6 +2750,9 @@ static int stmmac_poll(struct napi_struct *napi, int budget)
  *   netdev structure and arrange for the device to be reset to a sane state
  *   in order to transmit a new packet.
  */
+#ifdef TX_MONITOR
+unsigned int timeout_err;
+#endif
 static void stmmac_tx_timeout(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
@@ -3233,6 +3279,23 @@ static int stmmac_hw_init(struct stmmac_priv *priv)
 	return 0;
 }
 
+#ifdef TX_MONITOR
+struct stmmac_priv *priv_monitor;
+static void moniter_tx_handler(struct work_struct *work)
+{
+	if (priv_monitor) {
+		if (timeout_err) {
+			pr_info("reset eth\n");
+			stmmac_release(priv_monitor->dev);
+			stmmac_open(priv_monitor->dev);
+			timeout_err = 0;
+		}
+	} else {
+		pr_info("device not init yet!\n");
+	}
+//	queue_delayed_work(moniter_tx_wq, &moniter_tx_worker, HZ);
+}
+#endif
 /**
  * stmmac_dvr_probe
  * @device: device pointer
@@ -3251,6 +3314,17 @@ int stmmac_dvr_probe(struct device *device,
 	struct net_device *ndev = NULL;
 	struct stmmac_priv *priv;
 
+#ifdef TX_MONITOR
+	int result = 0;
+	moniter_tx_wq = create_singlethread_workqueue("eth_moniter_tx_wq");
+	INIT_DELAYED_WORK(&moniter_tx_worker, moniter_tx_handler);
+	/*register pm notify callback*/
+	result = register_pm_notifier(&suspend_pm_nb);
+	if (result) {
+		unregister_pm_notifier(&suspend_pm_nb);
+		pr_info("register suspend notifier failed return %d\n", result);
+	}
+#endif
 	ndev = alloc_etherdev(sizeof(struct stmmac_priv));
 	if (!ndev)
 		return -ENOMEM;
@@ -3396,6 +3470,13 @@ int stmmac_dvr_probe(struct device *device,
 		goto error_netdev_register;
 	}
 
+#ifdef CONFIG_DWMAC_MESON
+	ret = gmac_create_sysfs(
+		mdiobus_get_phy(priv->mii, priv->plat->phy_addr), priv->ioaddr);
+#endif
+#ifdef TX_MONITOR
+	priv_monitor = priv;
+#endif
 	return ret;
 
 error_netdev_register:
@@ -3431,6 +3512,10 @@ int stmmac_dvr_remove(struct device *dev)
 
 	priv->hw->dma->stop_rx(priv->ioaddr);
 	priv->hw->dma->stop_tx(priv->ioaddr);
+
+#ifdef CONFIG_DWMAC_MESON
+	gmac_remove_sysfs(priv->phydev);
+#endif
 
 	stmmac_set_mac(priv->ioaddr, false);
 	netif_carrier_off(ndev);
@@ -3473,15 +3558,25 @@ int stmmac_suspend(struct device *dev)
 	netif_device_detach(ndev);
 	netif_stop_queue(ndev);
 
+	/**
+	 *napi_disable call might_sleep,if not irq restore
+	 *It will warning bug
+	 */
+	spin_unlock_irqrestore(&priv->lock, flags);
 	napi_disable(&priv->napi);
+	spin_lock_irqsave(&priv->lock, flags);
 
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+	del_timer_sync(&priv->txtimer);
+#endif
 	/* Stop TX/RX DMA */
 	priv->hw->dma->stop_tx(priv->ioaddr);
 	priv->hw->dma->stop_rx(priv->ioaddr);
 
 	/* Enable Power down mode by programming the PMT regs */
 	if (device_may_wakeup(priv->device)) {
-		priv->hw->mac->pmt(priv->hw, priv->wolopts);
+		//priv->hw->mac->pmt(priv->hw, priv->wolopts);
+		priv->hw->mac->pmt(priv->hw, 0x1 << 5);
 		priv->irq_wake = 1;
 	} else {
 		stmmac_set_mac(priv->ioaddr, false);
@@ -3535,8 +3630,9 @@ int stmmac_resume(struct device *dev)
 			stmmac_mdio_reset(priv->mii);
 	}
 
+#ifndef CONFIG_AMLOGIC_ETH_PRIVE
 	netif_device_attach(ndev);
-
+#endif
 	spin_lock_irqsave(&priv->lock, flags);
 
 	priv->cur_rx = 0;
@@ -3550,10 +3646,18 @@ int stmmac_resume(struct device *dev)
 
 	stmmac_clear_descriptors(priv);
 
+	spin_unlock_irqrestore(&priv->lock, flags);
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+	netdev_reset_queue(priv->dev);
+#endif
 	stmmac_hw_setup(ndev, false);
+	spin_lock_irqsave(&priv->lock, flags);
+
 	stmmac_init_tx_coalesce(priv);
 	stmmac_set_rx_mode(ndev);
-
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+	netif_device_attach(ndev);
+#endif
 	napi_enable(&priv->napi);
 
 	netif_start_queue(ndev);
