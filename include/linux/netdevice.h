@@ -4478,4 +4478,8 @@ do {								\
 #define PTYPE_HASH_SIZE	(16)
 #define PTYPE_HASH_MASK	(PTYPE_HASH_SIZE - 1)
 
+#if defined(CONFIG_SONOS)
+void sonos_announce_linkup(struct net_device *dev);
+#endif
+
 #endif	/* _LINUX_NETDEVICE_H */
