@@ -1,0 +1,8 @@
+config SRFS
+        bool "Sonos Remote File System"
+	default y
+	depends on RPMSG
+        help
+           SREFS provide trident 7ULP with the ability of accessing NOR flash
+	   on M33.
+

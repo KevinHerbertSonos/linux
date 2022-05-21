@@ -1,0 +1,692 @@
+/*
+ * Copyright (c) 2019-2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+#include "sonos_imx7ulp.dtsi"
+#include <dt-bindings/input/input.h>
+
+/ {
+	compatible = "fsl,imx7ulp-evk", "fsl,imx7ulp", "Generic DT based system";
+
+	sonos-platform {
+		/* Sonos platform specific values for shared driver source & binaries */
+		thermal-mgmt {
+			/*
+			 * Dummy fault and warn values are configured for now.
+			 * Temperature from RPMsg is reported as AMP to mesh
+			 * with Sonos Sensor Driver.
+			 */
+			CPU {
+				compatible = "imx7ulp_cpu";
+				fault-temperature = <150>;
+				warn-temperature = <100>;
+			};
+			AMP {
+				compatible = "rpmsg_temp";
+				fault-temperature = <150>;
+				warn-temperature = <100>;
+			};
+		};
+	};
+
+	aliases {
+		i2c0 = &lpi2c5;
+		i2c1 = &rpmsg_i2c0;
+		i2c2 = &rpmsg_i2c1;
+		gpio4 = &rpmsg_gpio0;
+		gpio5 = &rpmsg_gpio1;
+		gpio6 = &gpio_ptb;
+	};
+
+	chosen {
+		stdout-path = &lpuart4;
+	};
+
+	memory {
+		device_type = "memory";
+		reg = <0x60000000 0x08000000>;
+	};
+
+	system_reset: system-reset {
+		compatible = "gpio-reset";
+		reset-gpios = <&gpio_ptc 9 GPIO_ACTIVE_LOW>;
+		reset-delay-us = <1000>;
+		#reset-cells = <0>;
+	};
+
+	regulators {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		reg_usbotg1_pwr: regulator@0 {
+			compatible = "regulator-fixed";
+			reg = <0>;
+			pinctrl-names = "default", "sleep";
+			pinctrl-0 = <&pinctrl_usbotg1_pwr>;
+			pinctrl-1 = <&pinctrl_usbotg1_pwr>;
+			regulator-name = "usb_otg1_vbus";
+			regulator-min-microvolt = <5000000>;
+			regulator-max-microvolt = <5000000>;
+			gpio = <&gpio_ptc 0 GPIO_ACTIVE_HIGH>;
+			enable-active-high;
+		};
+
+		reg_wlan: regulator@1 {
+			compatible = "regulator-fixed";
+			reg = <1>;
+			regulator-name = "wlan";
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3300000>;
+			gpio = <&gpio_pte 13 GPIO_ACTIVE_HIGH>;
+			enable-active-high;
+		};
+	};
+
+	extcon_usb1: extcon_usb1 {
+		compatible = "linux,extcon-usb-gpio";
+		id-gpio = <&gpio_ptc 13 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&pinctrl_usbotg1_id>;
+		pinctrl-1 = <&pinctrl_usbotg1_id>;
+	};
+
+	pf1550-rpmsg {
+		compatible = "fsl,pf1550-rpmsg";
+		sw1_reg: SW1 {
+				regulator-name = "SW1";
+				regulator-min-microvolt = <600000>;
+				regulator-max-microvolt = <1387500>;
+				regulator-boot-on;
+				regulator-always-on;
+		};
+
+		sw2_reg: SW2 {
+				regulator-name = "SW2";
+				regulator-min-microvolt = <600000>;
+				regulator-max-microvolt = <1387500>;
+				regulator-boot-on;
+				regulator-always-on;
+		};
+
+		sw3_reg: SW3 {
+				regulator-name = "SW3";
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-boot-on;
+				regulator-always-on;
+		};
+
+		vref_reg: VREFDDR {
+				regulator-name = "VREFDDR";
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <1200000>;
+				regulator-boot-on;
+				regulator-always-on;
+		};
+
+		vldo1_reg: LDO1 {
+				regulator-name = "LDO1";
+				regulator-min-microvolt = <750000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+		};
+
+		vldo2_reg: LDO2 {
+				regulator-name = "LDO2";
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+		};
+
+		vldo3_reg: LDO3 {
+				regulator-name = "LDO3";
+				regulator-min-microvolt = <750000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+		};
+	};
+
+	rpmsg_i2c0: rpmsg-i2c0 {
+		compatible = "sonos,imx7ulp-rpmsg-i2c";
+		status = "okay";
+	};
+
+	rpmsg_i2c1: rpmsg-i2c1 {
+		compatible = "sonos,imx7ulp-rpmsg-i2c";
+		status = "okay";
+	};
+
+	rpmsg_i2s: rpmsg-i2s {
+		compatible = "fsl,imx7ulp-rpmsg-i2s";
+		/* the audio device index in m4 domain */
+		fsl,audioindex = <0> ;
+		status = "disabled";
+	};
+
+	rpmsg_gpio0: rpmsg-gpio0 {
+		compatible = "fsl,imx-rpmsg-gpio";
+		port_idx = <0>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&rpmsg_gpio0>;
+		status = "disabled";
+	};
+
+	rpmsg_gpio1: rpmsg-gpio1 {
+		compatible = "fsl,imx-rpmsg-gpio";
+		port_idx = <1>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&rpmsg_gpio1>;
+		status = "okay";
+	};
+
+	/* rpmsg_keys: rpmsg-keys {
+		compatible = "fsl,rpmsg-keys";
+
+		volume-up {
+			label = "Volume Up";
+			linux,code = <KEY_VOLUMEUP>;
+		};
+
+		volume-down {
+			label = "Volume Down";
+			linux,code = <KEY_VOLUMEDOWN>;
+		};
+
+		power-on {
+			label = "PowerOn";
+			linux,code = <KEY_POWER>;
+			rpmsg-key,wakeup;
+		};
+	}; */
+
+	/* rpmsg_sensor: rpmsg-sensor {
+		compatible = "fsl,rpmsg-input";
+	}; */
+
+	/* sound-rpmsg {
+		compatible = "fsl,imx-audio-rpmsg";
+		model = "rpmsg-audio";
+		cpu-dai = <&rpmsg_i2s>;
+	}; */
+
+	sonos-bt {
+		compatible = "sonos,bt-rpmsg";
+		status = "okay";
+	};
+
+	sonos-psy {
+		compatible = "sonos,psy";
+		status = "okay";
+	};
+
+	sonos-sndcrd {
+		compatible = "sonos,sndcrdctl";
+		status = "okay";
+	};
+};
+
+&cpu0 {
+	arm-supply= <&sw1_reg>;
+};
+
+&iomuxc1 {
+    pinctrl-names = "default_iomuxc1";
+    pinctrl-0 = <&pinctrl_hog1>;
+
+
+    imx7ulp-custom-board {
+        pinctrl_hog1: hog1grp {                            /*!< Function assigned for the core: Cortex-A7[ca7] */
+/*
+ * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
+pinctrl_hog1:
+- options: {callFromInitBoot: 'false', coreID: ca7}
+- pin_list:
+  - {pin_num: J19, peripheral: DDR, signal: 'ddr_ca, 0', pin_signal: DDR_CA0}
+  - {pin_num: J18, peripheral: DDR, signal: 'ddr_ca, 1', pin_signal: DDR_CA1}
+  - {pin_num: J16, peripheral: DDR, signal: 'ddr_ca, 2', pin_signal: DDR_CA2}
+  - {pin_num: H17, peripheral: DDR, signal: 'ddr_ca, 3', pin_signal: DDR_CA3}
+  - {pin_num: G18, peripheral: DDR, signal: 'ddr_ca, 4', pin_signal: DDR_CA4}
+  - {pin_num: L17, peripheral: DDR, signal: 'ddr_ca, 5', pin_signal: DDR_CA5}
+  - {pin_num: L18, peripheral: DDR, signal: 'ddr_ca, 6', pin_signal: DDR_CA6}
+  - {pin_num: M17, peripheral: DDR, signal: 'ddr_ca, 7', pin_signal: DDR_CA7}
+  - {pin_num: L16, peripheral: DDR, signal: 'ddr_ca, 8', pin_signal: DDR_CA8}
+  - {pin_num: N16, peripheral: DDR, signal: 'ddr_ca, 9', pin_signal: DDR_CA9}
+  - {pin_num: K16, peripheral: DDR, signal: 'ddr_cke, 0', pin_signal: DDR_CKE0}
+  - {pin_num: K19, peripheral: DDR, signal: 'ddr_clk, 0', pin_signal: DDR_CLK0}
+  - {pin_num: L19, peripheral: DDR, signal: 'ddr_clk_b, 0', pin_signal: DDR_CLK0_b}
+  - {pin_num: K18, peripheral: DDR, signal: 'ddr_cs_b, 0', pin_signal: DDR_CS0_B}
+  - {pin_num: D17, peripheral: DDR, signal: 'ddr_dq, 0', pin_signal: DDR_DQ0}
+  - {pin_num: D16, peripheral: DDR, signal: 'ddr_dq, 1', pin_signal: DDR_DQ1}
+  - {pin_num: G16, peripheral: DDR, signal: 'ddr_dq, 2', pin_signal: DDR_DQ2}
+  - {pin_num: F19, peripheral: DDR, signal: 'ddr_dq, 3', pin_signal: DDR_DQ3}
+  - {pin_num: F18, peripheral: DDR, signal: 'ddr_dq, 4', pin_signal: DDR_DQ4}
+  - {pin_num: E17, peripheral: DDR, signal: 'ddr_dq, 5', pin_signal: DDR_DQ5}
+  - {pin_num: G17, peripheral: DDR, signal: 'ddr_dq, 6', pin_signal: DDR_DQ6}
+  - {pin_num: E16, peripheral: DDR, signal: 'ddr_dq, 7', pin_signal: DDR_DQ7}
+  - {pin_num: N18, peripheral: DDR, signal: 'ddr_dq, 8', pin_signal: DDR_DQ8}
+  - {pin_num: M16, peripheral: DDR, signal: 'ddr_dq, 9', pin_signal: DDR_DQ9}
+  - {pin_num: R17, peripheral: DDR, signal: 'ddr_dq, 10', pin_signal: DDR_DQ10}
+  - {pin_num: P18, peripheral: DDR, signal: 'ddr_dq, 11', pin_signal: DDR_DQ11}
+  - {pin_num: P19, peripheral: DDR, signal: 'ddr_dq, 12', pin_signal: DDR_DQ12}
+  - {pin_num: T16, peripheral: DDR, signal: 'ddr_dq, 13', pin_signal: DDR_DQ13}
+  - {pin_num: T17, peripheral: DDR, signal: 'ddr_dq, 14', pin_signal: DDR_DQ14}
+  - {pin_num: R18, peripheral: DDR, signal: 'ddr_dq, 15', pin_signal: DDR_DQ15}
+  - {pin_num: B17, peripheral: DDR, signal: 'ddr_dq, 16', pin_signal: DDR_DQ16}
+  - {pin_num: C16, peripheral: DDR, signal: 'ddr_dq, 17', pin_signal: DDR_DQ17}
+  - {pin_num: C17, peripheral: DDR, signal: 'ddr_dq, 18', pin_signal: DDR_DQ18}
+  - {pin_num: A18, peripheral: DDR, signal: 'ddr_dq, 19', pin_signal: DDR_DQ19}
+  - {pin_num: C18, peripheral: DDR, signal: 'ddr_dq, 20', pin_signal: DDR_DQ20}
+  - {pin_num: F17, peripheral: DDR, signal: 'ddr_dq, 21', pin_signal: DDR_DQ21}
+  - {pin_num: B19, peripheral: DDR, signal: 'ddr_dq, 22', pin_signal: DDR_DQ22}
+  - {pin_num: D18, peripheral: DDR, signal: 'ddr_dq, 23', pin_signal: DDR_DQ23}
+  - {pin_num: V19, peripheral: DDR, signal: 'ddr_dq, 24', pin_signal: DDR_DQ24}
+  - {pin_num: P16, peripheral: DDR, signal: 'ddr_dq, 25', pin_signal: DDR_DQ25}
+  - {pin_num: U18, peripheral: DDR, signal: 'ddr_dq, 26', pin_signal: DDR_DQ26}
+  - {pin_num: W18, peripheral: DDR, signal: 'ddr_dq, 27', pin_signal: DDR_DQ27}
+  - {pin_num: W17, peripheral: DDR, signal: 'ddr_dq, 28', pin_signal: DDR_DQ28}
+  - {pin_num: R16, peripheral: DDR, signal: 'ddr_dq, 29', pin_signal: DDR_DQ29}
+  - {pin_num: U17, peripheral: DDR, signal: 'ddr_dq, 30', pin_signal: DDR_DQ30}
+  - {pin_num: R15, peripheral: DDR, signal: 'ddr_dq, 31', pin_signal: DDR_DQ31}
+  - {pin_num: H18, peripheral: DDR, signal: 'ddr_dqm, 0', pin_signal: DDR_DQM0}
+  - {pin_num: M18, peripheral: DDR, signal: 'ddr_dqm, 1', pin_signal: DDR_DQM1}
+  - {pin_num: E18, peripheral: DDR, signal: 'ddr_dqm, 2', pin_signal: DDR_DQM2}
+  - {pin_num: T18, peripheral: DDR, signal: 'ddr_dqm, 3', pin_signal: DDR_DQM3}
+  - {pin_num: G19, peripheral: DDR, signal: 'ddr_dqs, 0', pin_signal: DDR_DQS0}
+  - {pin_num: N19, peripheral: DDR, signal: 'ddr_dqs, 1', pin_signal: DDR_DQS1}
+  - {pin_num: C19, peripheral: DDR, signal: 'ddr_dqs, 2', pin_signal: DDR_DQS2}
+  - {pin_num: U19, peripheral: DDR, signal: 'ddr_dqs, 3', pin_signal: DDR_DQS3}
+  - {pin_num: H19, peripheral: DDR, signal: 'ddr_dqs_b, 0', pin_signal: DDR_DQS0_b}
+  - {pin_num: M19, peripheral: DDR, signal: 'ddr_dqs_b, 1', pin_signal: DDR_DQS1_b}
+  - {pin_num: D19, peripheral: DDR, signal: 'ddr_dqs_b, 2', pin_signal: DDR_DQS2_b}
+  - {pin_num: T19, peripheral: DDR, signal: 'ddr_dqs_b, 3', pin_signal: DDR_DQS3_b}
+  - {pin_num: N17, peripheral: DDR, signal: ddr_odt, pin_signal: DDR_ODT}
+  - {pin_num: V17, peripheral: DDR, signal: 'ddr_zq, 0', pin_signal: DDR_ZQ0}
+  - {pin_num: B12, peripheral: PTC, signal: 'port, 9', pin_signal: PTC9}
+ * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
+ */
+            fsl,pins = <
+                IMX7ULP_PAD_PTC9__PTC9                     0x00000100
+            >;
+        };
+        pinctrl_sci_swd: sci_swdgrp {                      /*!< Function assigned for the core: Cortex-A7[ca7] */
+/*
+ * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
+pinctrl_sci_swd:
+- options: {callFromInitBoot: 'true', coreID: ca7}
+- pin_list:
+  - {pin_num: C12, peripheral: PTC, signal: 'port, 5', pin_signal: PTC5}
+  - {pin_num: B13, peripheral: PTC, signal: 'port, 6', pin_signal: PTC6}
+ * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
+ */
+            fsl,pins = <
+                IMX7ULP_PAD_PTC5__PTC5                     0x00000100
+                IMX7ULP_PAD_PTC6__PTC6                     0x00000100
+            >;
+        };
+        pinctrl_lpuart4: lpuart4grp {                      /*!< Function assigned for the core: Cortex-A7[ca7] */
+/*
+ * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
+pinctrl_lpuart4:
+- options: {callFromInitBoot: 'true', coreID: ca7}
+- pin_list:
+  - {pin_num: D12, peripheral: LPUART4, signal: lpuart_tx, pin_signal: PTC2}
+  - {pin_num: F12, peripheral: LPUART4, signal: lpuart_rx, pin_signal: PTC3}
+ * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
+ */
+            fsl,pins = <
+                IMX7ULP_PAD_PTC2__LPUART4_TX               0x00000400
+                IMX7ULP_PAD_PTC3__LPUART4_RX               0x00000400
+            >;
+        };
+        pinctrl_lpspi2: lpspi2grp {                        /*!< Function assigned for the core: Cortex-A7[ca7] */
+/*
+ * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
+pinctrl_lpspi2:
+- options: {callFromInitBoot: 'true', coreID: ca7}
+- pin_list:
+  - {pin_num: E5, peripheral: LPSPI2, signal: 'lpspi_pcs, 0', pin_signal: PTF11, DSE: DSE_0_Standard}
+  - {pin_num: D3, peripheral: LPSPI2, signal: lpspi_sck, pin_signal: PTF10, DSE: DSE_0_Standard}
+  - {pin_num: F3, peripheral: LPSPI2, signal: lpspi_sin, pin_signal: PTF8}
+  - {pin_num: C1, peripheral: LPSPI2, signal: lpspi_sout, pin_signal: PTF9, DSE: DSE_0_Standard}
+ * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
+ */
+            fsl,pins = <
+                IMX7ULP_PAD_PTF10__LPSPI2_SCK              0x00000300
+                IMX7ULP_PAD_PTF11__LPSPI2_PCS0             0x00000300
+                IMX7ULP_PAD_PTF8__LPSPI2_SIN               0x00000300
+                IMX7ULP_PAD_PTF9__LPSPI2_SOUT              0x00000300
+            >;
+        };
+        pinctrl_emmc: emmcgrp {                            /*!< Function assigned for the core: Cortex-A7[ca7] */
+/*
+ * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
+pinctrl_emmc:
+- options: {callFromInitBoot: 'true', coreID: ca7}
+- pin_list:
+  - {pin_num: B15, peripheral: SDHC0, signal: sdhc_clk, pin_signal: PTD2, IBE: IBE_1_Enabled, DSE: DSE_1_Hi_Drive, SRE: SRE_0_Standard, PE: PE_1_pull_enabled}
+  - {pin_num: A16, peripheral: SDHC0, signal: sdhc_cmd, pin_signal: PTD1, DSE: DSE_1_Hi_Drive}
+  - {pin_num: D13, peripheral: SDHC0, signal: 'sdhc_d, 0', pin_signal: PTD10, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+  - {pin_num: D14, peripheral: SDHC0, signal: 'sdhc_d, 1', pin_signal: PTD9, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+  - {pin_num: F14, peripheral: SDHC0, signal: 'sdhc_d, 2', pin_signal: PTD8, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+  - {pin_num: C14, peripheral: SDHC0, signal: 'sdhc_d, 3', pin_signal: PTD7, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+  - {pin_num: E13, peripheral: SDHC0, signal: 'sdhc_d, 4', pin_signal: PTD6, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+  - {pin_num: A14, peripheral: SDHC0, signal: 'sdhc_d, 5', pin_signal: PTD5, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+  - {pin_num: B14, peripheral: SDHC0, signal: 'sdhc_d, 6', pin_signal: PTD4, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+  - {pin_num: E14, peripheral: SDHC0, signal: 'sdhc_d, 7', pin_signal: PTD3, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+  - {pin_num: F13, peripheral: SDHC0, signal: sdhc_dqs, pin_signal: PTD11, DSE: DSE_1_Hi_Drive}
+  - {pin_num: A15, peripheral: SDHC0, signal: sdhc_reset_b, pin_signal: PTD0, OBE: OBE_1_Enabled}
+ * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
+ */
+            fsl,pins = <
+                IMX7ULP_PAD_PTD0__SDHC0_RESET_B            0x00020800
+                IMX7ULP_PAD_PTD1__SDHC0_CMD                0x00000840
+                IMX7ULP_PAD_PTD10__SDHC0_D0                0x00000843
+                IMX7ULP_PAD_PTD11__SDHC0_DQS               0x00000840
+                IMX7ULP_PAD_PTD2__SDHC0_CLK                0x00010842
+                IMX7ULP_PAD_PTD3__SDHC0_D7                 0x00000843
+                IMX7ULP_PAD_PTD4__SDHC0_D6                 0x00000843
+                IMX7ULP_PAD_PTD5__SDHC0_D5                 0x00000843
+                IMX7ULP_PAD_PTD6__SDHC0_D4                 0x00000843
+                IMX7ULP_PAD_PTD7__SDHC0_D3                 0x00000843
+                IMX7ULP_PAD_PTD8__SDHC0_D2                 0x00000843
+                IMX7ULP_PAD_PTD9__SDHC0_D1                 0x00000843
+            >;
+        };
+        pinctrl_sdio_wlan: sdio_wlangrp {                  /*!< Function assigned for the core: Cortex-A7[ca7] */
+/*
+ * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
+pinctrl_sdio_wlan:
+- options: {callFromInitBoot: 'true', coreID: ca7}
+- pin_list:
+  - {pin_num: F9, peripheral: SDHC1, signal: sdhc_clk, pin_signal: PTE2, IBE: IBE_1_Enabled, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled}
+  - {pin_num: A7, peripheral: SDHC1, signal: sdhc_cmd, pin_signal: PTE3, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+  - {pin_num: A8, peripheral: SDHC1, signal: 'sdhc_d, 0', pin_signal: PTE1, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+  - {pin_num: C9, peripheral: SDHC1, signal: 'sdhc_d, 1', pin_signal: PTE0, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+  - {pin_num: A6, peripheral: SDHC1, signal: 'sdhc_d, 2', pin_signal: PTE5, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+  - {pin_num: E9, peripheral: SDHC1, signal: 'sdhc_d, 3', pin_signal: PTE4, DSE: DSE_1_Hi_Drive, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+  - {pin_num: B8, peripheral: PTE, signal: 'port, 12', pin_signal: PTE12, OBE: OBE_1_Enabled}
+ * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
+ */
+            fsl,pins = <
+                IMX7ULP_PAD_PTE0__SDHC1_D1                 0x00000843
+                IMX7ULP_PAD_PTE1__SDHC1_D0                 0x00000843
+                IMX7ULP_PAD_PTE12__PTE12                   0x00020100
+                IMX7ULP_PAD_PTE2__SDHC1_CLK                0x00010842
+                IMX7ULP_PAD_PTE3__SDHC1_CMD                0x00000843
+                IMX7ULP_PAD_PTE4__SDHC1_D3                 0x00000843
+                IMX7ULP_PAD_PTE5__SDHC1_D2                 0x00000843
+            >;
+        };
+        pinctrl_wlan_reg: wlan_reggrp {                    /*!< Function assigned for the core: Cortex-A7[ca7] */
+/*
+ * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
+pinctrl_wlan_reg:
+- options: {callFromInitBoot: 'true', coreID: ca7}
+- pin_list:
+  - {pin_num: E8, peripheral: PTE, signal: 'port, 13', pin_signal: PTE13, OBE: OBE_1_Enabled}
+ * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
+ */
+            fsl,pins = <
+                IMX7ULP_PAD_PTE13__PTE13                   0x00020100
+            >;
+        };
+        pinctrl_usbotg1_id: usbotg1_idgrp {                /*!< Function assigned for the core: Cortex-A7[ca7] */
+/*
+ * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
+pinctrl_usbotg1_id:
+- options: {callFromInitBoot: 'true', coreID: ca7}
+- pin_list:
+  - {pin_num: B10, peripheral: PTC, signal: 'port, 12', pin_signal: PTC12, IBE: IBE_1_Enabled, PE: PE_1_pull_enabled, PS: PS_1_pull_up}
+ * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
+ */
+            fsl,pins = <
+                IMX7ULP_PAD_PTC13__PTC13                   0x00010103
+            >;
+        };
+        pinctrl_usbotg1_pwr: usbotg1_pwrgrp {              /*!< Function assigned for the core: Cortex-A7[ca7] */
+/*
+ * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
+pinctrl_usbotg1_pwr:
+- options: {callFromInitBoot: 'true', coreID: ca7}
+- pin_list:
+  - {pin_num: E12, peripheral: PTC, signal: 'port, 0', pin_signal: PTC0, OBE: OBE_1_Enabled}
+ * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
+ */
+            fsl,pins = <
+                IMX7ULP_PAD_PTC0__PTC0                     0x00020100
+            >;
+        };
+        pinctrl_usbotg1_oc: usbotg1_ocgrp {                /*!< Function assigned for the core: Cortex-A7[ca7] */
+/*
+ * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
+pinctrl_usbotg1_oc:
+- options: {callFromInitBoot: 'true', coreID: ca7}
+- pin_list:
+  - {pin_num: D9, peripheral: PTC, signal: 'port, 16', pin_signal: PTC16}
+ * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
+ */
+            fsl,pins = <
+                IMX7ULP_PAD_PTC16__PTC16                   0x00000100
+            >;
+        };
+        pinctrl_usbotg1: usbotg1grp {                      /*!< Function assigned for the core: Cortex-A7[ca7] */
+/*
+ * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
+pinctrl_usbotg1:
+- options: {callFromInitBoot: 'true', coreID: ca7}
+- pin_list:
+  - {pin_num: L1, peripheral: USB0, signal: usb0_dm, pin_signal: USB0_DM}
+  - {pin_num: K1, peripheral: USB0, signal: usb0_dp, pin_signal: USB0_DP}
+  - {pin_num: K4, peripheral: USB0, signal: usb0_vbus_detect, pin_signal: USB0_VBUS_DETECT}
+ * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
+ */
+            fsl,pins = <
+            >;
+        };
+    };
+};
+
+&iomuxc {
+	status = "okay";
+};
+
+&iomuxc {
+	imx7ulp-trident {
+		pinctrl_main_swd: psoc_main_swdgrp {
+			fsl,pins = <
+				IMX7ULP_PAD_PTB8__PTB8                     0x00000100
+				IMX7ULP_PAD_PTB9__PTB9                     0x00000100
+				IMX7ULP_PAD_PTB10__PTB10                   0x00000100
+			>;
+		};
+		pinctrl_bat_swd: psoc_bat_swdgrp {
+			fsl,pins = <
+				IMX7ULP_PAD_PTB1__PTB1                     0x00000104
+				IMX7ULP_PAD_PTB2__PTB2                     0x00000104
+				IMX7ULP_PAD_PTB3__PTB3                     0x00000104
+			>;
+		};
+
+		pinctrl_spi_ctrl: spi_ctrl_reggrp {
+			fsl,pins = <
+				IMX7ULP_PAD_PTB18__PTB18                   0x00010100
+				IMX7ULP_PAD_PTB19__PTB19                   0x00010100
+			>;
+		};
+	};
+};
+
+&lpspi2 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&pinctrl_lpspi2>;
+	pinctrl-1 = <&pinctrl_lpspi2>;
+	status = "okay";
+
+	spirpmsg: spi-rpmsg@0 {
+		reg = <0>;
+		compatible = "sonos,spi-rpmsg";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_spi_ctrl>;
+		spi-max-frequency = <20000000>;
+		buffer-max-size = <512>;
+		spi-cpha;
+		spi-cpol;
+		tx-busy-gpio = <&gpio_ptb 18 GPIO_ACTIVE_LOW>;
+		interrupts = <&gpio_ptb 19 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&lpuart4 { /* console */
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&pinctrl_lpuart4>;
+	pinctrl-1 = <&pinctrl_lpuart4>;
+	status = "okay";
+};
+
+&rpmsg{
+	/*
+	 * 64K for one rpmsg instance
+	 */
+	vdev-nums = <1>;
+	reg = <0x67F00000 0x10000>;
+	status = "okay";
+};
+
+&usbotg1 {
+	vbus-supply = <&reg_usbotg1_pwr>;
+	extcon = <0>, <&extcon_usb1>;
+	srp-disable;
+	hnp-disable;
+	adp-disable;
+	status = "okay";
+};
+
+&usbphy1 {
+	tx-d-cal = <0xc>;
+};
+
+&usdhc0 {
+	pinctrl-names = "default", "state_100mhz", "state_200mhz", "sleep";
+	pinctrl-0 = <&pinctrl_emmc>;
+	pinctrl-1 = <&pinctrl_emmc>;
+	pinctrl-2 = <&pinctrl_emmc>;
+	pinctrl-3 = <&pinctrl_emmc>;
+	/* cd-gpios = <&gpio_ptc 10 GPIO_ACTIVE_LOW>; */
+	/* vmmc-supply = <&reg_vsd_3v3>; */
+	/* vqmmc-supply = <&vldo2_reg>; */
+	status = "okay";
+};
+
+&usdhc1 {
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&pinctrl_sdio_wlan>;
+	pinctrl-1 = <&pinctrl_sdio_wlan>;
+	bus-width = <4>;
+	no-1-8-v;
+	/* vmmc-supply = <&reg_vmmc>; */
+	/* wlan-supply = <&reg_wlan>; */
+	vmmc-supply = <&reg_wlan>;
+	pm-ignore-notify;
+	keep-power-in-suspend;
+	non-removable;
+	status = "okay";
+
+	brcmf: bcrmf@1 {
+		compatible = "brcm,bcm4329-fmac";
+	};
+};
+
+&rpmsg_i2c0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+        sge@0 {  // Sigdetail Gesture Engine
+		compatible = "Sonos,sge-psoc4";
+		pinctrl-names = "mode-swd";
+		pinctrl-0 = <&pinctrl_main_swd>;
+		reg = <0x40>;
+		gpio-addr = <0x4100F040 0x40 0x4 0x8 0x10 0x4 0x8 0x10>;
+		gpio-params = "base-addr", "len", "io-set", "io-clr", "io-din", "scl-set", "scl-clr", "scl-din";
+		scl-bitmask =  <0x00000100>;
+		io-bitmask  =  <0x00000200>;
+		xres-gpio = <&gpio_ptb 10 GPIO_ACTIVE_LOW>;
+		io-gpio   = <&gpio_ptb  9 GPIO_ACTIVE_LOW>;
+		scl-gpio  = <&gpio_ptb  8 GPIO_ACTIVE_LOW>;
+		// irq-gpio PSoC interrupt signal goes to the RT600
+		psoc-flash-verify-disabled;
+		uses-rpmsg;
+		captouch-style-button;
+		finger-threshold = <37>;
+		noise-threshold = <16>;
+		hysteresis = <4>;
+		prox-finger-threshold = <100>;
+		prox-noise-threshold = <40>;
+		prox-hysteresis = <4>;
+		share-swd-uart = <0>;
+		status = "okay";
+
+		psoc-images {
+			image@0 {
+				model-num = <4025>;
+				ident = <0x24>;
+				flash-rows = <256>;
+				flash-row-size = <128>;
+				flash-protection-size = <32>;
+			};
+		};
+	};
+};
+
+&rpmsg_i2c1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	sge@1 {  // Sigdetail Gesture Engine
+		compatible = "Sonos,sge-psoc4";
+		pinctrl-names = "mode-swd";
+		pinctrl-0 = <&pinctrl_bat_swd>;
+		reg = <0x41>;
+		gpio-addr = <0x4100F040 0x40 0x4 0x8 0x10 0x4 0x8 0x10>;
+		gpio-params = "base-addr", "len", "io-set", "io-clr", "io-din", "scl-set", "scl-clr", "scl-din";
+		scl-bitmask =  <0x00000002>;
+		io-bitmask  =  <0x00000004>;
+		xres-gpio = <&gpio_ptb  3 GPIO_ACTIVE_LOW>;
+		io-gpio   = <&gpio_ptb  2 GPIO_ACTIVE_LOW>;
+		scl-gpio  = <&gpio_ptb  1 GPIO_ACTIVE_LOW>;
+		// irq-gpio PSoC interrupt signal goes to the RT600
+		psoc-skip-init-reset;
+		psoc-flash-verify-disabled;
+		uses-rpmsg;
+		program-requires-usbc-power;
+		shared-i2c-swd-pins;
+		captouch-style-touchpad;
+		finger-threshold = <33>;
+		noise-threshold = <9>;
+		hysteresis = <4>;
+		prox-finger-threshold = <100>;
+		prox-noise-threshold = <40>;
+		prox-hysteresis = <4>;
+		share-swd-uart = <0>;
+		status = "okay";
+
+		psoc-images {
+			image@0 {
+				model-num = <4025>;
+				ident = <0x27>;
+				flash-rows = <256>;
+				flash-row-size = <128>;
+				flash-protection-size = <32>;
+			};
+		};
+	};
+};

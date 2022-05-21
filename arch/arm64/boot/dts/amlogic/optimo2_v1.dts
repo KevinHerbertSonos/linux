@@ -1,0 +1,46 @@
+/*
+ * Copyright (c) 2021, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * v0	- Optimo2 p1a
+ * v1	- Optimo2 p1b - board-only build
+ */
+
+/dts-v1/;
+
+#include "optimo_common.dtsi"
+
+/ {
+	model = "Optimo2 V1";
+
+        sonos-product-id = <0x03>;
+
+	dolby_fw {
+		status = "okay";
+	};
+
+	soc {
+		cbus@ffd00000 {
+                        i2c@1f000 {
+				tas5825@2c {
+					status = "okay";
+				};
+				tas5825@2d {
+					status = "okay";
+				};
+				tas5805@2e {
+					status = "okay";
+				};
+				tas5805@2f {
+					status = "okay";
+				};
+			};
+		};
+		aobus@ff800000 {
+			i2c@5000 {
+				/delete-node/ is31fl3195@54 ;
+			};
+		};
+	};
+};

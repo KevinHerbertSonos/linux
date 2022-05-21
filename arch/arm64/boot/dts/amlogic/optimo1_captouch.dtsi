@@ -1,0 +1,14 @@
+/*
+ * Copyright (c) 2022, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * Common definition for the Optimo1 cap-touch tuning
+ *
+ */
+
+&i2c_AO {
+	sge@0 {  // Sigdetail Gesture Engine
+		captouch-o1-settings;
+	};
+};

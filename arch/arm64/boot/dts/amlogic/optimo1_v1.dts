@@ -1,0 +1,50 @@
+/*
+ * Copyright (c) 2021, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * v0	- Optimo1 p1a
+ * v1	- Optimo1 p1b
+ */
+
+/dts-v1/;
+
+#include "optimo_common.dtsi"
+
+/ {
+	model = "Optimo1 V1";
+
+        sonos-product-id = <0x01>;
+
+	sonos-platform {
+                thermal-mgmt {
+			/delete-node/ AMP;
+		};
+	};
+
+	soc {
+		cbus@ffd00000 {
+                        i2c@1f000 {
+				/* Tweeter 2, woofer 2 are not present on O1.  The tweeter
+				   moves from dev-id 3 to dev-id 2.
+				   */
+				tas5825@2c {	// tweeter 1
+					status = "okay";
+				};
+				tas5805@2e {    // tweeter [O2 - 2, left / O1]
+					dev-id = <0x2>;
+					/* If this changes here, it also needs to change in optimo_common.dtsi and optimo1sl.dts, preserving 0x34 0x40! */
+					reg-init3 = < 0x02 0x31 0x28 0x70 0x33 0x17 0x34 0x40 0x53 0x41 0x54 0x04 0x60 0x01 0x61 0x0b 0x03 0x00 >;
+					status = "okay";
+				};
+			};
+		};
+		aobus@ff800000 {
+			i2c@5000 {
+				/delete-node/ is31fl3195@54 ;
+			};
+		};
+	};
+};
+
+#include "optimo1_psoc_workaround.dtsi"

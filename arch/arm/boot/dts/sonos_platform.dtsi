@@ -1,0 +1,60 @@
+/*
+ * Copyright (c) 2019, Sonos, Inc.  All rights reserved.
+ *
+ */
+
+/ {
+	sonos-platform {
+		/* Sonos platform specific values for shared driver source & binaries */
+		sonos-ampctl {
+
+			sonos-ampfaults {
+				num-faults = <0x01>;
+
+				ampfault@0 {
+					fault-flags = <IRQ_TYPE_EDGE_FALLING>;
+					fault-label = "Amp fault";
+				} ;
+			} ;
+
+			sonos-ampctl-signals {
+				num-ctl-signals = <4>;
+				sonos-ampsignal@0 {
+					sig-label = "DACRESET";
+					signal-index = <0>;
+					on-event = <12>;
+					off-event = <13>;
+				} ;
+
+				sonos-ampsignal@1 {
+					sig-label = "POWER";
+					signal-index = <1>;
+					on-req = <0>;
+					off-req = <1>;
+					on-event = <2>;
+					off-event = <3>;
+				} ;
+
+				sonos-ampsignal@2 {
+					sig-label = "MUTE";
+					signal-index = <2>;
+					config = <1>;
+					on-req = <4>;
+					off-req = <5>;
+					on-event = <6>;
+					off-event = <7>;
+				} ;
+
+				sonos-ampsignal@3 {
+					sig-label = "HIPOWER";
+					signal-index = <3>;
+					on-req = <8>;
+					off-req = <9>;
+					on-event = <10>;
+					off-event = <11>;
+				} ;
+			} ;
+		} ;
+	} ;
+} ;
+
