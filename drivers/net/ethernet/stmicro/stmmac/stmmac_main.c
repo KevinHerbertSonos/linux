@@ -4802,7 +4802,12 @@ int stmmac_suspend(struct device *dev)
 	if (!ndev || !netif_running(ndev))
 		return 0;
 
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+	if (!device_may_wakeup(priv->device))
+		phylink_mac_change(priv->phylink, false);
+#else
 	phylink_mac_change(priv->phylink, false);
+#endif
 
 	mutex_lock(&priv->lock);
 
@@ -4823,6 +4828,13 @@ int stmmac_suspend(struct device *dev)
 
 	/* Enable Power down mode by programming the PMT regs */
 	if (device_may_wakeup(priv->device)) {
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+		pr_info("wzh setup wol\n");
+		if (priv->plat->mdns_wkup)
+			stmmac_pmt(priv, priv->hw, 0x120);
+		else
+			stmmac_pmt(priv, priv->hw, 0x1 << 5);
+#else
 		stmmac_pmt(priv, priv->hw, priv->wolopts);
 		priv->irq_wake = 1;
 	} else {
