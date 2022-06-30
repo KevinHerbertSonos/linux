@@ -1142,6 +1142,50 @@ static MESON_GATE(axg_vpu_intr, HHI_GCLK_MPEG2, 25);
 static MESON_GATE(axg_sec_ahb_ahb3_bridge, HHI_GCLK_MPEG2, 26);
 static MESON_GATE(axg_gic, HHI_GCLK_MPEG2, 30);
 static MESON_GATE(axg_mipi_enable, HHI_MIPI_CNTL0, 29);
+static MESON_GATE(axg_clk81_ddr, HHI_GCLK_MPEG0, 0);
+static MESON_GATE(axg_clk81_audio_locker, HHI_GCLK_MPEG0, 2);
+static MESON_GATE(axg_clk81_mipi_dsi_host, HHI_GCLK_MPEG0, 3);
+static MESON_GATE(axg_clk81_isa, HHI_GCLK_MPEG0, 5);
+static MESON_GATE(axg_clk81_pl301, HHI_GCLK_MPEG0, 6);
+static MESON_GATE(axg_clk81_periphs, HHI_GCLK_MPEG0, 7);
+static MESON_GATE(axg_clk81_spicc_0, HHI_GCLK_MPEG0, 8);
+static MESON_GATE(axg_clk81_i2c, HHI_GCLK_MPEG0, 9);
+static MESON_GATE(axg_clk81_rng0, HHI_GCLK_MPEG0, 12);
+static MESON_GATE(axg_clk81_uart0, HHI_GCLK_MPEG0, 13);
+static MESON_GATE(axg_clk81_mipi_dsi_phy, HHI_GCLK_MPEG0, 14);
+static MESON_GATE(axg_clk81_spicc_1, HHI_GCLK_MPEG0, 15);
+static MESON_GATE(axg_clk81_pcie_a, HHI_GCLK_MPEG0, 16);
+static MESON_GATE(axg_clk81_pcie_b, HHI_GCLK_MPEG0, 17);
+static MESON_GATE(axg_clk81_hiu_reg, HHI_GCLK_MPEG0, 19);
+static MESON_GATE(axg_clk81_assist_misc, HHI_GCLK_MPEG0, 23);
+static MESON_GATE(axg_clk81_emmc_b, HHI_GCLK_MPEG0, 25);
+static MESON_GATE(axg_clk81_emmc_c, HHI_GCLK_MPEG0, 26);
+static MESON_GATE(axg_clk81_dma, HHI_GCLK_MPEG0, 27);
+static MESON_GATE(axg_clk81_spi, HHI_GCLK_MPEG0, 30);
+
+static MESON_GATE(axg_clk81_audio, HHI_GCLK_MPEG1, 0);
+static MESON_GATE(axg_clk81_eth_core, HHI_GCLK_MPEG1, 3);
+static MESON_GATE(axg_clk81_uart1, HHI_GCLK_MPEG1, 16);
+static MESON_GATE(axg_clk81_g2d, HHI_GCLK_MPEG1, 20);
+static MESON_GATE(axg_clk81_usb0, HHI_GCLK_MPEG1, 21);
+static MESON_GATE(axg_clk81_usb1, HHI_GCLK_MPEG1, 22);
+static MESON_GATE(axg_clk81_reset, HHI_GCLK_MPEG1, 23);
+static MESON_GATE(axg_clk81_usb_general, HHI_GCLK_MPEG1, 26);
+static MESON_GATE(axg_clk81_ahb_arb0, HHI_GCLK_MPEG1, 29);
+static MESON_GATE(axg_clk81_efuse, HHI_GCLK_MPEG1, 30);
+static MESON_GATE(axg_clk81_boot_rom, HHI_GCLK_MPEG1, 31);
+
+static MESON_GATE(axg_clk81_ahb_data_bus, HHI_GCLK_MPEG2, 1);
+static MESON_GATE(axg_clk81_ahb_ctrl_bus, HHI_GCLK_MPEG2, 2);
+static MESON_GATE(axg_clk81_usb1_to_ddr, HHI_GCLK_MPEG2, 8);
+static MESON_GATE(axg_clk81_usb0_to_ddr, HHI_GCLK_MPEG2, 9);
+static MESON_GATE(axg_clk81_mmc_pclk, HHI_GCLK_MPEG2, 11);
+static MESON_GATE(axg_clk81_vpu_intr, HHI_GCLK_MPEG2, 25);
+static MESON_GATE(axg_clk81_sec_ahb_ahb3_bridge, HHI_GCLK_MPEG2, 26);
+static MESON_GATE(axg_clk81_gic, HHI_GCLK_MPEG2, 30);
+static MESON_GATE(axg_clk81_mipi_enable, HHI_MIPI_CNTL0, 29);
+static MESON_GATE(axg_clk81_mipi_bandgap, HHI_MIPI_CNTL0, 26);
+>>>>>>> 73f91eb6b3e99... pcie: axg add pcie support [1/1]
 
 /* Always On (AO) domain gates */
 
@@ -1209,6 +1253,47 @@ static struct clk_hw_onecell_data axg_hw_onecell_data = {
 		[CLKID_VPU_INTR]		= &axg_vpu_intr.hw,
 		[CLKID_SEC_AHB_AHB3_BRIDGE]	= &axg_sec_ahb_ahb3_bridge.hw,
 		[CLKID_GIC]			= &axg_gic.hw,
+		[CLKID_CLK81_DDR]		= &axg_clk81_ddr.hw,
+		[CLKID_CLK81_AUDIO_LOCKER]	= &axg_clk81_audio_locker.hw,
+		[CLKID_CLK81_MIPI_DSI_HOST]	= &axg_clk81_mipi_dsi_host.hw,
+		[CLKID_CLK81_ISA]		= &axg_clk81_isa.hw,
+		[CLKID_CLK81_PL301]		= &axg_clk81_pl301.hw,
+		[CLKID_CLK81_PERIPHS]		= &axg_clk81_periphs.hw,
+		[CLKID_CLK81_SPICC0]		= &axg_clk81_spicc_0.hw,
+		[CLKID_CLK81_I2C]		= &axg_clk81_i2c.hw,
+		[CLKID_CLK81_RNG0]		= &axg_clk81_rng0.hw,
+		[CLKID_CLK81_UART0]		= &axg_clk81_uart0.hw,
+		[CLKID_CLK81_MIPI_DSI_PHY]	= &axg_clk81_mipi_dsi_phy.hw,
+		[CLKID_CLK81_SPICC1]		= &axg_clk81_spicc_1.hw,
+		[CLKID_CLK81_PCIE_A]		= &axg_clk81_pcie_a.hw,
+		[CLKID_CLK81_PCIE_B]		= &axg_clk81_pcie_b.hw,
+		[CLKID_CLK81_HIU_IFACE]		= &axg_clk81_hiu_reg.hw,
+		[CLKID_CLK81_ASSIST_MISC]	= &axg_clk81_assist_misc.hw,
+		[CLKID_CLK81_SD_EMMC_B]		= &axg_clk81_emmc_b.hw,
+		[CLKID_CLK81_SD_EMMC_C]		= &axg_clk81_emmc_c.hw,
+		[CLKID_CLK81_DMA]		= &axg_clk81_dma.hw,
+		[CLKID_CLK81_SPI]		= &axg_clk81_spi.hw,
+		[CLKID_CLK81_AUDIO]		= &axg_clk81_audio.hw,
+		[CLKID_CLK81_ETH]		= &axg_clk81_eth_core.hw,
+		[CLKID_CLK81_UART1]		= &axg_clk81_uart1.hw,
+		[CLKID_CLK81_G2D]		= &axg_clk81_g2d.hw,
+		[CLKID_CLK81_USB0]		= &axg_clk81_usb0.hw,
+		[CLKID_CLK81_USB1]		= &axg_clk81_usb1.hw,
+		[CLKID_CLK81_RESET]		= &axg_clk81_reset.hw,
+		[CLKID_CLK81_USB]		= &axg_clk81_usb_general.hw,
+		[CLKID_CLK81_AHB_ARB0]		= &axg_clk81_ahb_arb0.hw,
+		[CLKID_CLK81_EFUSE]		= &axg_clk81_efuse.hw,
+		[CLKID_CLK81_BOOT_ROM]		= &axg_clk81_boot_rom.hw,
+		[CLKID_CLK81_AHB_DATA_BUS]	= &axg_clk81_ahb_data_bus.hw,
+		[CLKID_CLK81_AHB_CTRL_BUS]	= &axg_clk81_ahb_ctrl_bus.hw,
+		[CLKID_CLK81_USB1_DDR_BRIDGE]	= &axg_clk81_usb1_to_ddr.hw,
+		[CLKID_CLK81_USB0_DDR_BRIDGE]	= &axg_clk81_usb0_to_ddr.hw,
+		[CLKID_CLK81_MMC_PCLK]		= &axg_clk81_mmc_pclk.hw,
+		[CLKID_CLK81_VPU_INTR]		= &axg_clk81_vpu_intr.hw,
+		[CLKID_CLK81_SEC_AHB_AHB3_BRIDGE]	= &axg_clk81_sec_ahb_ahb3_bridge.hw,
+		[CLKID_CLK81_GIC]		= &axg_clk81_gic.hw,
+		[CLKID_CLK81_MIPI_ENABLE]	= &axg_clk81_mipi_enable.hw,
+		[CLKID_CLK81_MIPI_BANDGAP]	= &axg_clk81_mipi_bandgap.hw,
 		[CLKID_AO_MEDIA_CPU]		= &axg_ao_media_cpu.hw,
 		[CLKID_AO_AHB_SRAM]		= &axg_ao_ahb_sram.hw,
 		[CLKID_AO_AHB_BUS]		= &axg_ao_ahb_bus.hw,
@@ -1293,6 +1378,47 @@ static struct clk_regmap *const axg_clk_regmaps[] = {
 	&axg_vpu_intr,
 	&axg_sec_ahb_ahb3_bridge,
 	&axg_gic,
+	&axg_clk81_ddr,
+	&axg_clk81_audio_locker,
+	&axg_clk81_mipi_dsi_host,
+	&axg_clk81_isa,
+	&axg_clk81_pl301,
+	&axg_clk81_periphs,
+	&axg_clk81_spicc_0,
+	&axg_clk81_i2c,
+	&axg_clk81_rng0,
+	&axg_clk81_uart0,
+	&axg_clk81_mipi_dsi_phy,
+	&axg_clk81_spicc_1,
+	&axg_clk81_pcie_a,
+	&axg_clk81_pcie_b,
+	&axg_clk81_hiu_reg,
+	&axg_clk81_assist_misc,
+	&axg_clk81_emmc_b,
+	&axg_clk81_emmc_c,
+	&axg_clk81_dma,
+	&axg_clk81_spi,
+	&axg_clk81_audio,
+	&axg_clk81_eth_core,
+	&axg_clk81_uart1,
+	&axg_clk81_g2d,
+	&axg_clk81_usb0,
+	&axg_clk81_usb1,
+	&axg_clk81_reset,
+	&axg_clk81_usb_general,
+	&axg_clk81_ahb_arb0,
+	&axg_clk81_efuse,
+	&axg_clk81_boot_rom,
+	&axg_clk81_ahb_data_bus,
+	&axg_clk81_ahb_ctrl_bus,
+	&axg_clk81_usb1_to_ddr,
+	&axg_clk81_usb0_to_ddr,
+	&axg_clk81_mmc_pclk,
+	&axg_clk81_vpu_intr,
+	&axg_clk81_sec_ahb_ahb3_bridge,
+	&axg_clk81_gic,
+	&axg_clk81_mipi_enable,
+	&axg_clk81_mipi_bandgap,
 	&axg_ao_media_cpu,
 	&axg_ao_ahb_sram,
 	&axg_ao_ahb_bus,
