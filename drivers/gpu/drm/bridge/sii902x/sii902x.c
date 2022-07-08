@@ -294,12 +294,12 @@ void sii9022_cec_handler(void)
 	/*add by mtk*/
 	if (cecStatus.txState == SI_TX_SENDACKED) {
 		cec_transmit_done(cec->adap, CEC_TX_STATUS_OK, 0, 0, 0, 0);
-		pr_info("cec tx msg send ok\n");
+		pr_debug("cec tx msg send ok\n");
 	}
-#if 0
+#if 1
 	if (cecStatus.txState == SI_TX_SENDFAILED) {
 		cec_transmit_done(cec->adap, CEC_TX_STATUS_NACK, 0, 0, 0, 1);
-		pr_info("cec tx msg nack\n");
+		pr_debug("cec tx msg nack\n");
 	}
 #endif
 	/* Now look to see if any CEC commands were received.   */
@@ -312,7 +312,7 @@ void sii9022_cec_handler(void)
 		frameCount = ((SiIRegioRead(REG_CEC_RX_COUNT) & 0xF0) >> 4);
  
 		while (frameCount) {
-			pr_info("\n%d frames in Rx Fifo\n", (int)frameCount);
+			pr_debug("\n%d frames in Rx Fifo\n", (int)frameCount);
 
 			if (SI_CpiRead(&cecFrame)) {
 				pr_info("Error in Rx Fsi_CecRxMsgHandlerifo\n");
@@ -323,17 +323,17 @@ void sii9022_cec_handler(void)
 				int i;
 				struct cec_adapter *new_adap;
 
-				pr_info("cec msg recevied\n");
-				pr_info("src dest addr:0x%x\n",
+				pr_debug("cec msg received\n");
+				pr_debug("src dest addr:0x%x\n",
 					cecFrame.srcDestAddr);
-				pr_info("opcode:0x%x\n", cecFrame.opcode);
-				pr_info("oprand count:0x%x\n",
+				pr_debug("opcode:0x%x\n", cecFrame.opcode);
+				pr_debug("oprand count:0x%x\n",
 					cecFrame.argCount);
 				for (i = 0; i < cecFrame.argCount; i++)
-					pr_info(
+					pr_debug(
 					"oprand[%d]:0x%x\n",
 					i, cecFrame.args[i]);
-				pr_info(
+				pr_debug(
 					"cec msg end\n");
 
 				receive_msg.len = cecFrame.argCount + 2;
@@ -862,6 +862,7 @@ static const struct regmap_access_table sii902x_volatile_table = {
 static const struct regmap_config sii902x_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
+	.max_register = 0xff,
 	.volatile_table = &sii902x_volatile_table,
 	.cache_type = REGCACHE_NONE,
 };
@@ -878,6 +879,7 @@ static const struct regmap_access_table sii902x_cec_volatile_table = {
 static const struct regmap_config sii902x_cec_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
+	.max_register = 0xff,
 	.volatile_table = &sii902x_cec_volatile_table,
 	.cache_type = REGCACHE_NONE,
 };
@@ -909,7 +911,7 @@ static int sii9022_cec_adap_enable(struct cec_adapter *adap, bool enable)
 	return 0;
 }
 
-static void sii9022_print_cec_frame(struct cec_msg *frame)
+static void __maybe_unused sii9022_print_cec_frame(struct cec_msg *frame)
 {
 	struct cec_msg *msg = frame;
 	unsigned char header = msg->msg[0];
@@ -922,7 +924,7 @@ static void sii9022_print_cec_frame(struct cec_msg *frame)
 
 static int sii9022_cec_adap_log_addr(struct cec_adapter *adap, u8 logical_addr)
 {
-	pr_info("cec message opcode is\n");
+	pr_debug("cec message opcode is\n");
 
 	SiIRegioWrite(CEC_OP_ABORT_31, CLEAR_BITS);
 	if (!SI_CpiSetLogicalAddr(logical_addr))
@@ -935,13 +937,13 @@ static int sii9022_cec_adap_transmit(struct cec_adapter *adap, u8 attempts,
 {
 	struct SI_CpiData_t cecFrame;
 
-	sii9022_print_cec_frame(msg);
+	//~ sii9022_print_cec_frame(msg);
 
 	if (msg->len == 1) {
-		pr_info("cec msg header only\n");
+		pr_debug("cec msg header only\n");
 		SI_CpiSendPing(msg->msg[0] & 0xf);//send polling msg
 	} else if (msg->len == 2) {
-		pr_info("cec msg header + opcode\n");
+		pr_debug("cec msg header + opcode\n");
 		cecFrame.srcDestAddr   = msg->msg[0];
 	    cecFrame.opcode        = msg->msg[1];
 	    cecFrame.argCount      = 0;
@@ -960,19 +962,10 @@ static int sii9022_cec_adap_transmit(struct cec_adapter *adap, u8 attempts,
 	return 0;
 }
 
-static int sii9022_cec_received(struct cec_adapter *adap, struct cec_msg *msg)
-{
-	pr_info("%s, %d", __func__, __LINE__);
-	//dump_stack();
-	return -ENOMSG;
-}
-
-
 static const struct cec_adap_ops sii9022_hdmi_cec_adap_ops = {
 	.adap_enable = sii9022_cec_adap_enable,
 	.adap_log_addr = sii9022_cec_adap_log_addr,
 	.adap_transmit = sii9022_cec_adap_transmit,
-	.received = sii9022_cec_received,
 };
 
 static int sii902x_probe(struct i2c_client *client,
@@ -1078,7 +1071,7 @@ static int sii902x_probe(struct i2c_client *client,
 		cec->adap = cec_allocate_adapter(&sii9022_hdmi_cec_adap_ops,
 					cec, "sii-hdmi-cec",
 					CEC_CAP_TRANSMIT | CEC_CAP_PASSTHROUGH |
-					CEC_CAP_LOG_ADDRS, 1);
+					CEC_CAP_LOG_ADDRS | CEC_CAP_PHYS_ADDR, 1);
 
 		ret = PTR_ERR_OR_ZERO(cec->adap);
 		if (ret < 0) {

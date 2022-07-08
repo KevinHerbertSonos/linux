@@ -253,8 +253,8 @@ enum EDID_ErrorCodes {
 // Debug Definitions
 //--------------------------------------------------------------------
 // Compile debug prints inline or not
-#define CONF__TPI_TRACE_PRINT		(ENABLE)
-#define CONF__TPI_DEBUG_PRINT	(ENABLE)
+#define CONF__TPI_TRACE_PRINT		(DISABLE)
+#define CONF__TPI_DEBUG_PRINT	(DISABLE)
 #define CONF__TPI_EDID_PRINT		(DISABLE)
 #define CONF__CPI_DEBUG_PRINT	(DISABLE)
 
