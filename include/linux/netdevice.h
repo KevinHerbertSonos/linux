@@ -149,6 +149,11 @@ static inline bool dev_xmit_complete(int rc)
 #define MAX_HEADER (LL_MAX_HEADER + 48)
 #endif
 
+/* Moved definition of struct net_device_stats to
+ * uapi/linux/netdevice.h so that it can be accessed
+ * from userspace. Only when we're building for Sonos.
+ */
+#ifndef __SONOS_LINUX__
 /*
  *	Old network device statistics. Fields are native words
  *	(unsigned long) so they can be read and written atomically.
@@ -179,7 +184,7 @@ struct net_device_stats {
 	unsigned long	rx_compressed;
 	unsigned long	tx_compressed;
 };
-
+#endif /* __SONOS_LINUX__ */
 
 #include <linux/cache.h>
 #include <linux/skbuff.h>

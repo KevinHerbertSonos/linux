@@ -520,6 +520,19 @@ static struct rtnl_link_stats64 *mtk_get_stats64(struct net_device *dev,
 		storage->tx_aborted_errors = hw_stats->tx_skip;
 	} while (u64_stats_fetch_retry_irq(&hw_stats->syncp, start));
 
+#ifdef CONFIG_SONOS
+	dev->stats.rx_packets = storage->rx_packets;
+	dev->stats.tx_packets = storage->tx_packets;
+	dev->stats.rx_bytes = storage->rx_bytes;
+	dev->stats.tx_bytes = storage->tx_bytes;
+	dev->stats.collisions = storage->collisions;
+	dev->stats.rx_length_errors = storage->rx_length_errors;
+	dev->stats.rx_over_errors = storage->rx_over_errors;
+	dev->stats.rx_crc_errors = storage->rx_crc_errors;
+	dev->stats.rx_errors = storage->rx_errors;
+	dev->stats.tx_aborted_errors = storage->tx_aborted_errors;
+#endif
+
 	storage->tx_errors = dev->stats.tx_errors;
 	storage->rx_dropped = dev->stats.rx_dropped;
 	storage->tx_dropped = dev->stats.tx_dropped;

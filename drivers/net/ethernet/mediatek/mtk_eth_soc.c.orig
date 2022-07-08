@@ -1558,6 +1558,10 @@ static int mtk_open(struct net_device *dev)
 	struct mtk_eth *eth = mac->hw;
 	int err;
 
+#ifdef CONFIG_SONOS
+	clear_bit(__LINK_STATE_START, &dev->state);
+#endif
+
 	/* we run 2 netdevs on the same dma ring so we only bring it up once */
 	if (!atomic_read(&eth->dma_refcnt)) {
 		mtk_hw_init(eth);
@@ -1581,6 +1585,10 @@ static int mtk_open(struct net_device *dev)
 	atomic_inc(&eth->dma_refcnt);
 	phy_start(mac->phy_dev);
 	netif_start_queue(dev);
+
+#ifdef CONFIG_SONOS
+	set_bit(__LINK_STATE_START, &dev->state);
+#endif
 
 	return 0;
 
