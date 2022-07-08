@@ -28,6 +28,7 @@
 #include "mt8518-afe-utils.h"
 #include "mt8518-reg.h"
 #include "mt8518-afe-debug.h"
+#include "mt8518-afe-procfs.h"
 #include "mt8518-afe-controls.h"
 #include "../common/mtk-base-afe.h"
 #include "../common/mtk-afe-platform-driver.h"
@@ -9815,6 +9816,8 @@ static int spdif_in_detect_irq_handler(int irq, void *dev_id)
 		__func__, int_ext2, debug1, debug2, debug3, err);
 
 	if (err != 0) {
+		mt8518_afe_spdifin_errors_track(afe, err);
+
 		spdif_in_reset_and_clear_error(afe,
 			get_spdif_in_clear_bits(err));
 
@@ -10164,6 +10167,8 @@ static irqreturn_t mt8518_afe_irq_handler(int irq, void *dev_id)
 		if (!(val & irq_status_bits))
 			continue;
 
+		mt8518_afe_irqs_track(afe, irq_data->id);
+
 		if (irq_data->irq_clr_reg == ASYS_IRQ_CLR)
 			asys_irq_clr_bits |= irq_clr_bits;
 		else
@@ -10186,6 +10191,8 @@ static irqreturn_t mt8518_afe_irq_handler(int irq, void *dev_id)
 
 		if (!(val & irq_status_bits))
 			continue;
+
+		mt8518_afe_irqs_track(afe, irq_data->id);
 
 		if (irq_data->irq_clr_reg == ASYS_IRQ_CLR)
 			asys_irq_clr_bits |= irq_clr_bits;
@@ -11509,6 +11516,7 @@ static int mt8518_afe_pcm_dev_probe(struct platform_device *pdev)
 	mt8518_afe_init_registers(afe);
 
 	mt8518_afe_init_debugfs(afe);
+	mt8518_afe_init_procfs(afe);
 
 	dev_info(dev, "MT8518 AFE driver initialized.\n");
 	return 0;
@@ -11527,6 +11535,7 @@ static int mt8518_afe_pcm_dev_remove(struct platform_device *pdev)
 	struct mtk_base_afe *afe = platform_get_drvdata(pdev);
 	struct device *dev = &pdev->dev;
 
+	mt8518_afe_cleanup_procfs(afe);
 	mt8518_afe_cleanup_debugfs(afe);
 	if (!pm_runtime_status_suspended(dev))
 		mt8518_afe_runtime_suspend(dev);
