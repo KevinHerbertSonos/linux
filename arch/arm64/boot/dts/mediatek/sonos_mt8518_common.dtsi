@@ -1,0 +1,1036 @@
+/*
+ * Copyright (c) 2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+#include <dt-bindings/gpio/gpio.h>
+#include "mt8518b.dtsi"
+
+/ {
+	compatible = "mediatek,mt8518bp1", "mediatek,mt8518";
+
+	aliases {
+		serial0 = &uart0;
+		serial1 = &uart1;
+		i2c0 = &i2c0;
+		i2c1 = &i2c1;
+		i2c2 = &i2c2;
+		i2c3 = &i2c3;
+	};
+
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0 0x40000000 0 0x40000000>;
+	};
+
+	chosen {
+	};
+
+	mmc_clk: dummy12m0 {
+		compatible = "fixed-clock";
+		clock-frequency = <12000000>;
+		#clock-cells = <0>;
+	};
+
+	mmc_fixed_3v3: fixedregulator-0 {
+		compatible = "regulator-fixed";
+		regulator-name = "mmc_power";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		enable-active-high;
+		regulator-always-on;
+	};
+
+	mmc_fixed_1v8_io: fixedregulator1 {
+		compatible = "regulator-fixed";
+		regulator-name = "mmc_io";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		enable-active-high;
+		regulator-always-on;
+	};
+
+	sdio_fixed_3v3: fixedregulator2 {
+			compatible = "regulator-fixed";
+			regulator-name = "sdio_power";
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3300000>;
+			enable-active-high;
+			regulator-always-on;
+	};
+
+	sdio_fixed_1v8_io: fixedregulator3 {
+			compatible = "regulator-fixed";
+			regulator-name = "sdio_io";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			gpio = <&pio 55 0>;
+			enable-active-high;
+	};
+
+	tas5720_fixed_22v: fixedregulator4 {
+		compatible = "regulator-fixed";
+		regulator-name = "tas5720_pvdd";
+		regulator-min-microvolt = <22000000>;
+		regulator-max-microvolt = <22000000>;
+		enable-active-high;
+		regulator-always-on;
+	};
+
+	tas5720_fixed_3v3: fixedregulator5 {
+		compatible = "regulator-fixed";
+		regulator-name = "tas5720_dvdd";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		enable-active-high;
+		regulator-always-on;
+	};
+
+	vcore_pwm_clock: pwm_regulator_clock {
+		compatible = "mediatek, pwm-regulator-clock";
+		clocks = <&topckgen CLK_TOP_PWM_INFRA>,
+			 <&topckgen CLK_TOP_PWM>,
+			 <&topckgen CLK_TOP_PWM_B>,
+			 <&topckgen CLK_TOP_PWM1_FB>;
+		clock-names = "pwm_infra",
+			"pwm_top",
+			"pwm",
+			"pwm0";
+	};
+
+	reserved-memory {
+ 		ramoops@0x54410000 {
+ 			compatible = "ramoops";
+ 			reg = <0x0 0x54410000 0x0 0x000e0000>;
+ 			record-size = <0x8000>;
+ 			console-size = <0x10000>;
+ 			ftrace-size = <0x2000>;
+ 			pmsg-size = <0x4000>;
+ 		};
+		mtee-reserved-memory@7fd00000 {
+			compatible = "mediatek,mt8518-mtee-reserved-memory";
+			no-map;
+			reg = <0 0x7FD00000 0 0x300000>;
+		};
+	};
+
+	sonos_dummy_codec_dac: dac_dummy_codec {
+		#sound-dai-cells = <0>;
+		compatible = "Sonos,dummy-codec";
+		stream-name = "0-dac";
+		rate = <44100>; /* We use 44.1 KHz as the audio output rate */
+		format = "S32_LE"; /* We use signed 24-bit little endian samples in a 32-bit word */
+		channels = <8>; /* Number of playback channels on Bravo is 5 */
+		status = "okay";
+	};
+
+	sonos_dummy_codec_spdif: spdif_dummy_codec {
+		#sound-dai-cells = <0>;
+		compatible = "Sonos,dummy-codec";
+		stream-name = "1-spdif-tx";
+		rate = <44100>; /* We use 44.1 KHz as the audio output rate */
+		format = "S32_LE"; /* SPDIF tx uses 16-bit samples in a 32-bit word */
+		channels = <2>;
+		status = "okay";
+	};
+
+	sonos_dummy_codec_pdm: pdm_dummy_codec {
+		#sound-dai-cells = <0>;
+		compatible = "Sonos,dummy-codec";
+		stream-name = "pdm-mic";
+		rate = <16000>; /* We use 16 KHz as the audio input rate. */
+		format = "S32_LE"; /* We use signed 24-bit little endian samples in 32-bit words */
+		channels = <4>; /* Bravo has 4 microphones */
+		capture; /* Set the stream direction to capture. Note: Default without this boolean flag is playback */
+		status = "okay";
+	};
+
+	spdif_rx_codec: dummy{
+		#sound-dai-cells = <0>;
+		compatible = "linux,spdif-dir";
+		status = "okay";
+	};
+
+	sound: sound {
+		compatible = "mediatek,mt8518-evb";
+		mediatek,platform = <&afe>;
+		//mediatek,etdm2-out-audio-codec-num = <1>;
+		//mediatek,etdm2-out-audio-codec0 = <&tas5720a>;
+		//mediatek,etdm2-out-audio-codec1 = <&tas5720b>;
+		//mediatek,etdm2-out-audio-codec2 = <&tas5720c>;
+		//mediatek,etdm2-out-audio-codec3 = <&tas5720d>;
+		//mediatek,etdm2-out-audio-codec4 = <&tas5720e>;
+		//mediatek,etdm2-out-audio-codec0-prefix = "TAS5720@6c";
+		//mediatek,etdm2-out-audio-codec1-prefix = "TAS5720@6d";
+		//mediatek,etdm2-out-audio-codec2-prefix = "TAS5720@6e";
+		//mediatek,etdm2-out-audio-codec3-prefix = "TAS5720@6f";
+		//mediatek,etdm2-out-audio-codec4-prefix = "TAS5720@70";
+		// Sonos dummy codec links
+		mediatek,etdm2-out-audio-codec = <&sonos_dummy_codec_dac>;
+		mediatek,etdm2-out-codec-dai-name = "0-dac";
+		//mediatek,etdm2-out-codec-dai-name1 = "tas5720-amplifier";
+		//mediatek,etdm2-out-codec-dai-name2 = "tas5720-amplifier";
+		//mediatek,etdm2-out-codec-dai-name3 = "tas5720-amplifier";
+		//mediatek,etdm2-out-codec-dai-name4 = "tas5720-amplifier";
+		mediatek,etdm2-out-fix-bit-width = <32>;
+		mediatek,spdif-out-audio-codec = <&sonos_dummy_codec_spdif>;
+		mediatek,spdif-out-codec-dai-name = "1-spdif-tx";
+
+		mediatek,multi-in-fix-bit-width = <32>;
+		mediatek,multi-in-audio-codec = <&sii9437_codec>;
+		mediatek,multi-in-codec-dai-name = "sii9437-eARC";
+		mediatek,spdif-in-audio-codec = <&spdif_rx_codec>;
+		mediatek,spdif-in-codec-dai-name = "dir-hifi";
+		mediatek,dmic-audio-codec = <&sonos_dummy_codec_pdm>;
+		mediatek,dmic-codec-dai-name = "pdm-mic";
+		mediatek,dmic-fix-rate = <16000>;
+
+		pinctrl-names = "default", "extamp_on", "extamp_off";
+		pinctrl-0 = <&aud_pins_default>;
+		pinctrl-1 = <&aud_pins_extamp_on>;
+		pinctrl-2 = <&aud_pins_extamp_off>;
+		status = "okay";
+	};
+
+	thermal_zones: thermal-zones {
+		ampthermal: ampthermal {
+			polling-delay-passive = <1000>;
+			polling-delay = <1000>;
+			/* sensor ID */
+			thermal-sensors = <&amptempsensor 0>;
+		};
+		cputhermal: cputhermal {
+			polling-delay-passive = <1000>;
+			polling-delay = <1000>;
+			/* sensor ID */
+			thermal-sensors = <&cputempsensor 0>;
+		};
+	};
+
+	sonos_rollback:sonos-rollback@10007000 {
+		compatible = "sonos,sonos-rollback";
+		reg = <0x0 0x10007000 0x0 0x100>;
+		offset = <0x24>;
+		shift = <3>;
+	};
+
+	psmon {
+		compatible = "sonos,psmon";
+		psmon-gpio = <&pio 57 0>;
+		trigger-edge = <IRQ_TYPE_EDGE_RISING>;
+		amp-hiz-shutdown-gpio = <&pio 62 GPIO_ACTIVE_LOW>;
+		2g-shutdown-gpio = <&pio 114 GPIO_ACTIVE_LOW>;
+		5g-shutdown-gpio = <&pio 115 GPIO_ACTIVE_LOW>;
+		shutdown-phy = <&pio 91 GPIO_ACTIVE_LOW>;
+		shutdown-earc = <&pio 78 GPIO_ACTIVE_LOW>;
+		shutdown-led = <&pio 80 GPIO_ACTIVE_LOW>;
+		shutdown-psoc = <&pio 89 GPIO_ACTIVE_LOW>;
+		shutdown-mipi = <&pio 90 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&afe {
+	mediatek,dmic-iir-on;
+	mediatek,etdm-clock-modes = <0 0>;
+	mediatek,etdm-out-data-modes = <1 1>;
+	mediatek,etdm-in-data-modes = <0 1>;
+	mediatek,spdif-in-opt-mux = <0>;
+	mediatek,spdif-in-arc-mux = <2>;
+	mediatek,ul-agent-burst-conf-disable;
+	mediatek,ul9-pbuf-req-min-len = <0>;
+	mediatek,ul1-pbuf-req-min-len = <0>;
+	status = "okay";
+};
+
+&audio_asrc {
+	status = "okay";
+};
+
+&auxadc {
+	status = "okay";
+};
+
+&bch {
+	status = "okay";
+};
+
+&cpu0 {
+	proc-supply = <&mt6395_vproc>;
+};
+
+&cpu1 {
+	proc-supply = <&mt6395_vproc>;
+};
+
+&cpu2 {
+	proc-supply = <&mt6395_vproc>;
+};
+
+&cpu3 {
+	proc-supply = <&mt6395_vproc>;
+};
+
+&dpi0 {
+	status = "okay";
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&dpi_pin_mode>;
+	pinctrl-1 = <&dpi_pin_idle>;
+
+	port {
+		dpi0_out: endpoint {
+			remote-endpoint = <&hdmi0_in>;
+		};
+	};
+};
+
+&i2c0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c0_pins>;
+	status = "okay";
+};
+
+&rdma0 {
+	status = "okay";
+};
+
+&ovl0 {
+	status = "okay";
+};
+
+&color0 {
+	status = "okay";
+};
+
+&dbi0 {
+	status = "disabled";
+	pinctrl-names = "dbi_pin_gpio_mode", "dbi_pin_mode";
+	pinctrl-0 = <&dbi_pin_gpio_mode>;
+	pinctrl-1 = <&dbi_pin_mode>;
+
+	sif-port = <0>;
+	three-wire = <1>;
+	hw-cs = <1>;
+	sdi = <0>;
+	1st-pol = <0>;
+	sck-def = <1>;
+	div2 = <1>;
+
+	cs-setup = <0x5>;
+	cs-hold = <0x5>;
+	rd-1st = <0x0a>;
+	rd-2nd = <0x0a>;
+	wr-1st = <0x6>;
+	wr-2nd = <0x6>;
+
+	/* 0 - disable te mode, 1 - vsync only, 2 - vsync or hsync*/
+	te-mode = <1>;
+	/* 0 - rising edge, 1 - falling edge*/
+	te-edge = <0>;
+
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	ports {
+		port {
+			dbi_out: endpoint {
+				remote-endpoint = <&lcd_in>;
+			};
+		};
+	};
+
+	panel {
+		compatible = "ilitek,ili9341";
+		interface_type = "mipi-dbi";
+		/*reset-gpios = <&pio 66 0>;*/
+		/*backlight = <&backlight_lcd0>;*/
+		port {
+			lcd_in: endpoint {
+				remote-endpoint = <&dbi_out>;
+			};
+		};
+	};
+};
+
+&display_components {
+	status = "okay";
+};
+
+&gamma {
+	status = "okay";
+};
+
+&mmsys {
+	status = "okay";
+};
+
+&mutex {
+	status = "okay";
+};
+
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_pins>;
+	status = "okay";
+
+	amptempsensor: tmp102@49 {
+		compatible = "tmp102";
+		reg = <0x49>;
+		#thermal-sensor-cells = <1>;
+	};
+
+	/* Sonos Amp Ctrl */
+	amp1: tas5720@6c {
+		compatible = "ti,tas5720";
+		reg = <0x6c>;
+		dev-id = <0x1>;
+		reset-gpio = <&pio 62 0>;
+		tdm-ctl-value = <0x00>;
+		tdm-slot-value = <0x80>;
+		mask-clock-faults;
+		status = "okay";
+	};
+	amp2: tas5720@6d {
+		compatible = "ti,tas5720";
+		reg = <0x6d>;
+		dev-id = <0x2>;
+		reset-gpio = <&pio 62 0>;
+		tdm-ctl-value = <0x11>;
+		tdm-slot-value = <0x80>;
+		mask-clock-faults;
+		status = "okay";
+	};
+	amp3: tas5720@6e {
+		compatible = "ti,tas5720";
+		reg = <0x6e>;
+		dev-id = <0x3>;
+		reset-gpio = <&pio 62 0>;
+		tdm-ctl-value = <0x23>;
+		tdm-slot-value = <0x81>;
+		mask-clock-faults;
+		status = "okay";
+	};
+	amp4: tas5720@6f {
+		compatible = "ti,tas5720";
+		reg = <0x6f>;
+		dev-id = <0x4>;
+		reset-gpio = <&pio 62 0>;
+		tdm-ctl-value = <0x3f>;
+		tdm-slot-value = <0x80>;
+		mask-clock-faults;
+		status = "okay";
+	};
+	amp5: tas5720@70 {
+		compatible = "ti,tas5720";
+		reg = <0x70>;
+		dev-id = <0x5>;
+		reset-gpio = <&pio 62 0>;
+		tdm-ctl-value = <0x4f>;
+		tdm-slot-value = <0x81>;
+		mask-clock-faults;
+		status = "okay";
+	};
+	///* ALSA amplifier configuration */
+	//tas5720a: tas5720@6c {
+	//	status = "okay";
+	//	compatible = "ti,tas5720";
+	//	reg = <0x6c>;
+	//	dvdd-supply = <&tas5720_fixed_3v3>;
+	//	pvdd-supply = <&tas5720_fixed_22v>;
+	//	ti,tas5720-sdz-gpio = <&pio 62 0>;
+	//};
+
+	//tas5720b: tas5720@6d {
+	//	status = "okay";
+	//	compatible = "ti,tas5720";
+	//	reg = <0x6d>;
+	//	dvdd-supply = <&tas5720_fixed_3v3>;
+	//	pvdd-supply = <&tas5720_fixed_22v>;
+	//};
+
+	//tas5720c: tas5720@6e {
+	//	status = "okay";
+	//	compatible = "ti,tas5720";
+	//	reg = <0x6e>;
+	//	dvdd-supply = <&tas5720_fixed_3v3>;
+	//	pvdd-supply = <&tas5720_fixed_22v>;
+	//};
+
+	//tas5720d: tas5720@6f {
+	//	status = "okay";
+	//	compatible = "ti,tas5720";
+	//	reg = <0x6f>;
+	//	dvdd-supply = <&tas5720_fixed_3v3>;
+	//	pvdd-supply = <&tas5720_fixed_22v>;
+	//};
+
+	//tas5720e: tas5720@70 {
+	//	status = "okay";
+	//	compatible = "ti,tas5720";
+	//	reg = <0x70>;
+	//	dvdd-supply = <&tas5720_fixed_3v3>;
+	//	pvdd-supply = <&tas5720_fixed_22v>;
+	//};
+};
+
+&i2c2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c2_pins>;
+	status = "okay";
+
+	cputempsensor: tmp102@48 {
+		compatible = "tmp102";
+		reg = <0x48>;
+		#thermal-sensor-cells = <1>;
+	};
+
+	hdmi-bridge@39 {
+		compatible = "sil,sii9022";
+		reg = <0x39>;
+		reset-gpio = <&pio 90 1>;
+		interrupt-parent = <&pio>;
+		interrupts = <25 IRQ_TYPE_LEVEL_LOW>;
+
+		ports {
+			port0 {
+				hdmi0_in: endpoint {
+					remote-endpoint = <&dpi0_out>;
+				};
+			};
+		};
+	};
+
+	hdmi-cec@60 {
+		compatible = "sil,sii9022-cec";
+		reg = <0x60>;
+	};
+
+	sii9437_codec: hdmi-eARC@30 {
+		compatible = "lattice,sii9437";
+		reg = <0x30>;
+		mute-gpio = <&pio 118 0>;
+		reset-gpio = <&pio 78 0>;
+		irq-gpio = <&pio 24 0>;
+		status = "okay";
+	};
+};
+
+&i2c3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c3_pins>;
+	status = "okay";
+
+	mt6395: mt6395@61 {
+		compatible = "mediatek,mt6395-regulator";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pmic_irq_pins>;
+		mt6395,irq-gpios = <&pio 27 0x0>;
+		reg = <0x61>;
+		status = "okay";
+	};
+};
+
+&irrx {
+	pinctrl-names = "default";
+	pinctrl-0 = <&irrx_pins_ir_input>;
+	status = "disabled";
+};
+
+&pwm {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pwm_pins_default>;
+	status = "disabled";
+};
+
+&mmc0 {
+	pinctrl-names = "default", "state_uhs";
+	pinctrl-0 = <&mmc0_pins_default>;
+	pinctrl-1 = <&mmc0_pins_uhs>;
+	status = "okay";
+	bus-width = <8>;
+	max-frequency = <200000000>;
+	cap-mmc-highspeed;
+	cap-mmc-hw-reset;
+	mmc-hs200-1_8v;
+	mmc-hs400-1_8v;
+	hs400-ds-delay = <0x1201d>;
+	r_smpl = <0>;
+	vmmc-supply = <&mmc_fixed_3v3>;
+	vqmmc-supply = <&mmc_fixed_1v8_io>;
+	no-sdio;
+	no-sd;
+	non-removable;
+};
+
+&mmc2 {
+	status = "okay";
+	pinctrl-names = "default", "state_uhs", "state_eint", "state_dat1";
+	pinctrl-0 = <&mmc2_pins_default>;
+	pinctrl-1 = <&mmc2_pins_uhs>;
+	pinctrl-2 = <&mmc2_pins_eint>;
+	pinctrl-3 = <&mmc2_pins_dat1>;
+	eint-gpios = <&pio 32 0>;
+	bus-width = <4>;
+	max-frequency = <200000000>;
+	cap-sd-highspeed;
+	/*sd-uhs-ddr208;*/
+	drv-type = <2>;
+	sd-uhs-sdr104;
+	sd-uhs-sdr50;
+	keep-power-in-suspend;
+	enable-sdio-wakeup;
+	cap-sdio-irq;
+	hs400-ds-delay = <0x1401B>;
+	no-sd;
+	no-mmc;
+	non-removable;
+	vmmc-supply = <&sdio_fixed_3v3>;
+	vqmmc-supply = <&sdio_fixed_1v8_io>;
+};
+
+&nandc {
+	pinctrl-names = "default";
+	pinctrl-0 = <&nand_pins_default>;
+	status = "disabled";
+	nand@0 {
+		reg = <0>;
+		nand-on-flash-bbt;
+		nand-ecc-mode = "hw";
+	};
+};
+
+&pcie {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie_pins_default>;
+	pcie@0,0 {
+		speed =  <1>;
+		rst-gpio = <&pio 116 0>;
+		rst-2g-gpio = <&pio 114 0>;
+		rst-5g-gpio = <&pio 115 0>;
+		status = "okay";
+	};
+};
+
+&pio {
+	pinctrl-names = "default";
+
+	dbi_pin_mode: dbi_pin_mode {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_36_EINT0__FUNC_DBI_CSX>,
+				<MT8518_PIN_37_EINT1__FUNC_DBI_SCL>,
+				<MT8518_PIN_38_EINT2__FUNC_DBI_DOUT>,
+				<MT8518_PIN_39_EINT3__FUNC_DBI_DIN>,
+				<MT8518_PIN_40_EINT4__FUNC_DBI_SDA>,
+				<MT8518_PIN_41_EINT5__FUNC_DBI_DCX>,
+				<MT8518_PIN_42_EINT6__FUNC_DBI_RESX>,
+				<MT8518_PIN_43_EINT7__FUNC_DBI_TE>;
+		};
+	};
+
+	dbi_pin_gpio_mode: dbi_pin_gpio_mode {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_36_EINT0__FUNC_GPIO36>,
+				<MT8518_PIN_37_EINT1__FUNC_GPIO37>,
+				<MT8518_PIN_38_EINT2__FUNC_GPIO38>,
+				<MT8518_PIN_39_EINT3__FUNC_GPIO39>,
+				<MT8518_PIN_40_EINT4__FUNC_GPIO40>,
+				<MT8518_PIN_41_EINT5__FUNC_GPIO41>,
+				<MT8518_PIN_42_EINT6__FUNC_GPIO42>,
+				<MT8518_PIN_43_EINT7__FUNC_GPIO43>;
+		};
+	};
+
+	aud_pins_default: audiodefault {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_71_DMIC_CLK0__FUNC_DMIC_CLK0>,
+				<MT8518_PIN_73_DMIC_DAT0__FUNC_DMIC_DAT0>,
+				<MT8518_PIN_74_DMIC_DAT1__FUNC_DMIC_DAT1>,
+				<MT8518_PIN_64_I2SO_BCK__FUNC_I2SO_BCKA>,
+				<MT8518_PIN_65_I2SO_LRCK__FUNC_I2SO_LRCKA>,
+				<MT8518_PIN_66_I2SO_D0__FUNC_I2SO_D0>,
+				<MT8518_PIN_67_I2SO_D1__FUNC_I2SO_D1>,
+				<MT8518_PIN_68_I2SO_D2__FUNC_I2SO_D2>,
+				<MT8518_PIN_59_EINT18__FUNC_SPDIF_OUT>,
+				<MT8518_PIN_70_SPDIF_IN0__FUNC_SPDIF_IN_0>,
+				<MT8518_PIN_81_I2SIN_D0__FUNC_SPLIN_D0>,
+				<MT8518_PIN_82_I2SIN_D1__FUNC_SPLIN_D1>,
+				<MT8518_PIN_83_I2SIN_D2__FUNC_SPLIN_D2>,
+				<MT8518_PIN_84_I2SIN_D3__FUNC_SPLIN_D3>,
+				<MT8518_PIN_86_I2SIN_BCK__FUNC_SPLIN_BCK>,
+				<MT8518_PIN_87_I2SIN_LRCK__FUNC_SPLIN_LRCK>;
+		};
+	};
+
+	aud_pins_extamp_on: audexampon {
+	};
+
+	aud_pins_extamp_off: audexampoff {
+	};
+
+	blth_key: eint60default {
+	};
+
+	dpi_pin_mode: dpi_pin_mode {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_36_EINT0__FUNC_DPI_PCLK>,
+				<MT8518_PIN_37_EINT1__FUNC_DPI_VSYNC>,
+				<MT8518_PIN_38_EINT2__FUNC_DPI_HSYNC>,
+				<MT8518_PIN_39_EINT3__FUNC_DPI_DE>,
+				<MT8518_PIN_40_EINT4__FUNC_DPI_DATA0>,
+				<MT8518_PIN_41_EINT5__FUNC_DPI_DATA1>,
+				<MT8518_PIN_42_EINT6__FUNC_DPI_DATA2>,
+				<MT8518_PIN_43_EINT7__FUNC_DPI_DATA3>,
+				<MT8518_PIN_44_EINT8__FUNC_DPI_DATA4>,
+				<MT8518_PIN_45_EINT9__FUNC_DPI_DATA5>,
+				<MT8518_PIN_46_EINT10__FUNC_DPI_DATA6>,
+				<MT8518_PIN_47_EINT11__FUNC_DPI_DATA7>,
+				<MT8518_PIN_48_EINT12__FUNC_DPI_DATA8>,
+				<MT8518_PIN_49_EINT13__FUNC_DPI_DATA9>,
+				<MT8518_PIN_50_EINT14__FUNC_DPI_DATA10>,
+				<MT8518_PIN_51_EINT15__FUNC_DPI_DATA11>;
+				drive-strength = <MTK_DRIVE_12mA>;
+		};
+	};
+
+	dpi_pin_idle: dpi_pin_idle {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_36_EINT0__FUNC_GPIO36>,
+				<MT8518_PIN_37_EINT1__FUNC_GPIO37>,
+				<MT8518_PIN_38_EINT2__FUNC_GPIO38>,
+				<MT8518_PIN_39_EINT3__FUNC_GPIO39>,
+				<MT8518_PIN_40_EINT4__FUNC_GPIO40>,
+				<MT8518_PIN_41_EINT5__FUNC_GPIO41>,
+				<MT8518_PIN_42_EINT6__FUNC_GPIO42>,
+				<MT8518_PIN_43_EINT7__FUNC_GPIO43>,
+				<MT8518_PIN_44_EINT8__FUNC_GPIO44>,
+				<MT8518_PIN_45_EINT9__FUNC_GPIO45>,
+				<MT8518_PIN_46_EINT10__FUNC_GPIO46>,
+				<MT8518_PIN_47_EINT11__FUNC_GPIO47>,
+				<MT8518_PIN_48_EINT12__FUNC_GPIO48>,
+				<MT8518_PIN_49_EINT13__FUNC_GPIO49>,
+				<MT8518_PIN_50_EINT14__FUNC_GPIO50>,
+				<MT8518_PIN_51_EINT15__FUNC_GPIO51>;
+				output-low;
+		};
+	};
+
+	i2c0_pins: i2c0 {
+		pins_bus {
+			pinmux = <MT8518_PIN_110_SDA0__FUNC_SDA0_0>,
+				 <MT8518_PIN_111_SCL0__FUNC_SCL0_0>;
+			bias-disable;
+		};
+	};
+
+	i2c1_pins: i2c1 {
+		pins_bus {
+			pinmux = <MT8518_PIN_108_SDA1__FUNC_SDA1_0>,
+				 <MT8518_PIN_109_SCL1__FUNC_SCL1_0>;
+			bias-disable;
+		};
+	};
+
+	i2c2_pins: i2c2 {
+		pins_bus {
+			pinmux = <MT8518_PIN_112_SDA2__FUNC_SDA2_0>,
+				 <MT8518_PIN_113_SCL2__FUNC_SCL2_0>;
+			bias-disable;
+		};
+	};
+
+	i2c3_pins: i2c3 {
+		pins_bus {
+			pinmux = <MT8518_PIN_21_SDA3__FUNC_SDA3_0>,
+				 <MT8518_PIN_22_SCL3__FUNC_SCL3_0>;
+			bias-disable;
+		};
+	};
+
+	pcie_pins_default: pcie_pin {
+		pins_pcie {
+			pinmux = <MT8518_PIN_116_MSDC1_DAT0__FUNC_GPIO116>,
+				<MT8518_PIN_119_MSDC1_DAT3__FUNC_GPIO119>,
+				<MT8518_PIN_60_EINT19__FUNC_PCIE_CLKREQ>;
+			bias-disable;
+		};
+	};
+
+	irrx_pins_ir_input: irrx_pin_ir {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_56_IR__FUNC_IR>;
+			bias-pull-up;
+		};
+	};
+
+	pmic_irq_pins: pmic_irq {
+		pins_bus {
+			pinmux = <MT8518_PIN_27_PWRAP_INT__FUNC_GPIO27>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
+		};
+	};
+
+	mmc0_pins_default: mmc0default {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_13_MSDC0_DAT0__FUNC_MSDC0_DAT0>,
+				<MT8518_PIN_12_MSDC0_DAT1__FUNC_MSDC0_DAT1>,
+				<MT8518_PIN_11_MSDC0_DAT2__FUNC_MSDC0_DAT2>,
+				<MT8518_PIN_10_MSDC0_DAT3__FUNC_MSDC0_DAT3>,
+				<MT8518_PIN_6_MSDC0_DAT4__FUNC_MSDC0_DAT4>,
+				<MT8518_PIN_5_MSDC0_DAT5__FUNC_MSDC0_DAT5>,
+				<MT8518_PIN_4_MSDC0_DAT6__FUNC_MSDC0_DAT6>,
+				<MT8518_PIN_3_MSDC0_DAT7__FUNC_MSDC0_DAT7>,
+				<MT8518_PIN_8_MSDC0_CMD__FUNC_MSDC0_CMD>;
+			input-enable;
+			bias-pull-up;
+		};
+
+		pins_clk {
+			pinmux = <MT8518_PIN_9_MSDC0_CLK__FUNC_MSDC0_CLK>;
+			bias-pull-down;
+		};
+	};
+
+	mmc0_pins_uhs: mmc0_pins_uhs {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_13_MSDC0_DAT0__FUNC_MSDC0_DAT0>,
+				 <MT8518_PIN_12_MSDC0_DAT1__FUNC_MSDC0_DAT1>,
+				 <MT8518_PIN_11_MSDC0_DAT2__FUNC_MSDC0_DAT2>,
+				 <MT8518_PIN_10_MSDC0_DAT3__FUNC_MSDC0_DAT3>,
+				 <MT8518_PIN_6_MSDC0_DAT4__FUNC_MSDC0_DAT4>,
+				 <MT8518_PIN_5_MSDC0_DAT5__FUNC_MSDC0_DAT5>,
+				 <MT8518_PIN_4_MSDC0_DAT6__FUNC_MSDC0_DAT6>,
+				 <MT8518_PIN_3_MSDC0_DAT7__FUNC_MSDC0_DAT7>,
+				 <MT8518_PIN_8_MSDC0_CMD__FUNC_MSDC0_CMD>;
+			input-enable;
+			drive-strength = <MTK_DRIVE_6mA>;
+			bias-pull-up;
+		};
+
+		pins_clk {
+			pinmux = <MT8518_PIN_9_MSDC0_CLK__FUNC_MSDC0_CLK>;
+			drive-strength = <MTK_DRIVE_8mA>;
+			bias-pull-down;
+		};
+
+		pins_ds {
+			pinmux = <MT8518_PIN_2_NFI_NRNB__FUNC_MSDC0_DS>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+
+		pins_rst {
+			pinmux = <MT8518_PIN_7_MSDC0_RSTB__FUNC_MSDC0_RSTB>;
+			bias-pull-up;
+		};
+	};
+
+	nand_pins_default: nanddefault {
+		pins_dat {
+			pinmux = <MT8518_PIN_3_MSDC0_DAT7__FUNC_NLD7>,
+				 <MT8518_PIN_4_MSDC0_DAT6__FUNC_NLD6>,
+				 <MT8518_PIN_5_MSDC0_DAT5__FUNC_NLD4>,
+				 <MT8518_PIN_6_MSDC0_DAT4__FUNC_NLD3>,
+				 <MT8518_PIN_7_MSDC0_RSTB__FUNC_NLD0>,
+				 <MT8518_PIN_10_MSDC0_DAT3__FUNC_NLD1>,
+				 <MT8518_PIN_11_MSDC0_DAT2__FUNC_NLD5>,
+				 <MT8518_PIN_13_MSDC0_DAT0__FUNC_NLD2>;
+			input-enable;
+			bias-pull-up;
+		};
+
+		pins_cmd {
+			pinmux = <MT8518_PIN_0_NFI_NCEB0__FUNC_NCEB0>,
+				 <MT8518_PIN_1_NFI_NREB__FUNC_NREB>,
+				 <MT8518_PIN_2_NFI_NRNB__FUNC_NRNB>,
+				 <MT8518_PIN_8_MSDC0_CMD__FUNC_NALE>,
+				 <MT8518_PIN_9_MSDC0_CLK__FUNC_NWEB>,
+				 <MT8518_PIN_12_MSDC0_DAT1__FUNC_NCLE>;
+			bias-pull-up;
+		};
+	};
+
+	mmc2_pins_default: mmc2default {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_29_MSDC2_CMD__FUNC_MSDC2_CMD>,
+			       <MT8518_PIN_31_MSDC2_DAT0__FUNC_MSDC2_DAT0>,
+			       <MT8518_PIN_32_MSDC2_DAT1__FUNC_MSDC2_DAT1>,
+			       <MT8518_PIN_33_MSDC2_DAT2__FUNC_MSDC2_DAT2>,
+			       <MT8518_PIN_34_MSDC2_DAT3__FUNC_MSDC2_DAT3>;
+			input-enable;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
+		};
+
+		pins_clk {
+			pinmux = <MT8518_PIN_30_MSDC2_CLK__FUNC_MSDC2_CLK>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+
+		pins_wifi_clk {
+			pinmux = <MT8518_PIN_23_PWRAP_SPI_CLK__FUNC_GPIO23>,
+			       <MT8518_PIN_54_URTS1__FUNC_GPIO54>;
+			input-enable;
+			bias-disable;
+		};
+	};
+
+	mmc2_pins_uhs: mmc2_pins_uhs {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_29_MSDC2_CMD__FUNC_MSDC2_CMD>,
+			       <MT8518_PIN_31_MSDC2_DAT0__FUNC_MSDC2_DAT0>,
+			       <MT8518_PIN_32_MSDC2_DAT1__FUNC_MSDC2_DAT1>,
+			       <MT8518_PIN_33_MSDC2_DAT2__FUNC_MSDC2_DAT2>,
+			       <MT8518_PIN_34_MSDC2_DAT3__FUNC_MSDC2_DAT3>;
+			input-enable;
+			drive-strength = <MTK_DRIVE_4mA>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
+		};
+
+		pins_clk {
+			pinmux = <MT8518_PIN_30_MSDC2_CLK__FUNC_MSDC2_CLK>;
+			drive-strength = <MTK_DRIVE_4mA>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+
+		pins_ds {
+			pinmux = <MT8518_PIN_35_MSDC2_DS__FUNC_MSDC2_DS>;
+			drive-strength = <MTK_DRIVE_4mA>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+	};
+
+	mmc2_pins_eint: dat1_eint {
+		pins_dat1 {
+			pinmux = <MT8518_PIN_32_MSDC2_DAT1__FUNC_GPIO32>;
+			output-high;
+		};
+	};
+
+	mmc2_pins_dat1: sdio_dat1 {
+		pins_dat1 {
+			pinmux = <MT8518_PIN_32_MSDC2_DAT1__FUNC_MSDC2_DAT1>;
+			input-enable;
+			drive-strength = <MTK_DRIVE_4mA>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
+		};
+	};
+
+	pwm_pins_default: pwmdefault {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_88_SPI1_CS__FUNC_PWM_A>,
+				 <MT8518_PIN_89_SPI1_CK__FUNC_PWM_B>,
+				 <MT8518_PIN_90_SPI1_MI__FUNC_PWM_C>;
+		};
+	};
+
+	spi_pins_0: spi_pins_0 {
+		pins_spi {
+			pinmux = <MT8518_PIN_29_MSDC2_CMD__FUNC_SPI0_CSB>,
+				<MT8518_PIN_30_MSDC2_CLK__FUNC_SPI0_CLK>,
+				<MT8518_PIN_31_MSDC2_DAT0__FUNC_SPI0_MI>,
+				<MT8518_PIN_32_MSDC2_DAT1__FUNC_SPI0_MO>;
+			bias-disable;
+			};
+	};
+
+	spi_pins_1: spi_pins_1 {
+		pins_spi {
+			pinmux = <MT8518_PIN_92_SPI2_CS__FUNC_SPI2_CSB>,
+				<MT8518_PIN_93_SPI2_CK__FUNC_SPI2_CLK>,
+				<MT8518_PIN_94_SPI2_MI0__FUNC_SPI2_MI0>,
+				<MT8518_PIN_95_SPI2_MI1__FUNC_SPI2_MI1>,
+				<MT8518_PIN_96_SPI2_MI2__FUNC_SPI2_MI2>,
+				<MT8518_PIN_97_SPI2_MI3__FUNC_SPI2_MI3>;
+			bias-disable;
+		};
+	};
+
+	spi_pins_2: spi_pins_2 {
+		pins_spi {
+			pinmux = <MT8518_PIN_88_SPI1_CS__FUNC_SPI1_CSB>,
+				<MT8518_PIN_89_SPI1_CK__FUNC_SPI1_CLK>,
+				<MT8518_PIN_90_SPI1_MI__FUNC_SPI1_MI>,
+				<MT8518_PIN_91_SPI1_MO__FUNC_SPI1_MO>;
+			bias-disable;
+		};
+	};
+
+	/* USB GPIO start */
+	usb0_hubreset_rst: usb0_hubreset_rst{
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_91_SPI1_MO__FUNC_GPIO91>;
+			output-low;
+		};
+	};
+
+	usb0_hubreset_default: hubreset_default {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_91_SPI1_MO__FUNC_GPIO91>;
+			output-high;
+		};
+	};
+
+	usb0_switch_sel_default: switch_sel_default {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_117_MSDC1_DAT1__FUNC_GPIO117>;
+			output-low;
+		};
+	};
+
+	usb0_switch_sel_host: switch_sel_host {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_117_MSDC1_DAT1__FUNC_GPIO117>;
+			output-low;
+		};
+	};
+
+	usb0_switch_sel_device: switch_sel_device {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_117_MSDC1_DAT1__FUNC_GPIO117>;
+			output-high;
+		};
+	};
+
+	usb0_wifi_rst: usb_wifi_rst {
+		pins_cmd_dat {
+			pinmux = <MT8518_PIN_115_MSDC1_CLK__FUNC_GPIO115>;
+			output-low;
+		};
+	};
+	/* USB GPIO end */
+};
+
+&svs {
+	vproc-supply = <&mt6395_vproc>;
+};
+
+&uart0 {
+	status = "okay";
+};
+
+&uart1 {
+	status = "okay";
+};
+
+&usb0 {
+	interrupts-extended = <&sysirq GIC_SPI 72 IRQ_TYPE_LEVEL_LOW>;
+	pinctrl-names = "hubreset_rst",
+			"hubreset_default",
+			"switch_sel_default",
+			"switch_sel_host",
+			"switch_sel_device";
+	pinctrl-0 = <&usb0_hubreset_rst>;
+	pinctrl-1 = <&usb0_hubreset_default>;
+	pinctrl-2 = <&usb0_switch_sel_default>;
+	pinctrl-3 = <&usb0_switch_sel_host>;
+	pinctrl-5 = <&usb0_switch_sel_device>;
+	sw_default_mode = <2>;
+	hubreset_exist = <1>;
+	switchsel_exist = <1>;
+	wifi_exist = <0>;
+	status = "okay";
+};
+
+#include "mt6395.dtsi"
+
+&mt6395_ldo1 {
+	regulator-boot-on;
+	regulator-always-on;
+};

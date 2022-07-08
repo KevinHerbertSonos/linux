@@ -1,0 +1,190 @@
+/*
+ * Copyright (c) 2020-2022, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Bravo HW versions
+ *           bravo.dtsi       - Bravo Based dts
+ */
+
+#include "sonos_mt8518_common.dtsi"
+
+/ {
+
+	sonos-platform {
+		misc-gpio {
+			connect-button  = <&pio 106 GPIO_ACTIVE_LOW>;
+		};
+
+		simulated-buttons {
+		/* event-sources are offsets from EVTSOURCE_BUTTON_PLAYPAUSE, some generate an event for more than one source */
+			join {
+				event-sources = <3>;
+			};
+		};
+
+		thermal-mgmt {
+			AMP {
+				compatible = "tmp102";
+				fault-temperature = <103>;
+				warn-temperature = <98>;
+			};
+			CPU {
+				compatible = "tmp102";
+				fault-temperature = <95>;
+				warn-temperature = <90>;
+			};
+			SOC {
+				compatible = "mt8521p_soc";
+				fault-temperature = <102>;
+				warn-temperature = <100>;
+			};
+		};
+
+		sonos-ampctl { /* Bravo has one amp fault.  It has three control lines.  */
+			sonos-ampfaults {
+				num-faults = <0x01>;
+				status = "okay";
+
+				ampfault@0 {
+					fault-gpio = <&pio 58 0>;
+					fault-flags = <IRQ_TYPE_EDGE_FALLING>;
+					fault-label = "Amp fault";
+				};
+			};
+
+		};
+	};
+
+	micctl_gpio:sonos-gpio-micctl {
+		compatible = "sonos,gpio-mics";
+		micctl-gpio = <&pio 72 GPIO_ACTIVE_LOW>;
+		status = "okay";
+	};
+
+	micctl@1 {
+		compatible = "sonos,micctl";
+		micctl-device = <&micctl_gpio>;
+		status = "okay";
+	};
+
+	hdmi_ctrl {
+		compatible = "sonos,hdmi-ctrl";
+		power-ctrl-gpio = <&pio 88 0>;
+		fault-gpio = <&pio 26 0>;
+		hpd-gpio = <&pio 14 0>;
+		mipi-hpd-ctrl-gpio = <&pio 63 0>;
+		arc-hpd-ctrl-gpio = <&pio 103 0>;
+		songle-adc-device = <0>;
+		songle-adc-channel = <1>;
+		/* Nominal Songle voltage = 600 ADC units x 1500mV / 4095 ADC units = 220mV */
+		songle-adc-high = <840>;  /* 308mV */
+		songle-adc-low = <360>;   /* 132mV */
+		status = "okay";
+	};
+
+	ir_rcvr@10019000 {
+		compatible = "sonos,mt8518-ir-rcvr";
+		reg = <0 0x10019000 0 0x1000>;
+		interrupts = <GIC_SPI 139 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&irrx_pins_ir_input>;
+		clocks = <&topckgen CLK_TOP_INT_32K_SEL>;
+		clock-names = "irrx_clock";
+		status = "okay";
+	};
+};
+
+&i2c0 {
+	sge@0 {  // Sigdetail Gesture Engine
+		compatible = "Sonos,sge-psoc4";
+		pinctrl-names = "mode-flow-ctrl", "mode-uart-hiz";
+		pinctrl-0 = <&uart1_pins_flowctrl>;
+		pinctrl-1 = <&uart1_pins_hiz>;
+		reg = <0x40>;
+		gpio-addr =  <0x10005000 0x1000 0x150 0 0x250 0x150 0 0x250>;
+		gpio-params = "base-addr", "len", "io-set", "io-clr", "io-din", "scl-set", "scl-clr", "scl-din";
+		scl-bitmask =  <0x004000>;
+		io-bitmask  =  <0x008000>;
+		xres-gpio = <&pio 89 1>;
+		io-gpio   = <&pio 95 1>;
+		scl-gpio  = <&pio 94 1>;
+		irq-gpio  = <&pio 23 1>;
+		zonea = "vol1";
+		zoneb = "pp";
+		zonec = "vol2";
+		zonem = "mic";
+		finger-threshold = <33>;
+		noise-threshold = <12>;
+		hysteresis = <4>;
+		share-swd-uart = <0>;
+		eco-trim-cap = <0x5f4d>;
+		status = "okay";
+
+		psoc-images {
+			image@0 {
+				model-num = <4248>;
+				ident = <0xba>;
+				flash-rows = <1024>;
+				flash-row-size = <256>;
+				flash-protection-size = <128>;
+			};
+		};
+	};
+
+	auth0: apple_auth@10 {	// Apple authentication chip, v3.0
+		compatible = "Sonos,apple_auth";
+		reg = <0x10>;
+		status = "okay";
+	};
+
+	lp5562@0 {	// LED controller
+		compatible = "ti,lp5562";
+		reg = <0x30>;
+		reset-gpio = <&pio 80 0>;
+	};
+
+	nxp-nt3h211@55 {       // NXP 3H2111 NFC
+		compatible = "fsl,nxp-nt3h2111";
+		nfc-field-detect = <&pio 79 0>;
+		reg = <0x55>;
+		nfc-adc-port = <12>;
+		status = "okay";
+	};
+};
+
+&i2c2 {
+	clock-frequency=<80000>;	// Reduce DDC speed for more reliable EDID reads
+	eeprom0: m24c64@55 {
+		compatible = "st,m24c64";
+		reg = <0x55>;
+		dev-id = <0x2>;
+		chip-size = <0x10000>;
+		page-size = <0x20>;
+		addr-len = <0x2>;
+		reset-gpio = <&pio 77 0>;
+		status = "okay";
+	};
+};
+
+&pio {
+	uart1_pins_hiz: mode_hiz {
+		pins_dat {
+			pinmux = <MT8518_PIN_92_SPI2_CS__FUNC_GPIO92>,
+				 <MT8518_PIN_93_SPI2_CK__FUNC_GPIO93>,
+				 <MT8518_PIN_94_SPI2_MI0__FUNC_GPIO94>,
+				 <MT8518_PIN_95_SPI2_MI1__FUNC_GPIO95>;
+			bias-disable;
+		};
+	};
+
+	uart1_pins_flowctrl: mode_flowctrl {
+		pins_dat {
+			pinmux = <MT8518_PIN_92_SPI2_CS__FUNC_URXD1>,
+				 <MT8518_PIN_93_SPI2_CK__FUNC_UTXD1>,
+				 <MT8518_PIN_94_SPI2_MI0__FUNC_URTS1>,
+				 <MT8518_PIN_95_SPI2_MI1__FUNC_UCTS1>;
+			bias-disable;
+		};
+	};
+};

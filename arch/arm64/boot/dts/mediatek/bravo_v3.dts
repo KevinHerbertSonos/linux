@@ -1,0 +1,47 @@
+/*
+ * Copyright (c) 2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Bravo HW versions
+ * 	V0 - bravo_v0.dts    - Bravo P0 build
+ *	V1 - bravo_v1.dts    - Bravo P1 build
+ *      V2 - bravo_v2.dts    - Bravo P2 build
+ *      V3 - bravo_v3.dts    - Bravo parts replacement build - Ghostbusters 21
+ *					Replacing LED controller, temp sensor, PSoC, HDMI fault circuit
+ */
+
+/dts-v1/;
+#include "bravo.dtsi"
+
+/ {
+	model = "Sonos Bravo V3";
+
+        sonos-platform {
+		thermal-mgmt {
+                        /delete-node/ AMP;
+                        /delete-node/ CPU;
+		};
+	};
+};
+
+&i2c0 {
+	sge@0 {  // Sigdetail Gesture Engine
+		psoc-images {
+			image@1 {
+				model-num = <4248>;
+				ident = <0xbf>;
+				flash-rows = <1024>;
+				flash-row-size = <256>;
+				flash-protection-size = <128>;
+			};
+		};
+	};
+	/delete-node/ lp5562@0;
+
+	is31fl3195@54 {  // LED controller
+                compatible = "lumissil,is31fl3195";
+                reg = <0x54>;
+        };
+};
+

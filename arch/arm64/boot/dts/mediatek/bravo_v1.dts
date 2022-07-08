@@ -1,0 +1,30 @@
+/*
+ * Copyright (c) 2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Bravo HW versions
+ *      V0 - bravo_v0.dts    - Bravo P0 build
+ *      V1 - bravo_v1.dts    - Bravo P1 build
+ */
+
+/dts-v1/;
+#include "bravo.dtsi"
+
+/ {
+	model = "Sonos Bravo P1 board";
+
+	micctl_gpio:sonos-gpio-micctl {
+		compatible = "sonos,gpio-mics";
+		micctl-gpio = <&pio 107 GPIO_ACTIVE_LOW>;
+		status = "okay";
+	};
+
+	hdmi_ctrl {
+		/* Nominal Songle voltage = TODO */
+		/* FIXME - Ethan eyeballed these values. */
+		songle-adc-high = <550>;
+		songle-adc-low = <400>;
+	};
+
+};

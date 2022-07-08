@@ -1,0 +1,28 @@
+/*
+ * Copyright (c) 2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * V1 - gravity version 1 - P1A build
+ *				- Board revision 1
+ * V2 - gravity - DVT w/TI amp
+ * V3 - gravity - DVT w/INFineon 12070 amp
+ */
+#include "gravity.dtsi"
+
+/ {
+	model = "Sonos i.MX6 SoloX - Gravity V3";
+
+	sonos-platform {
+		sonos-ampctl {
+			sonos-ampctl-signals {
+				sonos-ampsignal@1 {		// POWER
+					active-low = <1>;
+				} ;
+				sonos-ampsignal@2 {		// AMP MUTE
+					active-low = <1>;
+				} ;
+			} ;
+		} ;
+	};
+};

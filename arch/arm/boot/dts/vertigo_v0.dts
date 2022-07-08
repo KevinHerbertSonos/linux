@@ -1,0 +1,14 @@
+/*
+ * Copyright (c) 2019-2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * Vertigo HW versions:
+ *	0 - initial implementation/bringup through p2b
+ *		- board revisions 0 and 1
+ */
+#include "vertigo.dtsi"
+
+/ {
+	model = "Sonos i.MX6 SoloX Vertigo Board V0";
+};

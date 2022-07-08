@@ -1,0 +1,15 @@
+/*
+ * Copyright (c) 2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * V1 - gravity version 1 - P1A build
+ *				- Board revision 1
+ * V2 - gravity - DVT w/TI amp
+ */
+#include "gravity.dtsi"
+
+/ {
+	model = "Sonos i.MX6 SoloX - Gravity V2";
+
+};

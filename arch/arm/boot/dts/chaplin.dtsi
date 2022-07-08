@@ -1,0 +1,224 @@
+/*
+ * Copyright (c) 2019-2021, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+#include "sonos_imx6sx_common.dtsi"
+
+/ {
+	model = "Sonos i.MX6 SoloX Chaplin Board";
+
+	sonos-platform {
+		/* Sonos platform specific values for shared driver source & binaries */
+		sonos-ampctl {
+			/* Chaplin(/Beacon) has one amp fault.  It has three control lines.
+			 */
+			status = "okay";
+			amprail-adc-port = <1>;
+			amprail-adc-scale = <7007>;
+
+			sonos-ampfaults {
+				num-faults = <0x01>;
+				status = "okay";
+
+				ampfault@0 {
+					fault-gpio = <&gpio7 4 0>;
+				} ;
+			} ;
+
+			sonos-ampctl-signals {
+				num-ctl-signals = <3>;
+				sonos-ampsignal@0 {		// DACRESET
+					config = <1>;
+					on-time = <4>;
+					off-time = <4>;
+					supports-off = <1>;
+					active-low = <1>;
+					sig-gpio = <&gpio1 5 0>;
+				} ;
+				sonos-ampsignal@1 {		// POWER
+					on-time = <15>;
+					off-time = <0>;
+					supports-off = <0>;
+					sig-gpio = <&gpio1 6 0>;
+				} ;
+				sonos-ampsignal@2 {		// AMP MUTE
+					config = <1>;
+					on-time = <4>;
+					off-time = <1>;
+					supports-off = <1>;
+					sig-gpio = <&gpio1 7 0>;
+				} ;
+			} ;
+		} ;
+		misc-gpio {
+			connect-button  = <&gpio1 9 0>;
+		};
+
+		simulated-buttons {
+			/* event-sources are offsets from EVTSOURCE_BUTTON_PLAYPAUSE, some generate an event for more than one source */
+			join {
+				event-sources = <3>;
+			};
+		};
+
+		thermal-mgmt {
+			CPU {
+				compatible = "seiko,s5851";
+				fault-temperature = <95>;
+				warn-temperature = <91>;
+			};
+		};
+	};
+
+	psmon {
+		compatible = "sonos,psmon";
+		shutdown-voltage = <10000>;
+		adc-port = <1>;
+		adc-scale = <7007>;
+	};
+	sonos_dummy_codec_dac: dac_dummy_codec {
+		#sound-dai-cells = <0>;
+		compatible = "Sonos,dummy-codec";
+		stream-name = "sonos.dac";
+		rate = <44100>; /* We use 44.1 KHz as the audio output rate */
+		format = "S32_LE"; /* We use signed 24-bit little endian samples in a 32-bit word */
+		channels = <2>;
+		status = "okay";
+	};
+
+	sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "DAC";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,bitclock-master = <&esai_out>;
+		simple-audio-card,frame-master = <&esai_out>;
+		simple-audio-card,mclk-fs = <256>;
+
+		esai_out: simple-audio-card,cpu {
+			sound-dai = <&esai>;
+			clocks = <&clks IMX6SX_CLK_ESAI_EXTAL>;
+			clock-id = <1>; /* ESAI_HCKT_EXTAL */
+		};
+
+		simple-audio-card,codec {
+			sound-dai = <&sonos_dummy_codec_dac>;
+		};
+	};
+
+};
+
+&esai {
+	status = "okay";
+};
+
+&uart3 {
+	fsl,uart-has-rtscts;
+	status = "okay";
+};
+
+&fec1 {
+	status = "okay";
+	phy-mode = "mii";
+	phy-handle = <&ethphy1>;
+	phy0 {
+		compatible = "Sonos,ter21x3_phy";
+		interrupts = <&gpio2 9 1>;
+	};
+};
+
+&fec2 {
+	status = "disabled";
+};
+
+&i2c1 {
+	apple_auth@0 {
+		compatible = "Sonos,apple_auth";
+		reg = <0x11>;
+		reset-gpio = <&gpio7 0x02 0x01>;
+	};
+
+	apple_auth@1 {
+		compatible = "Sonos,apple_auth";
+		reg = <0x10>;
+		reset-gpio = <&gpio7 0x02 0x01>;
+	};
+};
+
+&i2c2 {
+	sge@0 {  // Sigdetail Gesture Engine
+		compatible = "Sonos,sge-psoc4";
+		pinctrl-names = "mode-flow-ctrl", "mode-uart-hiz";
+		pinctrl-0 = <>;
+		pinctrl-1 = <>;
+		reg = <0x40>;
+		iomuxc-ofs = <0x20e0000 0x1000 0x270 0x274 0x5b8 0x5bc 0x83c>;
+		iomuxc-params = "base-addr", "len", "mux-s3d6", "mux-s3d7", "ctl-s3d6", "ctl-s3d7", "uart3-rts-sel";
+		xres-gpio = <&gpio4 22 1>;
+		io-gpio   = <&gpio7  8 1>;
+		scl-gpio  = <&gpio7  9 1>;
+		irq-gpio  = <&gpio2 16 1>;
+		zonea = "vol1";
+		zoneb = "pp";
+		zonec = "vol2";
+		finger-threshold = <63>;
+		noise-threshold = <24>;
+		hysteresis = <6>;
+		share-swd-uart = <1>;
+		eco-trim-cap = <0x5f4d>;
+		swd-preempt-disable;
+
+		psoc-images {
+			image@0 {
+				model-num = <4247>;
+				ident = <0x33>;
+				flash-rows = <1024>;
+				flash-row-size = <128>;
+				flash-protection-size = <128>;
+			};
+		};
+	};
+
+	lp5562@0 {      // LED controller
+		compatible = "ti,lp5562";
+		reg = <0x30>;
+	};
+};
+
+&i2c3 {
+	s5851@0 {	// CPU thermal sensor
+		compatible = "seiko,s5851";
+		reg = <0x4e>;
+		device_type = "CPU";
+	};
+
+	eeprom0: m24c64@55 {
+		compatible = "st,m24c64";
+		reg = <0x55>;
+		dev-id = <0x2>;
+		chip-size = <0x10000>;
+		page-size = <0x20>;
+		addr-len = <0x2>;
+		status = "okay";
+		write-protect = <&gpio4 0x17 0>;
+	};
+};
+
+&pcie{
+	clock-names = "pcie_phy", "pcie_bus", "pcie", "pcie_inbound_axi";
+	reset-gpio = <&gpio2 0x12 0x0>;
+	fsl,tx-deemph-gen1 = <21>;
+	fsl,tx-deemph-gen2-3p5db = <21>;
+	fsl,tx-deemph-gen2-6db = <32>;
+	fsl,tx-swing-full = <115>;
+	fsl,tx-swing-low = <115>;
+	status = "okay";
+};
+
+&adc1 {
+	status = "okay";
+};
+
+&pcie{
+	status = "okay";
+};

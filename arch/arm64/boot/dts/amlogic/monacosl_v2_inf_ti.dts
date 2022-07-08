@@ -1,0 +1,51 @@
+/*
+ * Copyright (c) 2021, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Monaco HW versions
+ *      V0 - monacosl_v0.dts		- Monaco SL v0
+ *      V1 - monacosl_v1.dts		- Monaco SL v1 - Monaco pre-DVT - GPIO changes to PIC
+ *      V2 - monacosl.dts		- Monaco SL with TI AMP (support for multiple amps in field)
+ *      V2_inf - monacosl_inf.dts	- Monaco SL with Infineon AMP (support for multiple amps in field)
+ *      V2_adi - monacosl_adi.dts	- Monaco SL with ADI AMP (support for multiple amps in field)
+ */
+/dts-v1/;
+
+#include "monaco_common.dtsi"
+
+/ {
+	model = "Sonos-MonacoSL V2_inf";
+
+	sonos-product-id = <0x0e>;
+
+	sonos-platform {
+	} ;
+
+	micctl_gpio:sonos-gpio-micctl {
+		no-mics-product;
+	};
+
+	pic16f@42 {
+                image-name = "pic16f_ti.hex";
+	};
+
+        memory@00000000 {
+		linux,usable-memory = <0x0 0x100000 0x0 0x1ff00000>;
+	};
+}; /* end of / */
+
+/* for mic board */
+&i2c_AO {
+	amp1: tas5825@4c {	// Single amp, dual-channel
+		status = "disabled";
+	};
+
+	ma2304@20 {
+		status = "okay";
+	};
+
+	ssm3582@11 {
+		status = "disabled";
+	};
+};

@@ -1,0 +1,67 @@
+/*
+ * Copyright (c) 2021, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Monaco HW versions
+ *      V0 - monaco_v0.dts		- Monaco P0 [Ryles XI]
+ *      V1 - monaco_v1.dts		- Monaco P1
+ *      V2 - monaco_v2.dts		- Monaco P2
+ *      V3 - monaco_v3.dts		- Monaco EVT(/p2b)
+ *      V4 - monaco_v4.dts		- Monaco pre-DVT - GPIO changes to PIC
+ *	V5	(prior to implementation of hw_parts_manifest)
+ *          			TI Fuel Gauge
+ *	  - monaco_v5_ti_ti.dts			- Monaco with TI AMP (support for multiple amps in field)
+ *	  - monaco_v5_inf_ti.dts		- Monaco with Infineon AMP (support for multiple amps in field)
+ *	  - monaco_v5_adi_ti.dts		- Monaco with ADI AMP (support for multiple amps in field)
+ *          			MAXIM Fuel Gauge
+ *	  - monaco_v5_ti_max.dts		- Monaco with TI AMP (support for multiple amps in field)
+ *	  - monaco_v5_inf_max.dts		- Monaco with Infineon AMP (support for multiple amps in field)
+ *	  - monaco_v5_adi_max.dts		- Monaco with ADI AMP (support for multiple amps in field)
+ */
+/dts-v1/;
+
+#include "monaco_common.dtsi"
+
+/ {
+	model = "Sonos-Monaco V5, Infineon amp, MAX FG";
+
+	sonos-product-id = <0x0d>;
+
+	sonos-platform {
+		simulated-buttons {
+                        mute {
+                                event-sources = <6>;
+                        };
+		};
+	} ;
+
+	micctl_gpio:sonos-gpio-micctl {
+		micctl-gpio = <&gpio GPIOX_21 GPIO_ACTIVE_LOW>;
+		micctl-clk-en = <&gpio GPIOX_22 GPIO_ACTIVE_LOW>;
+	};
+
+	pic16f@42 {
+                image-name = "pic16f_max.hex";
+		fuel-gauge-i2c-bus = <0x36>;
+	};
+
+        memory@00000000 {
+		linux,usable-memory = <0x0 0x100000 0x0 0x3ff00000>;
+	};
+};
+
+/* for mic board */
+&i2c_AO {
+	amp1: tas5825@4c {	// Single amp, dual-channel
+		status = "disabled";
+	};
+
+	ma2304@20 {
+		status = "okay";
+	};
+
+        ssm3582@11 {
+		status = "disabled";
+	};
+};

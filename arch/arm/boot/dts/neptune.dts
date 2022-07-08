@@ -1,0 +1,240 @@
+/*
+ * Copyright (c) 2019, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+#include "sonos_imx6sx_common.dtsi"
+
+/ {
+	model = "Sonos i.MX6 SoloX Neptune Board";
+
+	sonos-platform {
+		/* Sonos platform specific values for shared driver source & binaries */
+		sonos-ampctl {
+			/* Neptune has no amp fault.  It has one control line.
+			 */
+			status = "okay";
+			hw-inits-index = <3>;
+			hw-exits-index = <3>;
+			ampctl-amp-auto-power = <1>;
+			amprail-adc-port = <1>;
+			amprail-adc-scale = <8905>;
+
+			sonos-ampfaults {
+			num-faults = <0x0>;
+			status = "okay";
+			} ;
+		} ;
+
+		misc-gpio {
+			connect-button  = <&gpio7 3 0>;
+			linein-detect = <&gpio7 4 0>;
+			avtrigger-enable = <&gpio1 9 0>;
+			avtrigger-detect = <&gpio1 10 0>;
+			lineout-detect = <&gpio1 3 0>;
+			spdif_out-detect = <&gpio1 6 0>;
+		};
+
+		simulated-buttons {
+			/* event-sources are offsets from EVTSOURCE_BUTTON_PLAYPAUSE,
+			   some generate an event for more than one source */
+			join {
+				event-sources = <3>;
+			};
+		};
+		/* fault/warn events are not supported on neptune so temperatures set extremely high
+		   to prevent generation of those events */
+		thermal-mgmt {
+			CPU {
+				compatible = "seiko,s5851";
+				fault-temperature = <2007>;
+				warn-temperature = <2004>;
+			};
+		};
+	};
+
+	psmon {
+		compatible = "sonos,psmon";
+		psmon-gpio = <&gpio6 11 0>;
+		trigger-edge = <IRQ_TYPE_EDGE_RISING>;
+		2g-shutdown-gpio = <&gpio2 18 0>;
+	};
+};
+
+&fec1 {
+	status = "okay";
+	pinctrl-0 = <&pinctrl_enet1_rmii>;
+	phy-mode = "rmii";
+	phy-handle = <&ethphy1>;
+	mdio {
+		ethphy1: ethernet-phy@1 {
+			reg = <0x1d>;
+		};
+	};
+	phy0 {
+		compatible = "Sonos,mv88e6020_phy";
+		interrupts = <&gpio2 9 1>;
+	};
+};
+
+&fec2 {
+	status = "disabled";
+};
+
+&i2c1 {
+	apple_auth@0 {
+		compatible = "Sonos,apple_auth";
+		reg = <0x11>;
+		reset-gpio = <&gpio7 0x02 0x01>;
+	};
+
+	apple_auth@1 {
+		compatible = "Sonos,apple_auth";
+		reg = <0x10>;
+		reset-gpio = <&gpio7 0x02 0x01>;
+	};
+};
+
+&i2c3 {
+        s5851@0 {	// CPU thermal sensor
+                compatible = "seiko,s5851";
+                reg = <0x4e>;
+                device_type = "CPU";
+        };
+
+	sge@0 {  // Sigdetail Gesture Engine
+		compatible = "Sonos,sge-psoc4";
+		pinctrl-names = "mode-flow-ctrl", "mode-uart-hiz";
+		pinctrl-0 = <>;
+		pinctrl-1 = <>;
+		reg = <0x40>;
+		iomuxc-ofs = <0x20e0000 0x1000 0x270 0x274 0x5b8 0x5bc 0x83c>;
+		iomuxc-params = "base-addr", "len", "mux-s3d6", "mux-s3d7", "ctl-s3d6", "ctl-s3d7", "uart3-rts-sel";
+                xres-gpio = <&gpio1  7 1>;
+		io-gpio   = <&gpio2 16 1>;
+		scl-gpio  = <&gpio2 17 1>;
+		share-swd-uart = <0>;
+
+		psoc-images {
+			image@0 {
+				model-num = <4147>;
+				ident = <0xed>;
+				flash-rows = <1024>;
+				flash-row-size = <128>;
+				flash-protection-size = <128>;
+			};
+		};
+	};
+
+        ak4490@0 { // DAC
+                compatible = "Sonos,ak4490";
+                dac-pdn = <&gpio2 12 0>;
+                dac-mute = <&gpio1 5 0>;
+                reg = <0x10>;
+        };
+
+	lp5562@0 {      // LED controller
+		compatible = "ti,lp5562";
+		reg = <0x30>;
+	};
+};
+
+&audmux{
+	status = "okay";
+};
+
+&pwm5{
+        status = "okay";
+};
+
+&epit1 {
+	compatible = "fsl,imx6sx-epit";
+	clocks = <&clks IMX6SX_CLK_EPIT1>,
+	<&clks IMX6SX_CLK_DUMMY>,
+	<&clks IMX6SX_CLK_PERCLK>,
+	<&clks IMX6SX_CLK_CKIH>,
+	<&clks IMX6SX_CLK_CKIL>;
+	clock-names = "epit", "off", "per", "high", "low";
+	dev-id = <0>;
+	// This EPIT device serves as the LLA audio clock
+	lla-clock;
+};
+&spdif {
+	clock-names = "core", "rxtx0",
+			"rxtx1", "rxtx2",
+			"rxtx3", "rxtx4",
+			"rxtx5", "rxtx6",
+			"rxtx7", "dma", "ipg";
+	status = "okay";
+
+	lla-spdif-tx {
+		lla-type = <3>;
+		lla-sync-to-dev = <0>; /* ESAI lla-dac */
+		frames-per-second = <44100>; /* Note: Must be the same as ESAI lla-dac */
+		channel-status = [00 00 00 00 D0 00];
+		channel-len = <4>;
+		channel-mask = <0x3>;
+		channels-per-frame = <2>;
+		frames-per-buffer = <128>;
+		buffer-cnt = <64>;
+		watermark-frames = <8>;
+		clk-div = <4>;
+		status = "okay";
+	};
+};
+
+&esai {
+	compatible = "fsl,imx6q-esai";
+	clocks = <&clks IMX6SX_CLK_ESAI_IPG>,
+		<&clks IMX6SX_CLK_ESAI_EXTAL>,
+		<&clks IMX6SX_CLK_SPBA>;
+	clock-names = "core", "extal", "dma";
+	dmas = <&sdma 24 21 0>, <&sdma 23 21 0>;
+	dma-names = "tx", "rx";
+	status = "okay";
+        lla-line-in {
+		lla-type = <4>;
+		frames-per-second = <44100>;
+		channel-len = <4>;
+		channel-mask = <0x3>;
+		channels-per-frame = <2>;
+		frames-per-buffer = <128>;
+		buffer-cnt = <64>;
+		dividers = <3 1 0>;
+		watermark-frames = <8>;
+		active-lane-mask = <0x2>;
+		invert-fs;
+		i2s-mode;
+		status = "okay";
+	};
+	lla-dac {
+		lla-type = <0>;
+		frames-per-second = <44100>;
+		channel-len = <4>;
+		channel-mask = <0x3>;
+		channels-per-frame = <2>;
+		frames-per-buffer = <128>;
+		buffer-cnt = <64>;
+		dividers = <3 0 0>;
+		watermark-frames = <8>;
+                right-align; /* Required for SPDIF TX linking */
+		tdm-master; /* Required for SPDIF TX linking */
+		sync-tx-rx;
+		status = "okay";
+	};
+};
+
+&pcie{
+	clock-names = "pcie_phy", "pcie_bus", "pcie", "pcie_inbound_axi";
+	reset-gpio = <&gpio2 0x12 0x0>;
+	fsl,tx-deemph-gen1 = <21>;
+	fsl,tx-deemph-gen2-3p5db = <21>;
+	fsl,tx-deemph-gen2-6db = <32>;
+	fsl,tx-swing-full = <115>;
+	fsl,tx-swing-low = <115>;
+	status = "okay";
+};
+
+&adc1 {
+	status = "okay";
+};

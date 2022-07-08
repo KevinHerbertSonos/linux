@@ -1,0 +1,34 @@
+/*
+ * Copyright (c) 2019-2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * Vertigo HW versions:
+ *	1 - memory doubled to 256/256 for EVT/DVT
+ *	    Add new PSoC4247 support
+ *		- board revisions 2
+ *
+ */
+#include "vertigo.dtsi"
+
+/ {
+	model = "Sonos i.MX6 SoloX Vertigo Board V1";
+
+	memory {
+		reg = <0x80000000 0x10000000>;
+	};
+};
+
+&i2c1 {
+	sge@0 {
+		psoc-images {
+			image@1 {
+				model-num = <4247>;
+				ident = <0xe2>;
+				flash-rows = <1024>;
+				flash-row-size = <128>;
+				flash-protection-size = <128>;
+			};
+		};
+	};
+};

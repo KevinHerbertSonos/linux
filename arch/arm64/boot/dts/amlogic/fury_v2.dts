@@ -1,0 +1,92 @@
+/*
+ * Copyright (c) 2020-2021, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Fury HW versions
+ *      V0 - fury_v0.dts - Fury P0,P1 builds
+ *      V1 - fury_v1.dts - Fury P2a,P2b,EVT,DVT builds
+ *      V2 - fury.dts    - Fury DVT2 (ReQual) build
+ */
+/dts-v1/;
+
+#include "fury_common.dtsi"
+
+/ {
+	model = "Sonos-Fury V2";
+
+	sonos-platform {
+		sonos-ampctl {
+			hw-inits-index = <5>; /* verify index after support is added to amperctl */
+			hw-exits-index = <5>; /* verify index after support is added to amperctl */
+
+			sonos-ampfaults {
+				ampfault@0 {
+					fault-gpio = <&gpio GPIOA_17 GPIO_ACTIVE_LOW>;
+				};
+
+			};
+		};
+	};
+
+	auge_sound {
+		aml-audio-card,dai-link@0 {
+			format = "i2s";
+			/delete-property/ bitclock-inversion;
+			cpu {
+				dai-tdm-slot-tx-mask = <1 1>;
+				dai-tdm-slot-num = <2>;
+				system-clock-frequency = <12288000>;
+			};
+			codec {
+				prefix-names = "Sonos i2s out";
+			};
+		};
+	};
+
+	psmon {
+		amp-mute-shutdown-gpio = <&gpio GPIOA_18 GPIO_ACTIVE_LOW>;
+		amp-hiz-shutdown-gpio = <&gpio GPIOA_16 GPIO_ACTIVE_HIGH>;
+	};
+}; /* end of / */
+
+&audiobus {
+	aml_tdmc: tdmc {
+		dai-tdm-lane-slot-mask-out = <1 1 0 0>;
+	};
+};
+
+&i2c1 {
+	cputempsensor: tmp102@48 {
+		status = "disable";
+	};
+};
+
+&i2c3 {
+	amp1: tas5825@4c {
+		status = "disable";
+	};
+
+	amp2: tas5825@4d {
+		status = "disable";
+	};
+	ma12070p@20 {
+		status = "okay";
+	};
+
+	ma12070p@21 {
+		status = "okay";
+	};
+
+};
+
+&pinctrl_periphs {
+	tdmout_c:tdmout_c {
+		mux {
+			groups = "tdmc_sclk",
+				"tdmc_fs",
+				"tdmc_dout0",
+				"tdmc_dout1";
+		};
+	};
+};

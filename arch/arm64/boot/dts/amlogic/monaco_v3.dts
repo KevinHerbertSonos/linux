@@ -1,0 +1,62 @@
+/*
+ * Copyright (c) 2019-2021, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Monaco HW versions
+ *      V3 - monaco.dts			- Monaco EVT(/p2b)
+ */
+/dts-v1/;
+
+#include "monaco_common.dtsi"
+
+/ {
+	model = "Sonos-Monaco V3";
+
+	sonos-product-id = <0x0d>;
+
+	sonos-platform {
+		simulated-buttons {
+                        mute {
+                                event-sources = <6>;
+                        };
+		};
+	} ;
+
+	micctl_gpio:sonos-gpio-micctl {
+		micctl-gpio = <&gpio GPIOX_21 GPIO_ACTIVE_LOW>;
+		micctl-clk-en = <&gpio GPIOX_22 GPIO_ACTIVE_LOW>;
+	};
+
+	pic16f@42 {
+		/* PIC image for hw configuration 1 - p0 through EVT */
+                image-name = "pic16f_hwcfg1.hex";
+	};
+
+	memory@00000000 {
+		linux,usable-memory = <0x0 0x100000 0x0 0x3ff00000>;
+	};
+
+	tas5825@4c {	// Single amp, dual-channel
+		status = "okay";
+	};
+
+	ma2304@20 {
+		status = "disabled";
+	};
+
+	ssm3582@11 {
+		status = "disabled";
+	};
+}; /* end of / */
+
+/* for mic board */
+&i2c_AO {
+	ma2304@20 {	// Single amp, dual-channel
+		status = "disabled";
+	};
+
+	amp1: tas5825@4c {	// Single amp, dual-channel
+		status = "okay";
+	};
+};

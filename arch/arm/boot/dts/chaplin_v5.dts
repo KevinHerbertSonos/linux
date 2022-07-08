@@ -1,0 +1,30 @@
+/*
+ * Copyright (c) 2021, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+#include "chaplin.dtsi"
+/ {
+	model = "Sonos i.MX6 SoloX Chaplin Board v5";
+};
+
+&i2c2 {
+	sge@0 {  // Sigdetail Gesture Engine
+		psoc-images {
+			image@0 {
+				model-num = <4248>;
+				ident = <0x34>;
+				flash-rows = <1024>;
+                                flash-row-size = <256>;
+                                flash-protection-size = <128>;
+			};
+			image@1 {
+				model-num = <4248>;
+				ident = <0x35>;
+				flash-rows = <1024>;
+                                flash-row-size = <256>;
+                                flash-protection-size = <128>;
+			};
+		};
+	};
+};

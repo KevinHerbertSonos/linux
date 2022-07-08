@@ -1,0 +1,17 @@
+/*
+ * Copyright (c) 2022, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * V1 - gravity version 1 - P1A build
+ *				- Board revision 1
+ * V2 - gravity - DVT w/TI amp
+ * V3 - gravity - DVT w/INFineon 12070 amp
+ * V4 - gravity - DVT w/INFineon 12070 amp, inverters on POWER/MUTE to match TI polarity
+ */
+#include "gravity.dtsi"
+
+/ {
+	model = "Sonos i.MX6 SoloX - Gravity V4";
+
+};

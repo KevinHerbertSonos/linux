@@ -1,0 +1,15 @@
+/*
+ * Copyright (c) 2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Bravo HW versions
+ *           bravo.dts       - Bravo P2 build
+ */
+
+/dts-v1/;
+#include "bravo.dtsi"
+
+/ {
+	model = "Sonos Bravo P2 board";
+};

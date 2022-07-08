@@ -1,0 +1,58 @@
+/*
+ * Copyright (c) 2020-2021, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Fury HW versions
+ *      V0 - fury.dts    - Fury P0,P1 builds
+ */
+/dts-v1/;
+
+#include "fury_common.dtsi"
+
+/ {
+	model = "Sonos-Fury V0";
+
+	sonos-platform {
+		thermal-mgmt {
+			CPU {
+				compatible = "tmp102";
+				fault-temperature = <5153>;
+				warn-temperature = <2018>;
+			};
+		};
+	};
+
+	thermal-zones {
+		cputhermal: cputhermal {
+			polling-delay-passive = <1000>;
+			polling-delay = <1000>;
+			/* sensor ID */
+			thermal-sensors = <&cputempsensor 0>;
+		};
+	};
+}; /* end of / */
+
+&i2c_AO {
+	sge@40 {  // Sigdetail Gesture Engine
+		psoc-images {
+			image@0 {
+				ident = <0xfe>;
+			};
+		};
+	};
+};
+
+&i2c1 {
+	lis2hh12@0 { // accelerometer
+		compatible = "stm,lis2hh12";
+		reg = <0x1e>;
+		status = "disable";
+	};
+
+	bma420@0 { // accelerometer
+		compatible = "sonos,bma420";
+		reg = <0x18>;
+		status = "disable";
+	};
+};

@@ -1,0 +1,48 @@
+/*
+ * Copyright (c) 2019-2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * Vertigo HW versions:
+ *	2 - MP update, replaced AK4388A DAC with pcm5101
+ *		- board revisions 3
+ *
+ */
+#include "vertigo.dtsi"
+
+/ {
+	model = "Sonos i.MX6 SoloX Vertigo Board V2";
+
+	memory {
+		reg = <0x80000000 0x10000000>;
+	};
+
+	sonos-platform {
+		sonos-ampctl {
+			sonos-ampctl-signals {
+				sonos-ampsignal@0 {
+					config = <1>;
+					on-time = <4>;
+					off-time = <4>;
+					supports-off = <1>;
+					active-low = <1>;
+					sig-gpio = <&gpio4 31 0>;
+				} ;
+			} ;
+		} ;
+	} ;
+};
+
+&i2c1 {
+	sge@0 {
+		psoc-images {
+			image@1 {
+				model-num = <4247>;
+				ident = <0xe2>;
+				flash-rows = <1024>;
+				flash-row-size = <128>;
+				flash-protection-size = <128>;
+			};
+		};
+	};
+};

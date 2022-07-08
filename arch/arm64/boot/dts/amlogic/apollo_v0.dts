@@ -1,0 +1,1103 @@
+/*
+ * Copyright (c) 2018-2022 Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Apollo HW versions
+ *      V0 - apollo_v0.dts    - Apollo P0 P0.1 build
+ */
+/dts-v1/;
+
+#include "a113.dtsi"
+#include "sonos_platform.dtsi"
+#include "mesonaxg_ad7535-panel.dtsi"
+
+/ {
+	model = "Sonos-Apollo V0";
+	amlogic-dt-id = "axg_a113d_skt_v1";
+	compatible = "amlogic, axg";
+	interrupt-parent = <&gic>;
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	sonos-product-id = <0x0f>;
+
+	sonos-platform {
+		/* Sonos platform specific values for shared driver source & binaries */
+		sonos-ampctl { /* Apollo has one amp fault.  It has three control lines.  */
+			status = "okay";
+			hw-inits-index = <1>;
+			hw-exits-index = <1>;
+			using-i2c-amp;
+			ignore-startup-faults;
+			allow-auto-recovery;
+
+			sonos-ampfaults {
+				num-faults = <0x01>;
+				status = "okay";
+
+				ampfault@0 {
+					fault-gpio = <&gpio GPIOY_12 GPIO_ACTIVE_LOW>;
+					fault-flags = <IRQ_TYPE_EDGE_FALLING>;
+					fault-label = "Amp fault";
+				} ;
+			} ;
+
+		} ;
+
+		misc-gpio {
+			connect-button  = <&gpio GPIOX_2 GPIO_ACTIVE_LOW>;
+		};
+
+                simulated-buttons {
+			/* event-sources are offsets from EVTSOURCE_BUTTON_PLAYPAUSE, some generate an event for more than one source */
+                        join {
+                                event-sources = <3>;
+                        };
+                };
+
+                thermal-mgmt {
+                        AMP {
+				compatible = "seiko,s5851";
+                                fault-temperature = <100>;
+                                warn-temperature = <95>;
+                        };
+                        CPU {
+				compatible = "seiko,s5851";
+                                fault-temperature = <95>;
+                                warn-temperature = <91>;
+                        };
+                 };
+	} ;
+
+	micctl_gpio:sonos-gpio-micctl {
+		compatible = "sonos,gpio-mics";
+		micctl-gpio = <&gpio GPIOX_15 GPIO_ACTIVE_LOW>;
+	};
+
+	micctl@1 {
+		compatible = "sonos,micctl";
+		micctl-device = <&micctl_gpio>;
+	};
+
+	sonos-lla {
+		compatible = "sonos,alsa-lla";
+		status = "okay";
+	};
+
+	hrtimer-a113 {
+		compatible = "sonos,hrtimer-a113";
+		status = "okay";
+	};
+
+	aliases {
+		serial0 = &uart_AO;
+		serial1 = &uart_AO_B;
+		serial2 = &uart_B;
+		serial3 = &uart_A;
+		ethernet0 = &ethmac;
+	};
+
+	memory@00000000 {
+		device_type = "memory";
+		linux,usable-memory = <0x0 0x100000 0x0 0x3ff00000>;
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		/* global autoconfigured region for contiguous allocations */
+		ramoops@0x07400000 {
+			compatible = "ramoops";
+			reg = <0x0 0x07400000 0x0 0x00100000>;
+			record-size = <0x8000>;
+			console-size = <0x10000>;
+			ftrace-size = <0x2000>;
+			pmsg-size = <0x4000>;
+		};
+		secmon_reserved:linux,secmon {
+			compatible = "shared-dma-pool";
+			reusable;
+			size = <0x0 0x400000>;
+			alignment = <0x0 0x400000>;
+			alloc-ranges = <0x0 0x05000000 0x0 0x400000>;
+		};
+
+		secos_reserved:linux,secos {
+			status = "disable";
+			compatible = "amlogic, aml_secos_memory";
+			reg = <0x0 0x05300000 0x0 0x2000000>;
+			no-map;
+		};
+
+		ion_cma_reserved:linux,ion-dev {
+			compatible = "shared-dma-pool";
+			reusable;
+			size = <0x0 0x8000000>;
+			alignment = <0x0 0x400000>;
+			alloc-ranges = <0x0 0x33c00000 0x0 0x8000000>;
+		};
+
+		fb_reserved:linux,meson-fb {
+			//compatible = "amlogic, fb-memory";
+			//reg = <0x0 0x3e000000 0x0 0x1f00000>;
+			compatible = "shared-dma-pool";
+			reusable;
+			size = <0x0 0x2400000>;
+			alignment = <0x0 0x400000>;
+			alloc-ranges = <0x0 0x3bc00000 0x0 0x2400000>;
+		};
+	};
+
+	mtd_nand {
+		compatible = "amlogic, aml_mtd_nand";
+		dev_name = "mtdnand";
+		status = "disable";
+		reg = <0x0 0xFFE07800 0x0 0x200>;
+		interrupts = <	0 34 1 >;
+		pinctrl-names = "nand_rb_mod","nand_norb_mod", "nand_cs_only";
+		pinctrl-0 = <&all_nand_pins>;
+		pinctrl-1 = <&all_nand_pins>;
+		pinctrl-2 = <&nand_cs_pins>;
+		device_id = <0>;
+
+		/*fip/tpl configurations, must be same
+		 * with uboot if bl_mode was set as 1
+		 * bl_mode: 0 compact mode; 1 descrete mode
+		 * if bl_mode was set as 1, fip configeration will work
+		 */
+		bl_mode = <1>;
+		/*copy count of fip*/
+		fip_copies = <4>;
+		/*size of each fip copy */
+		fip_size = <0x200000>;
+		nand_clk_ctrl = <0xFFE07000>;
+		plat-names = "bootloader","nandnormal";
+		plat-num = <2>;
+		plat-part-0 = <&bootloader>;
+		plat-part-1 = <&nandnormal>;
+		bootloader: bootloader{
+			enable_pad ="ce0";
+			busy_pad = "rb0";
+			timming_mode = "mode5";
+			bch_mode = "bch8_1k";
+			t_rea = <20>;
+			t_rhoh = <15>;
+			chip_num = <1>;
+			part_num = <0>;
+			rb_detect = <1>;
+		};
+		nandnormal: nandnormal{
+			enable_pad ="ce0";
+			busy_pad = "rb0";
+			timming_mode = "mode5";
+			bch_mode = "bch8_1k";
+			plane_mode = "twoplane";
+			t_rea = <20>;
+			t_rhoh = <15>;
+			chip_num = <2>;
+			part_num = <3>;
+			partition = <&nand_partitions>;
+			rb_detect = <1>;
+		};
+		nand_partitions:nand_partition{
+			/*
+			 * if bl_mode is 1, tpl size was generate by
+			 * fip_copies * fip_size which
+			 * will not skip bad when calculating
+			 * the partition size;
+			 *
+			 * if bl_mode is 0,
+			 * tpl partition must be comment out.
+			 */
+			tpl{
+				offset=<0x0 0x0>;
+				size=<0x0 0x0>;
+			};
+			logo{
+				offset=<0x0 0x0>;
+				size=<0x0 0x200000>;
+			};
+			recovery{
+				offset=<0x0 0x0>;
+				size=<0x0 0x1000000>;
+			};
+			boot{
+				offset=<0x0 0x0>;
+				size=<0x0 0xC00000>;
+			};
+			system{
+				offset=<0x0 0x0>;
+				size=<0x0 0xDC40000>;
+			};
+			data{
+				offset=<0xffffffff 0xffffffff>;
+				size=<0x0 0x0>;
+			};
+		};
+	};
+
+	ethmac: ethernet@0xff3f0000 {
+			compatible = "amlogic, gxbb-eth-dwmac";
+			status = "okay";
+			reg = <0x0 0xff3f0000 0x0 0x10000
+			0x0 0xff634540 0x0 0x8>;
+			interrupts = <0 8 1>;
+			pinctrl-names = "external_eth_pins";
+			pinctrl-0 = <&external_eth_pins>;
+			mc_val_internal_phy = <0x1800>;
+			mc_val_external_phy = <0x1404>;
+			interrupt-names = "macirq";
+			clocks = <&clkc CLKID_ETH_CORE>;
+			clock-names = "ethclk81";
+			internal_phy=<0>;
+
+			phy0 {
+				compatible = "Sonos,ti83822_phy";
+				interrupts = <&gpio GPIOY_14 GPIO_ACTIVE_HIGH>;
+			};
+
+	};
+
+	aml_sensor0: aml-sensor@0 {
+		compatible = "amlogic, aml-thermal";
+		device_name = "thermal";
+		#thermal-sensor-cells = <1>;
+		cooling_devices {
+			cpufreq_cool_cluster0 {
+				min_state = <1000000>;
+				dyn_coeff = <140>;
+				cluster_id = <0>;
+				node_name = "cpufreq_cool0";
+				device_type = "cpufreq";
+			};
+			cpucore_cool_cluster0 {
+				min_state = <1>;
+				dyn_coeff = <0>;
+				cluster_id = <0>;
+				node_name = "cpucore_cool0";
+				device_type = "cpucore";
+			};
+		};
+		cpufreq_cool0:cpufreq_cool0 {
+			#cooling-cells = <2>; /* min followed by max */
+		};
+		cpucore_cool0:cpucore_cool0 {
+			#cooling-cells = <2>; /* min followed by max */
+		};
+	};
+	thermal-zones {
+		soc_thermal {
+			polling-delay = <1000>;
+			polling-delay-passive = <100>;
+			sustainable-power = <1050>;
+
+			thermal-sensors = <&aml_sensor0 3>;
+
+			trips {
+				switch_on: trip-point@0 {
+					temperature = <70000>;
+					hysteresis = <1000>;
+					type = "passive";
+				};
+				control: trip-point@1 {
+					temperature = <80000>;
+					hysteresis = <1000>;
+					type = "passive";
+				};
+				hot: trip-point@2 {
+					temperature = <105000>;
+					hysteresis = <5000>;
+					type = "hot";
+				};
+				critical: trip-point@3 {
+					temperature = <260000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				cpufreq_cooling_map {
+					trip = <&control>;
+					cooling-device = <&cpufreq_cool0 0 4>;
+					contribution = <1024>;
+				};
+				cpucore_cooling_map {
+					trip = <&control>;
+					cooling-device = <&cpucore_cool0 0 3>;
+					contribution = <1024>;
+				};
+			};
+		};
+	};
+
+	usb2_phy: usb2phy@ffe09000 {
+		compatible = "amlogic, amlogic-new-usb2";
+		status = "disabled";
+		portnum = <4>;
+		reg = <0x0 0xffe09000 0x0 0x80>;
+	};
+	usb3_phy: usb3phy@ffe09080 {
+		compatible = "amlogic, amlogic-new-usb3";
+		status = "disabled";
+		portnum = <0>;
+		reg = <0x0 0xffe09080 0x0 0x20>;
+		interrupts = <0 16 4>;
+		otg = <1>;
+		gpio-vbus-power = "GPIOAO_5";
+		gpios = <&gpio_ao GPIOAO_5 GPIO_ACTIVE_HIGH>;
+	};
+
+	dwc2_a {
+		compatible = "amlogic, dwc2";
+		device_name = "dwc2_a";
+		reg = <0x0 0xff400000 0x0 0x40000>;
+		status = "disabled";
+		interrupts = <0 31 4>;
+		pl-periph-id = <0>; /** lm name */
+		clock-src = "usb0"; /** clock src */
+		port-id = <0>;  /** ref to mach/usb.h */
+		port-type = <2>;        /** 0: otg, 1: host, 2: slave */
+		port-speed = <0>; /** 0: default, high, 1: full */
+		port-config = <0>; /** 0: default */
+		/*0:default,1:single,2:incr,3:incr4,4:incr8,5:incr16,6:disable*/
+		port-dma = <0>;
+		port-id-mode = <0>; /** 0: hardware, 1: sw_host, 2: sw_slave*/
+		usb-fifo = <728>;
+		cpu-type = "gxl";
+		/** 0: normal, 1: otg+dwc3 host only, 2: otg+dwc3 device only*/
+		controller-type = <3>;
+		phy-reg = <0xffe09000>;
+		phy-reg-size = <0xa0>;
+		clocks = <&clkc CLKID_USB_GENERAL
+			&clkc CLKID_USB1_TO_DDR
+			&clkc CLKID_USB1>;
+		clock-names = "usb_general",
+			"usb1",
+			"usb1_to_ddr";
+	};
+
+	pcie_A: pcieA@f9800000 {
+		compatible = "amlogic, amlogic-pcie", "snps,dw-pcie";
+		reg = <0x0 0xf9800000 0x0 0x400000
+				0x0 0xff646000 0x0 0x2000
+				0x0 0xf9f00000 0x0 0x100000
+				0x0 PCIE_PHY_REG 0x0 PCIE_PHY_SIZE
+				0x0 PCIE_RESET_REG 0x0 PCIE_RESET_SIZE>;
+		reg-names = "elbi", "cfg", "config", "phy", "reset";
+		reset-gpio = <&gpio GPIOX_20 GPIO_ACTIVE_HIGH>;
+		interrupts = <0 177 0>, <0 179 0>;
+		#interrupt-cells = <1>;
+		bus-range = <0x0 0xff>;
+		#address-cells = <3>;
+		#size-cells = <2>;
+		device_type = "pci";
+		ranges = <0x82000000 0 0 0x0 0xf9c00000 0 0x00300000>;
+			/* non-prefetchable memory */
+		num-lanes = <1>;
+		pcie-num = <1>;
+		speed-mod = <1>; /* gen1 */
+
+		clocks = <&clkc CLKID_USB_GENERAL
+				&clkc CLKID_PCIE_PLL
+				&clkc CLKID_MIPI_ENABLE_GATE
+				&clkc CLKID_MIPI_BANDGAP_GATE
+				&clkc CLKID_PCIE_A
+				&clkc CLKID_PCIE_CML_EN0>;
+		clock-names = "pcie_general",
+				"pcie_refpll",
+				"pcie_mipi_enable_gate",
+				"pcie_mipi_bandgap_gate",
+				"pcie",
+				"port";
+		/*reset-gpio-type 0:Shared pad(no reset)1:OD pad2:Normal pad*/
+		gpio-type = <2>;
+		status = "okay";
+	};
+
+	pcie_B: pcieB@fa000000 {
+		compatible = "amlogic, amlogic-pcie", "snps,dw-pcie";
+		reg = <0x0 0xfa000000 0x0 0x400000
+				0x0 0xff648000 0x0 0x2000
+				0x0 0xfa400000 0x0 0x100000
+				0x0 PCIE_PHY_REG 0x0 PCIE_PHY_SIZE
+				0x0 PCIE_RESET_REG 0x0 PCIE_RESET_SIZE>;
+		reg-names = "elbi", "cfg", "config", "phy", "reset";
+		reset-gpio = <&gpio GPIOZ_5 GPIO_ACTIVE_HIGH>;
+		interrupts = <0 167 0>, <0 169 0>;
+		#interrupt-cells = <1>;
+		bus-range = <0x0 0xff>;
+		#address-cells = <3>;
+		#size-cells = <2>;
+		device_type = "pci";
+		ranges = <0x81000000 0 0 0 0xfa500000 0x0 0x10000
+			/* downstream I/O */
+			0x82000000 0 0xfa510000 0x0 0xfa510000 0 0x002f0000>;
+			/* non-prefetchable memory */
+		num-lanes = <1>;
+		pcie-num = <2>;
+		speed-mod = <1>; /* gen1 */
+
+		clocks = <&clkc CLKID_USB_GENERAL
+			&clkc CLKID_PCIE_PLL
+			&clkc CLKID_MIPI_ENABLE_GATE
+			&clkc CLKID_MIPI_BANDGAP_GATE
+			&clkc CLKID_PCIE_B
+			&clkc CLKID_PCIE_CML_EN1>;
+		clock-names = "pcie_general",
+			"pcie_refpll",
+			"pcie_mipi_enable_gate",
+			"pcie_mipi_bandgap_gate",
+			"pcie",
+			"port";
+		/*reset-gpio-type 0:Shared pad(no reset)1:OD pad2:Normal pad*/
+		gpio-type = <2>;
+		status = "okay";
+	};
+
+	uart_A: serial@ffd24000 {
+		compatible = "amlogic, meson-uart";
+		reg = <0x0 0xffd24000 0x0 0x18>;
+		interrupts = <0 26 1>;
+		status = "disable";
+		clocks = <&xtal
+			&clkc CLKID_UART0>;
+		clock-names = "clk_uart",
+			"clk_gate";
+		fifosize = < 128 >;
+		pinctrl-names = "default";
+		pinctrl-0 = <&a_uart_pins>;
+	};
+
+	uart_B: serial@ffd23000 {
+		compatible = "amlogic, meson-uart";
+		reg = <0x0 0xffd23000 0x0 0x18>;
+		interrupts = <0 75 1>;
+		status = "disable";
+		clocks = <&xtal
+			&clkc CLKID_UART1>;
+		clock-names = "clk_uart",
+			"clk_gate";
+		fifosize = < 64 >;
+		pinctrl-names = "default";
+		pinctrl-0 = <&b_uart_pins>;
+	};
+
+	vpu {
+		compatible = "amlogic, vpu-axg";
+		dev_name = "vpu";
+		status = "okay";
+		clocks = <&clkc CLKID_VAPB_MUX>,
+			<&clkc CLKID_VPU_INTR>,
+			<&clkc CLKID_VPU_P0_COMP>,
+			<&clkc CLKID_VPU_P1_COMP>,
+			<&clkc CLKID_VPU_MUX>;
+		clock-names = "vapb_clk",
+			"vpu_intr_gate",
+			"vpu_clk0",
+			"vpu_clk1",
+			"vpu_clk";
+		clk_level = <3>;
+		/* 0: 100.0M    1: 166.7M    2: 200.0M    3: 250.0M */
+	};
+
+	vout {
+		compatible = "amlogic, vout";
+		dev_name = "vout";
+		status = "okay";
+	};
+
+	/* Audio Related start */
+	/* Sound iomap */
+
+	aml_snd_iomap {
+		compatible = "amlogic, snd-iomap";
+		status = "okay";
+		#address-cells=<2>;
+		#size-cells=<2>;
+		ranges;
+		pdm_bus {
+			reg = <0x0 0xFF632000 0x0 0x2000>;
+		};
+		audiobus_base {
+			reg = <0x0 0xFF642000 0x0 0x2000>;
+		};
+		audiolocker_base {
+			reg = <0x0 0xFF64A000 0x0 0x2000>;
+		};
+	};
+	pdm_codec:dummy{
+		#sound-dai-cells = <0>;
+		compatible = "amlogic, pdm_dummy_codec";
+		status = "okay";
+	};
+	dummy_codec:dummy{
+		#sound-dai-cells = <0>;
+		compatible = "amlogic, aml_dummy_codec";
+		status = "okay";
+	};
+	sonos_dummy_codec_dac: dac_dummy_codec {
+		#sound-dai-cells = <0>;
+		compatible = "Sonos,dummy-codec";
+		stream-name = "Sonos DAC playback stream";
+		rate = <44100>; /* We use 44.1 KHz as the audio output rate */
+		format = "S32_LE"; /* We use signed 24-bit little endian samples in a 32-bit word */
+		channels = <12>; /* Number of playback channels on Apollo is 12 */
+		status = "okay";
+	};
+	sonos_dummy_codec_pdm: pdm_dummy_codec {
+		#sound-dai-cells = <0>;
+		compatible = "Sonos,dummy-codec";
+		stream-name = "Sonos PDM mic capture stream";
+		rate = <16000>; /* We use 16 KHz as the audio input rate. May be changed after consulting SMAV team */
+		format = "S32_LE"; /* We use signed 24-bit little endian samples in 32-bit words */
+		channels = <8>; /* Number of capture channels on Apollo is 8 */
+		capture; /* Set the stream direction to capture. Note: Deafult without this boolean flag is playback */
+		status = "okay";
+	};
+
+	auge_sound {
+		compatible = "amlogic, axg-sound-card";
+		aml-audio-card,name = "AML-AUGESOUND";
+
+		aml-audio-card,dai-link@2 {
+			format = "dsp_b";
+			mclk-fs = <256>;
+			continuous-clock;
+			bitclock-inversion;
+			//frame-inversion;
+			bitclock-master = <&aml_tdmc>;
+			frame-master = <&aml_tdmc>;
+			cpu {
+				sound-dai = <&aml_tdmc>;
+				dai-tdm-slot-tx-mask = <1 1 1 1>;
+				dai-tdm-slot-rx-mask = <0 0 0 0>;
+				dai-tdm-slot-num = <4>;
+				dai-tdm-slot-width = <32>;
+			};
+			codec {
+				prefix-names = "Sonos TDM out";
+				sound-dai = <&sonos_dummy_codec_dac>;
+			};
+		};
+
+		aml-audio-card,dai-link@3 {
+			mclk-fs = <256>;
+			cpu {
+				sound-dai = <&aml_pdm>;
+			};
+			codec {
+				prefix-names = "Sonos PDM in";
+				sound-dai = <&sonos_dummy_codec_pdm>;
+			};
+		};
+	};
+	sd_emmc_c: emmc@ffe07000 {
+		status = "okay";
+		compatible = "amlogic, meson-mmc-axg";
+		reg = <0x0 0xffe07000 0x0 0x2000>;
+		interrupts = <0 218 1>;
+		pinctrl-names = "emmc_clk_cmd_pins", "emmc_all_pins";
+		pinctrl-0 = <&emmc_clk_cmd_pins>;
+		pinctrl-1 = <&emmc_conf_pull_up &emmc_conf_pull_done>;
+		clocks = <&clkc CLKID_SD_EMMC_C>,
+			   <&clkc CLKID_SD_EMMC_C_P0_COMP>,
+			   <&clkc CLKID_FCLK_DIV2>,
+			   <&clkc CLKID_FCLK_DIV5>,
+			   <&xtal>;
+		clock-names = "core", "clkin0", "clkin1", "clkin2", "xtal";
+
+		bus-width = <8>;
+		cap-sd-highspeed;
+		cap-mmc-highspeed;
+		mmc-ddr-1_8v;
+		mmc-hs200-1_8v;
+
+		max-frequency = <200000000>;
+		non-removable;
+		disable-wp;
+		emmc {
+			status = "disable";
+			pinname = "emmc";
+			ocr_avail = <0x200080>; /**VDD voltage 3.3 ~ 3.4 */
+			caps = "MMC_CAP_8_BIT_DATA",
+				 "MMC_CAP_MMC_HIGHSPEED",
+				 "MMC_CAP_SD_HIGHSPEED",
+				 "MMC_CAP_NONREMOVABLE",
+				 "MMC_CAP_1_8V_DDR",
+				 "MMC_CAP_HW_RESET",
+				 "MMC_CAP_ERASE",
+				 "MMC_CAP_CMD23";
+			f_min = <400000>;
+			f_max = <200000000>;
+			max_req_size = <0x20000>; /**128KB*/
+			gpio_dat3 = <&gpio BOOT_3 GPIO_ACTIVE_HIGH>;
+			tx_delay = <8>;
+			hw_reset = <&gpio BOOT_9 GPIO_ACTIVE_HIGH>;
+			card_type = <1>;
+			/* 1:mmc card(include eMMC),
+			 * 2:sd card(include tSD)
+			 */
+		};
+	};
+
+	ion_dev {
+		compatible = "amlogic, ion_dev";
+		memory-region = <&ion_cma_reserved>;
+	};/*V end of ion_dev*/
+
+	ionvideo {
+		compatible = "amlogic, ionvideo";
+		dev_name = "ionvideo";
+		status = "okay";
+	};
+
+	meson-fb {
+		compatible = "amlogic, meson-axg";
+		memory-region = <&fb_reserved>;
+		dev_name = "meson-fb";
+		status = "okay";
+		interrupts = <0 3 1
+			0 89 1>;
+		interrupt-names = "viu-vsync", "rdma";
+		mem_size = <0x0 0x1800000 0x00100000>;
+		/* uboot logo,fb0/fb1 memory size */
+		display_mode_default = "1080p60hz";
+		scale_mode = <0>;
+		/** 0:VPU free scale 1:OSD free scale 2:OSD super scale */
+		display_size_default = <1920 1080 1920 3240 32>;
+		/*768*1024*4*2 = 0x600000*/
+		mem_alloc = <1>;
+		logo_addr = "0x3bc00000";
+		pxp_mode = <0>; /** 0:normal mode 1:pxp mode */
+	};
+
+	ge2d {
+		compatible = "amlogic, ge2d-axg";
+		dev_name = "ge2d";
+		status = "okay";
+		interrupts = <0 150 1>;
+		interrupt-names = "ge2d";
+		clocks = <&clkc CLKID_VAPB_MUX>,
+			<&clkc CLKID_G2D>,
+			<&clkc CLKID_GE2D_GATE>;
+		clock-names = "clk_vapb_0",
+			"clk_ge2d",
+			"clk_ge2d_gate";
+		reg = <0x0 0xff940000 0x0 0x10000>;
+	};
+}; /* end of / */
+
+&i2c1 {
+	status = "okay";
+	pinctrl-names="default";
+	pinctrl-0=<&b_i2c_master_pin1>;
+
+	s5851@0 {       // CPU thermal sensor
+		compatible = "seiko,s5851";
+		reg = <0x48>;
+		device_type = "CPU";
+	};
+
+	ad7535@0x39 {
+		compatible = "amlogic, bl_extern_i2c";
+		reg = <0x39>;
+		dev_name="bl_extern_i2c_ad7535";
+	};
+};
+
+&i2c2 {
+	status = "okay";
+	pinctrl-names="default";
+	pinctrl-0=<&c_i2c_master>;
+
+	s5851@1 {       // Amp thermal sensor
+		compatible = "seiko,s5851";
+		reg = <0x49>;
+		device_type = "AMP";
+	};
+
+	amp3: tas5825@4c {
+		compatible = "ti,tas5825";
+		reg = <0x4c>;
+		dev-id = <0x3>;
+		first-amp-devid = <3>;
+		shared-reset;
+		mask-clock-faults;
+		reset-gpio = <&gpio GPIOY_13 GPIO_ACTIVE_LOW>;
+		number-init-stages = <2>;
+		init-sequence-length1 = <2>;
+		reg-init1 = <0x6a 0x03 0x03 0x02>;
+		init-sequence-length2 = <146>;
+		reg-init2 = <0x00 0x00 0x7f 0x00 0x03 0x02 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+			0x00 0x00 0x7f 0x00 0x7d 0x11 0x7e 0xff 0x00 0x01 0x51 0x05 0x00 0x02 0x19 0xa0 0x1d 0x01
+			0x00 0x00 0x7f 0x00 0x46 0x01 0x00 0x00 0x60 0x01 0x61 0x0b 0x7f 0x00 0x03 0x0f 0x00 0x00 0x00 0x00 0x00 0x00
+			0x00 0x00 0x7f 0x8c 0x00 0x06 0x38 0x00 0x39 0x00 0x3a 0x04 0x3b 0x00 0x00 0x0b 0x50 0x00 0x51 0x20 0x52 0xc4
+		       	0x53 0x9c 0x5c 0x7f 0x5d 0xff 0x5e 0xff 0x5f 0xff
+			0x00 0x00 0x7f 0x8c 0x00 0x01 0x28 0x40 0x29 0x00 0x2a 0x00 0x2b 0x00 0x00 0x0a 0x64 0x00 0x65 0x80 0x66 0x00
+		       	0x67 0x00 0x68 0x00 0x69 0x00 0x6a 0x00 0x6b 0x00 0x6c 0x00 0x6d 0x00 0x6e 0x00 0x6f 0x00 0x70 0x00 0x71 0x80
+		       	0x72 0x00 0x73 0x00 0x74 0x00 0x75 0x80 0x76 0x00 0x77 0x00 0x78 0x00 0x79 0x00 0x7a 0x00 0x7b 0x00 0x7c 0x00
+		       	0x7d 0x00 0x7e 0x00 0x7f 0x00 0x00 0x0b 0x08 0x00 0x09 0x80 0x0a 0x00 0x0b 0x00 0x38 0x22 0x39 0x94 0x3a 0xDC
+		       	0x3b 0xBB 0x3c 0x22 0x3d 0x94 0x3e 0xDC 0x3f 0xBB 0x48 0x05 0x49 0x91 0x4a 0x06 0x4b 0x12 0x4c 0x00 0x4d 0x03
+		       	0x4e 0xB7 0x4f 0x17 0x54 0x7a 0x55 0x6E 0x56 0xF9 0x57 0xEE 0x58 0x00 0x59 0x00 0x5a 0x5F 0x5b 0x1C 0x60 0x08
+		       	0x61 0x13 0x62 0x85 0x63 0x62 0x64 0x00 0x65 0x80 0x66 0x00 0x67 0x00 0x6c 0x00 0x6d 0x78 0x6e 0xd6 0x6f 0xfd
+		       	0x70 0x00 0x71 0x08 0x72 0x13 0x73 0x85 0x00 0x00 0x7f 0x00 0x30 0x00 0x4c 0x30 0x02 0x02 0x03 0x0a 0x28 0x78
+		       	0x33 0x17 0x34 0x00 0x50 0x00 0x53 0x00 0x54 0x04 0x3A 0xF8 0x6B 0x00 0x6C 0x00 0x75 0x38 0x77 0x00 0x29 0x00
+			0x00 0x00 0x7f 0x00 0x78 0x80 0x03 0xa >;
+		status = "okay";
+	};
+	amp4: tas5825@4d {
+		compatible = "ti,tas5825";
+		reg = <0x4d>;
+		dev-id = <0x4>;
+		shared-reset;
+		mask-clock-faults;
+		reset-gpio = <&gpio GPIOY_13 GPIO_ACTIVE_LOW>;
+		number-init-stages = <2>;
+		init-sequence-length1 = <2>;
+		reg-init1 = <0x6a 0x07 0x03 0x02>;
+		init-sequence-length2 = <146>;
+		reg-init2 = <0x00 0x00 0x7f 0x00 0x03 0x02 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+			0x00 0x00 0x7f 0x00 0x7d 0x11 0x7e 0xff 0x00 0x01 0x51 0x05 0x00 0x02 0x19 0xa0 0x1d 0x01
+			0x00 0x00 0x7f 0x00 0x46 0x01 0x00 0x00 0x60 0x01 0x61 0x0b 0x7f 0x00 0x03 0x0f 0x00 0x00 0x00 0x00 0x00 0x00
+			0x00 0x00 0x7f 0x8c 0x00 0x06 0x38 0x00 0x39 0x00 0x3a 0x04 0x3b 0x00 0x00 0x0b 0x50 0x00 0x51 0x20 0x52 0xc4
+		       	0x53 0x9c 0x5c 0x7f 0x5d 0xff 0x5e 0xff 0x5f 0xff
+			0x00 0x00 0x7f 0x8c 0x00 0x01 0x28 0x40 0x29 0x00 0x2a 0x00 0x2b 0x00 0x00 0x0a 0x64 0x00 0x65 0x80 0x66 0x00
+		       	0x67 0x00 0x68 0x00 0x69 0x00 0x6a 0x00 0x6b 0x00 0x6c 0x00 0x6d 0x00 0x6e 0x00 0x6f 0x00 0x70 0x00 0x71 0x80
+		       	0x72 0x00 0x73 0x00 0x74 0x00 0x75 0x80 0x76 0x00 0x77 0x00 0x78 0x00 0x79 0x00 0x7a 0x00 0x7b 0x00 0x7c 0x00
+		       	0x7d 0x00 0x7e 0x00 0x7f 0x00 0x00 0x0b 0x08 0x00 0x09 0x80 0x0a 0x00 0x0b 0x00 0x38 0x22 0x39 0x94 0x3a 0xDC
+		       	0x3b 0xBB 0x3c 0x22 0x3d 0x94 0x3e 0xDC 0x3f 0xBB 0x48 0x05 0x49 0x91 0x4a 0x06 0x4b 0x12 0x4c 0x00 0x4d 0x03
+		       	0x4e 0xB7 0x4f 0x17 0x54 0x7a 0x55 0x6E 0x56 0xF9 0x57 0xEE 0x58 0x00 0x59 0x00 0x5a 0x5F 0x5b 0x1C 0x60 0x08
+		       	0x61 0x13 0x62 0x85 0x63 0x62 0x64 0x00 0x65 0x80 0x66 0x00 0x67 0x00 0x6c 0x00 0x6d 0x78 0x6e 0xd6 0x6f 0xfd
+		       	0x70 0x00 0x71 0x08 0x72 0x13 0x73 0x85 0x00 0x00 0x7f 0x00 0x30 0x00 0x4c 0x30 0x02 0x02 0x03 0x0a 0x28 0x78
+		       	0x33 0x17 0x34 0x40 0x50 0x00 0x53 0x00 0x54 0x04 0x3A 0xF8 0x6B 0x00 0x6C 0x00 0x75 0x38 0x77 0x00 0x29 0x00
+			0x00 0x00 0x7f 0x00 0x78 0x80 0x03 0xa >;
+		status = "okay";
+	};
+	amp5: tas5825@4e { // tweeter + woofer
+		compatible = "ti,tas5825";
+		reg = <0x4e>;
+		dev-id = <0x5>;
+		shared-reset;
+		mask-clock-faults;
+		reset-gpio = <&gpio GPIOY_13 GPIO_ACTIVE_LOW>;
+		number-init-stages = <2>;
+		init-sequence-length1 = <2>;
+		reg-init1 = <0x6a 0x0b 0x03 0x02>;
+		init-sequence-length2 = <146>;
+		reg-init2 = <0x00 0x00 0x7f 0x00 0x03 0x02 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+			0x00 0x00 0x7f 0x00 0x7d 0x11 0x7e 0xff 0x00 0x01 0x51 0x05 0x00 0x02 0x19 0xa0 0x1d 0x01
+			0x00 0x00 0x7f 0x00 0x46 0x01 0x00 0x00 0x60 0x01 0x61 0x0b 0x7f 0x00 0x03 0x0f 0x00 0x00 0x00 0x00 0x00 0x00
+			0x00 0x00 0x7f 0x8c 0x00 0x06 0x38 0x00 0x39 0x00 0x3a 0x04 0x3b 0x00 0x00 0x0b 0x50 0x00 0x51 0x20 0x52 0xc4
+		       	0x53 0x9c 0x5c 0x7f 0x5d 0xff 0x5e 0xff 0x5f 0xff
+			0x00 0x00 0x7f 0x8c 0x00 0x01 0x28 0x40 0x29 0x00 0x2a 0x00 0x2b 0x00 0x00 0x0a 0x64 0x00 0x65 0x80 0x66 0x00
+		       	0x67 0x00 0x68 0x00 0x69 0x00 0x6a 0x00 0x6b 0x00 0x6c 0x00 0x6d 0x00 0x6e 0x00 0x6f 0x00 0x70 0x00 0x71 0x80
+		       	0x72 0x00 0x73 0x00 0x74 0x00 0x75 0x80 0x76 0x00 0x77 0x00 0x78 0x00 0x79 0x00 0x7a 0x00 0x7b 0x00 0x7c 0x00
+		       	0x7d 0x00 0x7e 0x00 0x7f 0x00 0x00 0x0b 0x08 0x00 0x09 0x80 0x0a 0x00 0x0b 0x00 0x38 0x22 0x39 0x94 0x3a 0xDC
+		       	0x3b 0xBB 0x3c 0x22 0x3d 0x94 0x3e 0xDC 0x3f 0xBB 0x48 0x05 0x49 0x91 0x4a 0x06 0x4b 0x12 0x4c 0x00 0x4d 0x03
+		       	0x4e 0xB7 0x4f 0x17 0x54 0x7a 0x55 0x6E 0x56 0xF9 0x57 0xEE 0x58 0x00 0x59 0x00 0x5a 0x5F 0x5b 0x1C 0x60 0x08
+		       	0x61 0x13 0x62 0x85 0x63 0x62 0x64 0x00 0x65 0x80 0x66 0x00 0x67 0x00 0x6c 0x00 0x6d 0x78 0x6e 0xd6 0x6f 0xfd
+		       	0x70 0x00 0x71 0x08 0x72 0x13 0x73 0x85 0x00 0x00 0x7f 0x00 0x30 0x00 0x4c 0x30 0x02 0x02 0x03 0x0a 0x28 0x78
+		       	0x33 0x17 0x34 0x00 0x50 0x00 0x53 0x00 0x54 0x04 0x3A 0xF8 0x6B 0x00 0x6C 0x00 0x75 0x38 0x77 0x00 0x29 0x00
+			0x00 0x00 0x7f 0x00 0x78 0x80 0x03 0xa >;
+		status = "okay";
+	};
+	amp6: tas5825@4f { // woofer
+		compatible = "ti,tas5825";
+		reg = <0x4f>;
+		dev-id = <0x6>;
+		shared-reset;
+		mask-clock-faults;
+		reset-gpio = <&gpio GPIOY_13 GPIO_ACTIVE_LOW>;
+		number-init-stages = <2>;
+		init-sequence-length1 = <2>;
+		reg-init1 = <0x6a 0x0f 0x03 0x02>;
+		init-sequence-length2 = <146>;
+		reg-init2 = <0x00 0x00 0x7f 0x00 0x03 0x02 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+			0x00 0x00 0x7f 0x00 0x7d 0x11 0x7e 0xff 0x00 0x01 0x51 0x05 0x00 0x02 0x19 0xa0 0x1d 0x01
+			0x00 0x00 0x7f 0x00 0x46 0x01 0x00 0x00 0x60 0x01 0x61 0x0b 0x7f 0x00 0x03 0x0f 0x00 0x00 0x00 0x00 0x00 0x00
+			0x00 0x00 0x7f 0x8c 0x00 0x06 0x38 0x00 0x39 0x00 0x3a 0x04 0x3b 0x00 0x00 0x0b 0x50 0x00 0x51 0x20 0x52 0xc4
+		       	0x53 0x9c 0x5c 0x7f 0x5d 0xff 0x5e 0xff 0x5f 0xff
+			0x00 0x00 0x7f 0x8c 0x00 0x01 0x28 0x40 0x29 0x00 0x2a 0x00 0x2b 0x00 0x00 0x0a 0x64 0x00 0x65 0x80 0x66 0x00
+		       	0x67 0x00 0x68 0x00 0x69 0x00 0x6a 0x00 0x6b 0x00 0x6c 0x00 0x6d 0x00 0x6e 0x00 0x6f 0x00 0x70 0x00 0x71 0x80
+		       	0x72 0x00 0x73 0x00 0x74 0x00 0x75 0x80 0x76 0x00 0x77 0x00 0x78 0x00 0x79 0x00 0x7a 0x00 0x7b 0x00 0x7c 0x00
+		       	0x7d 0x00 0x7e 0x00 0x7f 0x00 0x00 0x0b 0x08 0x00 0x09 0x80 0x0a 0x00 0x0b 0x00 0x38 0x22 0x39 0x94 0x3a 0xDC
+		       	0x3b 0xBB 0x3c 0x22 0x3d 0x94 0x3e 0xDC 0x3f 0xBB 0x48 0x05 0x49 0x91 0x4a 0x06 0x4b 0x12 0x4c 0x00 0x4d 0x03
+		       	0x4e 0xB7 0x4f 0x17 0x54 0x7a 0x55 0x6E 0x56 0xF9 0x57 0xEE 0x58 0x00 0x59 0x00 0x5a 0x5F 0x5b 0x1C 0x60 0x08
+		       	0x61 0x13 0x62 0x85 0x63 0x62 0x64 0x00 0x65 0x80 0x66 0x00 0x67 0x00 0x6c 0x00 0x6d 0x78 0x6e 0xd6 0x6f 0xfd
+		       	0x70 0x00 0x71 0x08 0x72 0x13 0x73 0x85 0x00 0x00 0x7f 0x00 0x30 0x00 0x4c 0x30 0x02 0x02 0x03 0x0a 0x28 0x78
+		       	0x33 0x17 0x34 0x40 0x50 0x00 0x53 0x00 0x54 0x04 0x3A 0xF8 0x6B 0x00 0x6C 0x00 0x75 0x38 0x77 0x00 0x29 0x00
+			0x00 0x00 0x7f 0x00 0x78 0x80 0x03 0xa >;
+		status = "okay";
+	};
+
+};
+
+&i2c3 {
+	status = "okay";
+	pinctrl-names="default";
+	pinctrl-0=<&d_i2c_master_pin2>;
+
+	pcm1684_0: pcm1684_0@0x4a {
+		 compatible = "ti,pcm1864";
+		 #sound-dai-cells = <0>;
+		 reg = <0x4a>;
+		 status = "okay";
+	};
+	pcm1684_1: pcm1684_1@0x4b {
+		 compatible = "ti,pcm1864";
+		 #sound-dai-cells = <0>;
+		 reg = <0x4b>;
+		 status = "okay";
+	};
+};
+
+/* for mic board */
+&i2c_AO {
+	status = "okay";
+	pinctrl-names="default";
+	pinctrl-0=<&ao_i2c_master_pin2>;
+
+	apple_auth@0 {
+		compatible = "Sonos,apple_auth";
+		reg = <0x11>;
+		reset-gpio = <&gpio GPIOX_8 GPIO_ACTIVE_HIGH>;
+	};
+
+	lp5562@0 {      // LED controller
+		compatible = "ti,lp5562";
+		reg = <0x30>;
+	};
+
+	sge@0 {  // Sigdetail Gesture Engine
+		compatible = "Sonos,sge-psoc4";
+		pinctrl-names = "mode-uart-hiz", "mode-flow-ctrl";
+		pinctrl-0 = <>;
+		pinctrl-1 = <&ao_b_uart_pins>;
+		reg = <0x40>;
+		gpio-addr = <0xff634400 0x130 0x4c 0x0 0x50 0x4c 0x0 0x50>;
+		gpio-params = "base-addr", "len", "io-set", "io-clr", "io-din", "scl-set", "scl-clr", "scl-din";
+		scl-bitmask =  <0x000008>;
+		io-bitmask  =  <0x000020>;
+		xres-gpio = <&gpio GPIOX_9 GPIO_ACTIVE_HIGH>;
+		// Note: The values for IO and SCL are overridden by sdd-a113.c
+		io-gpio   = <&gpio GPIOX_5 GPIO_ACTIVE_HIGH>;
+		scl-gpio  = <&gpio GPIOX_3 GPIO_ACTIVE_HIGH>;
+		irq-gpio  = <&gpio GPIOX_0 GPIO_ACTIVE_HIGH>;
+		zonea = "vol1";
+		zoneb = "pp";
+		zonec = "vol2";
+		zonem = "mic";
+		finger-threshold = <33>;
+		noise-threshold = <12>;
+		hysteresis = <4>;
+		share-swd-uart = <0>;
+		psoc-rtc = <0>;
+		status = "okay";
+
+		psoc-images {
+			image@0 {
+				model-num = <4247>;
+				ident = <0xa1>;
+				flash-rows = <1024>;
+				flash-row-size = <128>;
+				flash-protection-size = <128>;
+			};
+			image@1 {
+				model-num = <4247>;
+				ident = <0xa2>;
+				flash-rows = <1024>;
+				flash-row-size = <128>;
+				flash-protection-size = <128>;
+			};
+		};
+	};
+};
+
+&audiobus {
+
+	aml_tdmc: tdmc {
+		compatible = "amlogic, axg-snd-tdmc";
+		#sound-dai-cells = <0>;
+		dai-tdm-lane-slot-mask-in = <0 0 0 0>;
+		dai-tdm-lane-slot-mask-out = <1 1 1 0>;
+		dai-tdm-clk-sel = <2>;
+		clocks = <&clkaudio CLKID_AUDIO_MCLK_C
+				&clkc CLKID_MPLL2>;
+		clock-names = "mclk", "clk_srcpll";
+		pinctrl-names = "tdm_pins";
+		pinctrl-0 = <&tdmc_mclk &tdmout_c>;
+	};
+/*
+	aml_spdif: spdif {
+		compatible = "amlogic, axg-snd-spdif";
+		#sound-dai-cells = <0>;
+		spdif_from_ddr = <0>;
+		spdif_to_ddr = <0>;
+		clocks = <&clkc CLKID_MPLL0
+				&clkc CLKID_FCLK_DIV4
+				&clkaudio CLKID_AUDIO_SPDIFIN
+				&clkaudio CLKID_AUDIO_SPDIFOUT
+				&clkaudio CLKID_AUDIO_SPDIFIN_CTRL
+				&clkaudio CLKID_AUDIO_SPDIFOUT_CTRL>;
+		clock-names = "sysclk", "fixed_clk", "gate_spdifin",
+				"gate_spdifout", "clk_spdifin", "clk_spdifout";
+		interrupts =
+				<GIC_SPI 87 IRQ_TYPE_EDGE_RISING
+				GIC_SPI 84 IRQ_TYPE_EDGE_RISING
+				GIC_SPI 88 IRQ_TYPE_EDGE_RISING>;
+
+		interrupt-names = "irq_spdifin", "irq_toddr", "irq_frddr";
+		pinctrl-names = "spdif_pins";
+		pinctrl-0 = <&spdifout &spdifin>;
+		status = "disabled";
+	};
+*/
+
+	aml_pdm: pdm {
+		compatible = "amlogic, axg-snd-pdm";
+		#sound-dai-cells = <0>;
+		clocks = <&clkaudio CLKID_AUDIO_PDM
+			&clkc CLKID_FCLK_DIV3
+			&clkc CLKID_MPLL3
+			&clkaudio CLKID_AUDIO_PDMIN0
+			&clkaudio CLKID_AUDIO_PDMIN1>;
+		clock-names = "gate",
+			"sysclk_srcpll",
+			"dclk_srcpll",
+			"pdm_dclk",
+			"pdm_sysclk";
+		pinctrl-names = "pdm_pins";
+		pinctrl-0 = <&pdmin>;
+		filter_mode = <1>; /* mode 0~4, defalut:1 */
+		status = "okay";
+	};
+}; /* end of audiobus */
+
+&pinctrl_periphs {
+	tdmout_a: tdmout_a {
+		mux {
+			groups = "tdma_sclk",
+				"tdma_fs";
+			function = "tdma_out";
+		};
+	};
+
+	tdmout_a_data: tdmout_a_data {
+		mux {
+			groups = "tdma_dout1_x15";
+			function = "tdma_out";
+		};
+	};
+
+	tdmin_a: tdmin_a {
+		mux {
+			groups = "tdma_din0";
+			function = "tdma_in";
+		};
+	};
+
+	tdmb_mclk: tdmb_mclk {
+		mux {
+			groups = "mclk_b";
+			function = "mclk_b";
+		};
+	};
+
+	tdmout_b: tdmout_b {
+		mux {
+			groups = "tdmb_sclk",
+				"tdmb_fs";
+			function = "tdmb_out";
+		};
+	};
+	// tdmin and tdmout are the same pins. can't use at same time
+
+	tdmin_b:tdmin_b {
+		mux {
+			groups = "tdmb_din0",
+				"tdmb_din1",
+				"tdmb_din2_a12",
+				"tdmb_din3_a13";
+			function = "tdmb_in";
+		};
+	};
+
+	tdmc_mclk: tdmc_mclk {
+		mux {
+			groups = "mclk_a";
+			function = "mclk_a";
+		};
+	};
+
+	tdmout_c:tdmout_c {
+		mux {
+			groups = "tdmc_sclk",
+				"tdmc_fs",
+				"tdmc_dout0",
+				"tdmc_dout1",
+				"tdmc_dout2_a6";
+			function = "tdmc_out";
+		};
+	};
+
+	tdmin_c:tdmin_c {
+		mux {
+			groups = "tdmc_din1";
+			function = "tdmc_in";
+		};
+	};
+
+	pdmin: pdmin {
+		mux {
+			groups = "pdm_dclk_a14",
+				"pdm_din0",
+				"pdm_din1",
+				"pdm_din2",
+				"pdm_din3";
+			function = "pdm";
+		};
+	};
+
+	bl_pwm_on_pins: bl_pwm_on_pin {
+		mux {
+			groups = "pwm_b_z";
+			function = "pwm_b";
+		};
+	};
+}; /* end of pinctrl_periphs */
+/* Audio Related End */
+
+&aobus{
+	uart_AO: serial@3000 {
+		compatible = "amlogic, meson-uart";
+		reg = <0x0 0x3000 0x0 0x18>;
+		interrupts = <0 193 1>;
+		status = "okay";
+		clocks = <&xtal>;
+		clock-names = "clk_uart";
+		xtal_tick_en = <1>;
+		fifosize = < 64 >;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ao_uart_pins>;
+		support-sysrq = <1>;	/* 0 not support , 1 support */
+	};
+
+	uart_AO_B: serial@4000 {
+		compatible = "amlogic, meson-uart";
+		reg = <0x0 0x4000 0x0 0x18>;
+		interrupts = <0 197 1>;
+		status = "okay";
+		clocks = <&xtal>;
+		clock-names = "clk_uart";
+		fifosize = < 64 >;
+		pinctrl-names = "default";
+		pinctrl-0 = <>;
+	};
+};
+
+&audio_data{
+	status = "okay";
+};

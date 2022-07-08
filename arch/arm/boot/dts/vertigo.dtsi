@@ -1,0 +1,206 @@
+/*
+ * Copyright (c) 2019-2021, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+#include "sonos_imx6sx_common.dtsi"
+
+/ {
+	sonos-platform {
+		/* Sonos platform specific values for shared driver source & binaries */
+		sonos-ampctl {
+			status = "okay";
+
+			sonos-ampfaults {
+				num-faults = <0x03>;
+				status = "okay";
+
+				ampfault@0 {
+					fault-gpio = <&gpio6 10 0>;
+					fault-label = "Amp Clipping fault";
+					fault-flags = <IRQ_TYPE_EDGE_FALLING>;
+				} ;
+				ampfault@1 {
+					fault-gpio = <&gpio6 8 0>;
+					fault-label = "Amp Shutdown fault";
+					fault-flags = <IRQ_TYPE_EDGE_FALLING>;
+				} ;
+				ampfault@2 {
+					fault-gpio = <&gpio6 9 0>;
+					fault-label = "Amp Overtemperature fault";
+					fault-flags = <IRQ_TYPE_EDGE_FALLING>;
+				} ;
+			} ;
+			sonos-ampctl-signals {
+				num-ctl-signals = <3>;
+				sonos-ampsignal@0 {		// DACRESET
+					config = <1>;
+					on-time = <10>;
+					off-time = <10>;
+					supports-off = <1>;
+					active-low = <1>;
+					sig-gpio = <&gpio4 23 0>;
+				} ;
+				sonos-ampsignal@1 {		// POWER
+					on-time = <25>;
+					off-time = <0>;
+					supports-off = <1>;
+					sig-gpio = <&gpio7 1 0>;
+				} ;
+				sonos-ampsignal@2 {		// AMP MUTE
+					config = <1>;
+					on-time = <0>;
+					off-time = <25>;
+					supports-off = <1>;
+					active-low = <1>;
+					sig-gpio = <&gpio7 0 0>;
+				} ;
+			} ;
+		} ;
+		misc-gpio {
+			connect-button  = <&gpio7 3 0>;
+		};
+
+		simulated-buttons {
+			/* event-sources are offsets from EVTSOURCE_BUTTON_PLAYPAUSE, some generate an event for more than one source */
+			join {
+				event-sources = <3>;
+			};
+		};
+
+		thermal-mgmt {
+			CPU {
+				compatible = "seiko,s5851";
+				fault-temperature = <80>;
+				warn-temperature = <77>;
+			};
+		};
+	};
+
+	psmon {
+		compatible = "sonos,psmon";
+		psmon-gpio = <&gpio6 11 0>;
+		trigger-edge = <IRQ_TYPE_EDGE_RISING>;
+		2g-shutdown-gpio = <&gpio2 18 0>;
+	};
+
+	sonos_dummy_codec_dac: dac_dummy_codec {
+		#sound-dai-cells = <0>;
+		compatible = "Sonos,dummy-codec";
+		stream-name = "sonos.dac";
+		rate = <44100>; /* We use 44.1 KHz as the audio output rate */
+		format = "S32_LE"; /* We use signed 24-bit little endian samples in a 32-bit word */
+		channels = <2>;
+		status = "okay";
+	};
+
+	sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "DAC";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,bitclock-master = <&esai_out>;
+		simple-audio-card,frame-master = <&esai_out>;
+		simple-audio-card,mclk-fs = <256>;
+
+		esai_out: simple-audio-card,cpu {
+			sound-dai = <&esai>;
+			clocks = <&clks IMX6SX_CLK_ESAI_EXTAL>;
+			clock-id = <1>; /* ESAI_HCKT_EXTAL */
+		};
+
+		simple-audio-card,codec {
+			sound-dai = <&sonos_dummy_codec_dac>;
+		};
+	};
+};
+
+&esai {
+	status = "okay";
+};
+
+&i2c1 {
+	lp5562@0 {      // LED controller
+		compatible = "ti,lp5562";
+		reg = <0x30>;
+	};
+
+	nxp-nt3h211@55 {       // NXP 3H2111 NFC
+		compatible = "fsl,nxp-nt3h2111";
+		nfc-field-detect = <&gpio1 9 0>;
+		reg = <0x55>;
+		status = "okay";
+	};
+
+	sge@0 {  // Sigdetail Gesture Engine
+		compatible = "Sonos,sge-psoc4";
+		pinctrl-names = "mode-flow-ctrl", "mode-uart-hiz";
+		pinctrl-0 = <>;
+		pinctrl-1 = <>;
+		reg = <0x40>;
+		iomuxc-ofs = <0x20e0000 0x1000 0x270 0x274 0x5b8 0x5bc 0x83c>;
+		iomuxc-params = "base-addr", "len", "mux-s3d6", "mux-s3d7", "ctl-s3d6", "ctl-s3d7", "uart3-rts-sel";
+		xres-gpio = <&gpio1  7 1>;
+		io-gpio   = <&gpio2 16 1>;
+		scl-gpio  = <&gpio2 17 1>;
+		share-swd-uart = <0>;
+		eco-trim-cap = <0x3d55>;
+		psoc-no-captouch;
+		swd-preempt-disable;
+
+		psoc-images {
+			image@0 {
+				model-num = <4147>;
+				ident = <0xed>;
+				flash-rows = <1024>;
+				flash-row-size = <128>;
+				flash-protection-size = <128>;
+			};
+		};
+	};
+};
+
+&i2c3 {
+	s5851@0 {	// CPU thermal sensor
+		compatible = "seiko,s5851";
+		reg = <0x4e>;
+		device_type = "CPU";
+	};
+};
+
+&uart3 {
+	fsl,uart-has-rtscts;
+	status = "okay";
+};
+
+&fec1 {
+	status = "okay";
+	phy-mode = "mii";
+	phy-handle = <&ethphy1>;
+	phy0 {
+		compatible = "Sonos,ter21x3_phy";
+		interrupts = <&gpio2 9 1>;
+	};
+};
+
+&fec2 {
+	status = "disabled";
+};
+
+&pcie{
+	clock-names = "pcie_phy", "pcie_bus", "pcie", "pcie_inbound_axi";
+	reset-gpio = <&gpio2 0x12 0x0>;
+	fsl,tx-deemph-gen1 = <21>;
+	fsl,tx-deemph-gen2-3p5db = <21>;
+	fsl,tx-deemph-gen2-6db = <32>;
+	fsl,tx-swing-full = <115>;
+	fsl,tx-swing-low = <115>;
+	status = "okay";
+};
+
+&adc1 {
+	status = "okay";
+};
+
+&pcie{
+	status = "okay";
+};

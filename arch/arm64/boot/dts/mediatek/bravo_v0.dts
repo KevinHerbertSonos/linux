@@ -1,0 +1,75 @@
+/*
+ * Copyright (c) 2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Bravo HW versions
+ *      V0 - bravo.dts    - Bravo P0 build
+ */
+
+/dts-v1/;
+#include "sonos_mt8518_common.dtsi"
+
+/ {
+	model = "Sonos Bravo P0 board";
+};
+
+&i2c0 {
+	sge@0 {  // Sigdetail Gesture Engine
+		compatible = "Sonos,sge-psoc4";
+		pinctrl-names = "mode-flow-ctrl", "mode-uart-hiz";
+		pinctrl-0 = <&uart1_pins_flowctrl>;
+		pinctrl-1 = <&uart1_pins_hiz>;
+		reg = <0x40>;
+		gpio-addr =  <0x10005000 0x1000 0x150 0 0x250 0x150 0 0x250>;
+		gpio-params = "base-addr", "len", "io-set", "io-clr", "io-din", "scl-set", "scl-clr", "scl-din";
+		scl-bitmask =  <0x004000>;
+		io-bitmask  =  <0x008000>;
+		xres-gpio = <&pio 89 1>;
+		io-gpio   = <&pio 95 1>;
+		scl-gpio  = <&pio 94 1>;
+		irq-gpio  = <&pio 23 1>;
+		zonea = "vol1";
+		zoneb = "pp";
+		zonec = "vol2";
+		zonem = "mic";
+		finger-threshold = <33>;
+		noise-threshold = <12>;
+		hysteresis = <4>;
+		share-swd-uart = <0>;
+		eco-trim-cap = <0x5f4d>;
+		status = "okay";
+
+		psoc-images {
+			image@0 {
+				model-num = <4248>;
+				ident = <0xba>;
+				flash-rows = <1024>;
+				flash-row-size = <256>;
+				flash-protection-size = <128>;
+			};
+		};
+	};
+};
+
+&pio {
+	uart1_pins_hiz: mode_hiz {
+		pins_dat {
+			pinmux = <MT8518_PIN_92_SPI2_CS__FUNC_GPIO92>,
+				 <MT8518_PIN_93_SPI2_CK__FUNC_GPIO93>,
+				 <MT8518_PIN_94_SPI2_MI0__FUNC_GPIO94>,
+				 <MT8518_PIN_95_SPI2_MI1__FUNC_GPIO95>;
+			bias-disable;
+		};
+	};
+
+	uart1_pins_flowctrl: mode_flowctrl {
+		pins_dat {
+			pinmux = <MT8518_PIN_92_SPI2_CS__FUNC_URXD1>,
+				 <MT8518_PIN_93_SPI2_CK__FUNC_UTXD1>,
+				 <MT8518_PIN_94_SPI2_MI0__FUNC_URTS1>,
+				 <MT8518_PIN_95_SPI2_MI1__FUNC_UCTS1>;
+			bias-disable;
+		};
+	};
+};

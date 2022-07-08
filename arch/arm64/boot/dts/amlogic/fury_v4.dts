@@ -1,0 +1,50 @@
+/*
+ * Copyright (c) 2020-2022, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Fury HW versions
+ *      V0 - fury_v0.dts - Fury P0,P1 builds
+ *      V1 - fury_v1.dts - Fury P2a,P2b,EVT,DVT builds
+ *      V2 - fury_v2.dts - Fury DVT2 (ReQual) build -AMP Infineon MA12070 replaces TI 5825
+ *      V3 - fury_v3.dts - Fury, in MP, Infineon AMP, replacing lp5562 with lumissil 3195
+ *      V4 - fury_v4.dts - Fury, in MP, TI amp, lp5562 LED controller
+ */
+/dts-v1/;
+
+#include "fury_common.dtsi"
+
+/ {
+	model = "Sonos-Fury V4";
+
+}; /* end of / */
+
+
+&i2c1 {
+	cputempsensor: tmp102@48 {
+		status = "disable";
+	};
+};
+
+&i2c3 {
+	amp1: tas5825@4c {
+		status = "okay";
+	};
+
+	amp2: tas5825@4d {
+		status = "okay";
+	};
+	ma12070p@20 {
+		status = "disable";
+	};
+
+	ma12070p@21 {
+		status = "disable";
+	};
+
+};
+
+&i2c_AO {
+        /delete-node/ is31fl3195@54;
+
+};
