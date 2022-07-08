@@ -14,11 +14,6 @@ if PHYLIB
 
 comment "MII PHY device drivers"
 
-config TI_PHY
-	tristate "Drivers for TI DP8822 PHYs"
-	---help---
-	  Currently supports the TI DP8822 model
-
 config AQUANTIA_PHY
         tristate "Drivers for the Aquantia PHYs"
         ---help---
