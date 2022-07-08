@@ -1477,91 +1477,6 @@ static int mtk_driving_get(struct gpio_chip *chip, unsigned offset)
 	return ((val & mask) >> shift);
 }
 
-#ifdef CONFIG_SONOS
-static ssize_t mt_gpio_show_pin(struct device *dev,
-	struct device_attribute *attr, char *buf, int start, int end)
-{
-	int len = 0;
-	int bufLen = PAGE_SIZE;
-	struct mtk_pinctrl *pctl = dev_get_drvdata(dev);
-	struct gpio_chip *chip = pctl->chip;
-	unsigned i;
-	int pull_val;
-	int start_gpio = start;
-	int end_gpio = end;
-
-	if (start_gpio >= end_gpio ) {
-		len += snprintf(buf+len, bufLen-len,
-		"wrong gpio-range: end %d less than start %d!\n",
-			end_gpio, start_gpio);
-		return len;
-	}
-
-	if (dbg_start >= pctl->chip->ngpio) {
-		len += snprintf(buf+len, bufLen-len,
-		"wrong gpio-range: start should less than %d!\n", pctl->chip->ngpio);
-		return len;
-	}
-
-	len += snprintf(buf+len, bufLen-len,
-		"gpio base is %d, total num is %d\n", chip->base, pctl->chip->ngpio);
-
-	if ( start_gpio < dbg_start ) {
-		start_gpio = dbg_start;
-	}
-
-	if ( end_gpio > pctl->chip->ngpio ) {
-		end_gpio = pctl->chip->ngpio;
-	}
-
-	len += snprintf(buf+len, bufLen-len,
-		"PIN: [MODE] [DIR] [DOUT] [DIN] [PULL_EN] [PULL_SEL] [IES] [SMT] [DRIVE] ( [R1] [R0] )\n");
-
-	for (i = start_gpio; i < end_gpio; i++) {
-		pull_val = mtk_pullsel_get(chip, i);
-
-		len += snprintf(buf+len, bufLen-len, "%4d:% d% d% d% d% d% d% d% d% d",
-				i,
-				mtk_pinmux_get(chip, i),
-				mtk_gpio_get_direction(chip, i),
-				mtk_gpio_get_out(chip, i),
-				mtk_gpio_get_in(chip, i),
-				mtk_pullen_get(chip, i),
-				(pull_val >= 0) ? (pull_val&1) : -1,
-				mtk_ies_get(chip, i),
-				mtk_smt_get(chip, i),
-				mtk_driving_get(chip, i));
-		if ((pull_val & 8) && (pull_val >= 0))
-			len += snprintf(buf+len, bufLen-len, " %d %d", !!(pull_val&4), !!(pull_val&2));
-		len += snprintf(buf+len, bufLen-len, "\n");
-	}
-	return len;
-}
-
-static ssize_t mt_gpio_show_pin0(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	ssize_t len = 0;
-
-	len = mt_gpio_show_pin(dev, attr, buf, 0, 100);
-	return len;
-}
-
-static ssize_t mt_gpio_show_pin100(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	ssize_t len = 0;
-
-	len = mt_gpio_show_pin(dev, attr, buf, 100, 200);
-	return len;
-}
-
-static ssize_t mt_gpio_show_pin200(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	ssize_t len = 0;
-
-	len = mt_gpio_show_pin(dev, attr, buf, 200, 300);
-	return len;
-}
-#else
 static ssize_t mt_gpio_show_pin(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	int len = 0;
@@ -1603,7 +1518,6 @@ static ssize_t mt_gpio_show_pin(struct device *dev, struct device_attribute *att
 	}
 	return len;
 }
-#endif
 
 static ssize_t mt_gpio_store_pin(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -1635,22 +1549,10 @@ static ssize_t mt_gpio_store_pin(struct device *dev, struct device_attribute *at
 	return count;
 }
 
-#ifdef CONFIG_SONOS
-static DEVICE_ATTR(mt_gpio, S_IWUSR, NULL, mt_gpio_store_pin);
-static DEVICE_ATTR(mt_gpio0, S_IRUSR, mt_gpio_show_pin0, NULL);
-static DEVICE_ATTR(mt_gpio100, S_IRUSR, mt_gpio_show_pin100, NULL);
-static DEVICE_ATTR(mt_gpio200, S_IRUSR, mt_gpio_show_pin200, NULL);
-#else
 static DEVICE_ATTR(mt_gpio, 0664, mt_gpio_show_pin, mt_gpio_store_pin);
-#endif
 
 static struct device_attribute *gpio_attr_list[] = {
 	&dev_attr_mt_gpio,
-#ifdef CONFIG_SONOS
-	&dev_attr_mt_gpio0,
-	&dev_attr_mt_gpio100,
-	&dev_attr_mt_gpio200,
-#endif
 };
 
 static int mt_gpio_create_attr(struct device *dev)
