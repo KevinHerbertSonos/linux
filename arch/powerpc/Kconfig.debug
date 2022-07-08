@@ -291,7 +291,8 @@ config PPC_EARLY_DEBUG_CPM_ADDR
 	hex "CPM UART early debug transmit descriptor address"
 	depends on PPC_EARLY_DEBUG_CPM
 	default "0xfa202008" if PPC_EP88XC
-	default "0xf0001ff8" if CPM2
+	default "0xf0001ff8" if CPM2 && !SONOS
+	default "0xf0000088" if CPM2 && SONOS
 	default "0xff002008" if CPM1
 	help
 	  This specifies the address of the transmit descriptor
