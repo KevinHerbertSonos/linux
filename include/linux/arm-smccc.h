@@ -160,6 +160,7 @@ asmlinkage void __arm_smccc_hvc(unsigned long a0, unsigned long a1,
 
 #define SMCCC_SMC_INST	"smc	#0"
 #define SMCCC_HVC_INST	"hvc	#0"
+#define SMCCC_REG(n)	asm("x" # n)
 
 #elif defined(CONFIG_ARM)
 #include <asm/opcodes-sec.h>
@@ -167,6 +168,7 @@ asmlinkage void __arm_smccc_hvc(unsigned long a0, unsigned long a1,
 
 #define SMCCC_SMC_INST	__SMC(0)
 #define SMCCC_HVC_INST	__HVC(0)
+#define SMCCC_REG(n)	asm("r" # n)
 
 #endif
 

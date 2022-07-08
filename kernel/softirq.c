@@ -27,6 +27,10 @@
 #include <linux/tick.h>
 #include <linux/irq.h>
 
+#ifndef CONFIG_AMLOGIC_MODIFY
+#define KSOFTIRQD_HIGH_RATE
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/irq.h>
 
@@ -251,6 +255,10 @@ asmlinkage __visible void __softirq_entry __do_softirq(void)
 	bool in_hardirq;
 	__u32 pending;
 	int softirq_bit;
+#ifdef CONFIG_AMLOGIC_DEBUG_LOCKUP
+	int cpu;
+	unsigned long long tin;
+#endif
 
 	/*
 	 * Mask out PF_MEMALLOC s current task context is borrowed for the
@@ -285,7 +293,14 @@ restart:
 		kstat_incr_softirqs_this_cpu(vec_nr);
 
 		trace_softirq_entry(vec_nr);
+#ifdef CONFIG_AMLOGIC_DEBUG_LOCKUP
+		cpu = smp_processor_id();
+		sirq_in_hook(cpu, &tin, (void *)h->action);
+#endif
 		h->action(h);
+#ifdef CONFIG_AMLOGIC_DEBUG_LOCKUP
+		sirq_out_hook(cpu, tin, (void *)h->action);
+#endif
 		trace_softirq_exit(vec_nr);
 		if (unlikely(prev_count != preempt_count())) {
 			pr_err("huh, entered softirq %u %s %p with preempt_count %08x, exited with %08x?\n",

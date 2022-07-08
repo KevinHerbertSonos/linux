@@ -218,9 +218,14 @@ static enum dvbv3_emulation_type dvbv3_type(u32 delivery_system)
 		return DVBV3_UNKNOWN;
 	}
 }
-
+#ifdef CONFIG_AMLOGIC_DVB_COMPAT
+void dvb_frontend_add_event(struct dvb_frontend *fe,
+				   enum fe_status status)
+#else
 static void dvb_frontend_add_event(struct dvb_frontend *fe,
 				   enum fe_status status)
+
+#endif
 {
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
@@ -1054,7 +1059,19 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_STREAM_ID, 1, 0),
 	_DTV_CMD(DTV_DVBT2_PLP_ID_LEGACY, 1, 0),
 	_DTV_CMD(DTV_LNA, 1, 0),
-
+#ifdef CONFIG_AMLOGIC_DVB_COMPAT
+	/*set blind scan cmd*/
+	_DTV_CMD(DTV_START_BLIND_SCAN, 1, 0),
+	_DTV_CMD(DTV_CANCEL_BLIND_SCAN, 1, 0),
+	_DTV_CMD(DTV_BLIND_SCAN_MIN_FRE, 1, 0),
+	_DTV_CMD(DTV_BLIND_SCAN_MAX_FRE, 1, 0),
+	_DTV_CMD(DTV_BLIND_SCAN_MIN_SRATE, 1, 0),
+	_DTV_CMD(DTV_BLIND_SCAN_MAX_SRATE, 1, 0),
+	_DTV_CMD(DTV_BLIND_SCAN_FRE_RANGE, 1, 0),
+	_DTV_CMD(DTV_BLIND_SCAN_FRE_STEP, 1, 0),
+	_DTV_CMD(DTV_BLIND_SCAN_TIMEOUT, 1, 0),
+	/*set blind scan cmd end*/
+#endif
 	/* Get */
 	_DTV_CMD(DTV_DISEQC_SLAVE_REPLY, 0, 1),
 	_DTV_CMD(DTV_API_VERSION, 0, 0),
@@ -1504,6 +1521,13 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 	case DTV_STAT_TOTAL_BLOCK_COUNT:
 		tvp->u.st = c->block_count;
 		break;
+#ifdef CONFIG_AMLOGIC_DVB_COMPAT
+	case DTV_DELIVERY_SUB_SYSTEM:
+	case DTV_TS_INPUT:
+		r = 0;
+		//printk("dvb-core get sub sys\r\n");
+		break;
+#endif
 	default:
 		dev_dbg(fe->dvb->device,
 			"%s: FE property %d doesn't exist\n",
@@ -1522,8 +1546,15 @@ static bool is_dvbv3_delsys(u32 delsys)
 {
 	bool status;
 
+#ifdef CONFIG_AMLOGIC_MODIFY /* added by Amlogic 20180720 */
+	status = (delsys == SYS_DVBT) || (delsys == SYS_DVBC_ANNEX_A) ||
+		 (delsys == SYS_DVBS) || (delsys == SYS_ATSC) ||
+		 (delsys == SYS_DTMB) || (delsys == SYS_DVBS2) ||
+		 (delsys == SYS_DVBT2);
+#else
 	status = (delsys == SYS_DVBT) || (delsys == SYS_DVBC_ANNEX_A) ||
 		 (delsys == SYS_DVBS) || (delsys == SYS_ATSC);
+#endif
 
 	return status;
 }
@@ -2249,6 +2280,8 @@ static int dtv_set_frontend(struct dvb_frontend *fe)
 	/* Request the search algorithm to search */
 	fepriv->algo_status |= DVBFE_ALGO_SEARCH_AGAIN;
 
+//	if (fe->ops.set_frontend)
+//		fe->ops.set_frontend(fe);
 	dvb_frontend_clear_events(fe);
 	dvb_frontend_add_event(fe, 0);
 	dvb_frontend_wakeup(fe);
@@ -2798,6 +2831,9 @@ static const struct file_operations dvb_frontend_fops = {
 	.open		= dvb_frontend_open,
 	.release	= dvb_frontend_release,
 	.llseek		= noop_llseek,
+#ifdef CONFIG_AMLOGIC_DVB_COMPAT
+	.compat_ioctl	= dvb_frontend_compat_ioctl,
+#endif
 };
 
 int dvb_frontend_suspend(struct dvb_frontend *fe)

@@ -115,4 +115,6 @@ struct sonos_socket_data {
 
 #define SO_CNX_ADVICE		53
 
+#define SO_COOKIE		57
+
 #endif /* __ASM_GENERIC_SOCKET_H */

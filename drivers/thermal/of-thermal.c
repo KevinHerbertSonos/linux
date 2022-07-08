@@ -384,6 +384,23 @@ static int of_thermal_get_crit_temp(struct thermal_zone_device *tz,
 	return -EINVAL;
 }
 
+#ifdef CONFIG_AMLOGIC_TEMP_SENSOR
+static int of_thermal_notify(struct thermal_zone_device *tz, int trip,
+			     enum thermal_trip_type type)
+{
+	struct thermal_instance *instance;
+	struct thermal_cooling_device *cdev;
+	int ret = 0;
+
+	list_for_each_entry(instance, &tz->thermal_instances, tz_node) {
+		cdev = instance->cdev;
+		if (cdev->ops && cdev->ops->notify_state)
+			ret += cdev->ops->notify_state(cdev, tz, type);
+	}
+	return ret;
+}
+#endif
+
 static struct thermal_zone_device_ops of_thermal_ops = {
 	.get_mode = of_thermal_get_mode,
 	.set_mode = of_thermal_set_mode,
@@ -397,6 +414,9 @@ static struct thermal_zone_device_ops of_thermal_ops = {
 
 	.bind = of_thermal_bind,
 	.unbind = of_thermal_unbind,
+#ifdef CONFIG_AMLOGIC_TEMP_SENSOR
+	.notify = of_thermal_notify,
+#endif
 };
 
 /***   sensor API   ***/
@@ -976,6 +996,9 @@ int __init of_parse_thermal_zones(void)
 	for_each_available_child_of_node(np, child) {
 		struct thermal_zone_device *zone;
 		struct thermal_zone_params *tzp;
+	#ifdef CONFIG_AMLOGIC_TEMP_SENSOR
+		const char *str;
+	#endif
 		int i, mask = 0;
 		u32 prop;
 
@@ -1002,6 +1025,11 @@ int __init of_parse_thermal_zones(void)
 
 		if (!of_property_read_u32(child, "sustainable-power", &prop))
 			tzp->sustainable_power = prop;
+
+	#ifdef CONFIG_AMLOGIC_TEMP_SENSOR
+		if (!of_property_read_string(child, "policy", &str))
+			strncpy(tzp->governor_name, str, THERMAL_NAME_LENGTH);
+	#endif
 
 		for (i = 0; i < tz->ntrips; i++)
 			mask |= 1 << i;
