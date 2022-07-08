@@ -3276,7 +3276,12 @@ static int meson_mmc_probe(struct platform_device *pdev)
 		if (aml_card_type_sdio(pdata)) { /* if sdio_wifi */
 			/*	mmc->host_rescan_disable = true;*/
 			/* do NOT run mmc_rescan for the first time */
+#if defined(CONFIG_SONOS)
+			gpio_direction_output(pdata->hw_reset, 1);
+			mmc->rescan_entered = 0;
+#else
 			mmc->rescan_entered = 1;
+#endif
 		} else {
 			/*	mmc->host_rescan_disable = false;*/
 			mmc->rescan_entered = 0;
