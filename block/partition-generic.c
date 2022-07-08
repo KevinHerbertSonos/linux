@@ -25,7 +25,7 @@
 extern void md_autodetect_dev(dev_t dev);
 #endif
 
-#define AMLOGIC_ADD_PARTITION
+#undef AMLOGIC_ADD_PARTITION
 /*
  * disk_name() is used by partition check code and the genhd driver.
  * It formats the devicename of the indicated disk into
