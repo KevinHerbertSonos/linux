@@ -1078,6 +1078,29 @@ static int mtk_nfc_write_oob_std(struct mtd_info *mtd, struct nand_chip *chip,
 	return ret & NAND_STATUS_FAIL ? -EIO : 0;
 }
 
+#ifdef CONFIG_SONOS
+/**
+ * Check whether the pointed buffer are all 0xff (blank).
+ *
+ * @param buf   data buffer for blank check
+ * @param len   length of the buffer in byte
+ * @return
+ *      1 - blank
+ *      0 - non-blank
+ */
+static int blank_check(u8 *buf, int len)
+{
+	int i;
+
+	for (i = 0; i < len; i++) {
+		if (buf[i] != 0xFF) {
+			return 0;
+		}
+	}
+	return 1;
+}
+#endif
+
 static int mtk_nfc_update_ecc_stats(struct mtd_info *mtd, u8 *buf, u32 sectors)
 {
 	struct nand_chip *chip = mtd_to_nand(mtd);
@@ -1096,6 +1119,13 @@ static int mtk_nfc_update_ecc_stats(struct mtd_info *mtd, u8 *buf, u32 sectors)
 
 	mtk_ecc_get_stats(nfc->ecc, &stats, sectors);
 	mtd->ecc_stats.corrected += stats.corrected;
+#ifdef CONFIG_SONOS
+	if ( stats.failed == 1 && sectors == 2 ) {
+		if ( blank_check(&buf[chip->ecc.size], chip->ecc.size) ) {
+			stats.failed = 0;
+		}
+	}
+#endif
 	mtd->ecc_stats.failed += stats.failed;
 
 	return stats.bitflips;
@@ -1520,6 +1550,9 @@ static int mtk_nfc_nand_chip_init(struct device *dev, struct mtk_nfc *nfc,
 	nand_set_controller_data(nand, nfc);
 
 	nand->options |= NAND_USE_BOUNCE_BUFFER | NAND_SUBPAGE_READ;
+#ifdef CONFIG_SONOS
+	nand->options |= NAND_NO_SUBPAGE_WRITE;
+#endif
 	nand->dev_ready = mtk_nfc_dev_ready;
 	nand->select_chip = mtk_nfc_select_chip;
 	nand->write_byte = mtk_nfc_write_byte;
