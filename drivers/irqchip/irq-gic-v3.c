@@ -1131,6 +1131,10 @@ static void __init gic_of_setup_kvm_info(struct device_node *node)
 	gic_set_kvm_info(&gic_v3_kvm_info);
 }
 
+#ifdef CONFIG_MTK_GIC_EXT
+int __init mt_gic_ext_init(void);
+#endif
+
 static int __init gic_of_init(struct device_node *node, struct device_node *parent)
 {
 	void __iomem *dist_base;
@@ -1193,6 +1197,11 @@ static int __init gic_of_init(struct device_node *node, struct device_node *pare
 
 	gic_populate_ppi_partitions(node);
 	gic_of_setup_kvm_info(node);
+
+#ifdef CONFIG_MTK_GIC_EXT
+	mt_gic_ext_init();
+#endif
+
 	return 0;
 
 out_unmap_rdist:
