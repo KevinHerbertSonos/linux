@@ -3172,6 +3172,9 @@ static void set_carrier(struct r8152 *tp)
 			napi_enable(&tp->napi);
 			netif_wake_queue(netdev);
 			netif_info(tp, link, netdev, "carrier on\n");
+#ifdef CONFIG_SONOS
+			sonos_announce_linkup(netdev);
+#endif
 		} else if (netif_queue_stopped(netdev) &&
 			   skb_queue_len(&tp->tx_queue) < tp->tx_qlen) {
 			netif_wake_queue(netdev);
@@ -3183,6 +3186,9 @@ static void set_carrier(struct r8152 *tp)
 			tp->rtl_ops.disable(tp);
 			napi_enable(&tp->napi);
 			netif_info(tp, link, netdev, "carrier off\n");
+#ifdef CONFIG_SONOS
+			sonos_announce_linkup(netdev);
+#endif
 		}
 	}
 }
@@ -3244,6 +3250,9 @@ static void rtl_hw_phy_work_func_t(struct work_struct *work)
 	mutex_unlock(&tp->control);
 
 	usb_autopm_put_interface(tp->intf);
+#ifdef CONFIG_SONOS
+	sonos_announce_linkup(tp->netdev);
+#endif
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -4494,6 +4503,10 @@ static void rtl8152_disconnect(struct usb_interface *intf)
 		if (udev->state == USB_STATE_NOTATTACHED)
 			set_bit(RTL8152_UNPLUG, &tp->flags);
 
+#ifdef CONFIG_SONOS
+		if ( netif_carrier_ok(tp->netdev) )
+			sonos_announce_linkup(tp->netdev);
+#endif
 		netif_napi_del(&tp->napi);
 		unregister_netdev(tp->netdev);
 		cancel_delayed_work_sync(&tp->hw_phy_work);
