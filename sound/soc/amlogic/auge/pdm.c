@@ -698,13 +698,17 @@ static snd_pcm_uframes_t aml_pdm_pointer(
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct aml_pdm *p_pdm = runtime->private_data;
 	unsigned int addr = 0, start_addr = 0;
+	snd_pcm_uframes_t frames = 0;
 
 	start_addr = runtime->dma_addr;
 
-	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 		addr = aml_toddr_get_position(p_pdm->tddr);
+		frames = bytes_to_frames(runtime, addr - start_addr);
+		frames -= (frames % runtime->period_size);
+	}
 
-	return bytes_to_frames(runtime, addr - start_addr);
+	return frames;
 }
 
 static int aml_pdm_mmap(
