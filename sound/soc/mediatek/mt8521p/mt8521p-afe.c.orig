@@ -1755,6 +1755,7 @@ int afe_i2s_out_configurate(enum afe_i2s_out_id id, const struct afe_i2s_out_con
 	      | (config->couple_mode  << 17)
 	      | (config->one_heart_mode << 16)
 	      | (mode << 8)
+	      | (config->fs_invert << 5)
 	      | (config->slave << 2);
 	if (config->dsd_mode) {
 		dsd_use = config->dsd_use;

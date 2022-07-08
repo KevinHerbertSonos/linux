@@ -4373,7 +4373,7 @@ static u32 spdifrx_fs_interpreter(u32 fsval)
 	return fs;
 }
 
-static void (*spdifrx_callback)(void);
+afe_spdifrx_callback spdifrx_callback;
 
 /*
  * [Programming Guide]
@@ -4462,7 +4462,7 @@ void afe_spdifrx_isr(void)
 			spdifrx_state.rate = 0;
 			spdifrx_clear_vucp();
 			if (spdifrx_callback)
-				spdifrx_callback();
+				spdifrx_callback(SPDIFRX_CALLBACK_EVENT_UNLOCK);
 		}
 #if MYDELAY
 		mdelay(100);
@@ -4498,10 +4498,11 @@ void afe_spdifrx_isr(void)
 			spdifrx_state.rate = fsval;
 			pr_debug("%s spdifrx_state.rate =0x%x.\n", __func__, spdifrx_state.rate);
 			if ((spdifrx_callback) && (fsvalod != fsval))
-				spdifrx_callback();
+				spdifrx_callback(SPDIFRX_CALLBACK_EVENT_LOCK);
 
 		}
 		if (((chsintflag & SPDIFIN_CHANNEL_STATUS_INT_FLAG) != 0) && (fsval != SPDIFIN_OUT_RANGE)) {
+			int change = 0;
 			for (i = 0; i < 6; i++) {
 				u32 temp = afe_read(AFE_SPDIFIN_CHSTS1 + i * 0x4);
 
@@ -4510,21 +4511,24 @@ void afe_spdifrx_isr(void)
 					pr_notice("AFE_SPDIFIN_CHSTS1 + %d * 0x4 =  0x%08x --- new = 0x%08x\n", i, spdifrx_state.c_bit[i], temp);
 #endif
 					spdifrx_state.c_bit[i] =  temp;
-					if (spdifrx_callback)
-						spdifrx_callback();
+					change++;
 				}
 			}
+			if (change && spdifrx_callback)
+				spdifrx_callback(SPDIFRX_CALLBACK_EVENT_C_BITS);
+			change = 0;
 			for (i = 0; i < 2; i++) {
 				for (j = 0; j < 6; j++) {
 					u32 temp  = afe_read(AFE_SPDIFIN_USERCODE_1 + (i * 6 + j) * 0x4);
 
 					if (temp != spdifrx_state.u_bit[i][j]) {
 						spdifrx_state.u_bit[i][j] = temp;
-					if (spdifrx_callback)
-						spdifrx_callback();
+						change++;
 					}
 				}
 			}
+			if (change && spdifrx_callback)
+				spdifrx_callback(SPDIFRX_CALLBACK_EVENT_U_BITS);
 		}
 #if MYENABLE
 		if (fsval == SPDIFIN_OUT_RANGE)
@@ -4633,7 +4637,7 @@ static void spdifrx_uninit(void)
 	spdifrx_inited = 0;
 }
 
-void afe_spdifrx_start(enum afe_spdifrx_port port, void (*callback)(void))
+void afe_spdifrx_start(enum afe_spdifrx_port port, afe_spdifrx_callback callback)
 {
 	/*
 	 * [Programming Guide]

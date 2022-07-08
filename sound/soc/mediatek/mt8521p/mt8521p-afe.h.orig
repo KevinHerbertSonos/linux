@@ -410,6 +410,7 @@ struct afe_i2s_out_config {
 	enum afe_i2s_out_dsd_use dsd_use;
 	int couple_mode;
 	int one_heart_mode;	/* 0: 2 channel mode, 1: multi channel mode */
+	int fs_invert;
 	int slave;
 	enum afe_i2s_format fmt;
 	int mclk;

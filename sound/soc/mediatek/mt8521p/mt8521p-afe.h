@@ -699,7 +699,17 @@ enum afe_spdifrx_port {
 	SPDIFRX_PORT_OPT = 1,
 	SPDIFRX_PORT_ARC = 2
 };
-void afe_spdifrx_start(enum afe_spdifrx_port port, void (*callback)(void));
+
+enum afe_spdifrx_callback_event {
+	SPDIFRX_CALLBACK_EVENT_UNLOCK,
+	SPDIFRX_CALLBACK_EVENT_LOCK,
+	SPDIFRX_CALLBACK_EVENT_C_BITS,
+	SPDIFRX_CALLBACK_EVENT_U_BITS,
+};
+
+typedef void (*afe_spdifrx_callback)(enum afe_spdifrx_callback_event event);
+
+void afe_spdifrx_start(enum afe_spdifrx_port port, afe_spdifrx_callback callback);
 void afe_spdifrx_stop(void);
 const volatile struct afe_dir_info *afe_spdifrx_state(void);
 
