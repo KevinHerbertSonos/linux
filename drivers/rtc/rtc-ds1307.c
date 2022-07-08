@@ -527,6 +527,20 @@ static int ds1337_read_alarm(struct device *dev, struct rtc_wkalrm *t)
 	dev_dbg(dev, "%s: %4ph, %3ph, %2ph\n", "alarm read",
 		&ds1307->regs[0], &ds1307->regs[4], &ds1307->regs[7]);
 
+#if defined CONFIG_SONOS
+	/*
+	 * report alarm time (ALARM**2**); assume 24 hour and day-of-month modes,
+	 * and that all four fields are checked matches
+	 */
+	t->time.tm_sec = 0;
+	t->time.tm_min = bcd2bin(ds1307->regs[4] & 0x7f);
+	t->time.tm_hour = bcd2bin(ds1307->regs[5] & 0x3f);
+	t->time.tm_mday = bcd2bin(ds1307->regs[6] & 0x3f);
+
+	/* ... and status */
+	t->enabled = !!(ds1307->regs[7] & DS1337_BIT_A2IE);
+	t->pending = !!(ds1307->regs[8] & DS1337_BIT_A2I);
+#else
 	/*
 	 * report alarm time (ALARM1); assume 24 hour and day-of-month modes,
 	 * and that all four fields are checked matches
@@ -539,6 +553,7 @@ static int ds1337_read_alarm(struct device *dev, struct rtc_wkalrm *t)
 	/* ... and status */
 	t->enabled = !!(ds1307->regs[7] & DS1337_BIT_A1IE);
 	t->pending = !!(ds1307->regs[8] & DS1337_BIT_A1I);
+#endif
 
 	dev_dbg(dev, "%s secs=%d, mins=%d, "
 		"hours=%d, mday=%d, enabled=%d, pending=%d\n",
@@ -579,6 +594,32 @@ static int ds1337_set_alarm(struct device *dev, struct rtc_wkalrm *t)
 	dev_dbg(dev, "%s: %4ph, %3ph, %02x %02x\n", "alarm set (old status)",
 		&ds1307->regs[0], &ds1307->regs[4], control, status);
 
+#ifdef CONFIG_SONOS
+	/* set ALARM**2**, using 24 hour and day-of-month modes */
+	t->time.tm_min += 1;	/* if alarm is less than a minute out, 
+				 * losing the seconds means it's already
+				 * passed...
+				 */
+	if (t->time.tm_min > 59) {
+		/* Did the minutes roll? */
+		t->time.tm_min = 0;
+		t->time.tm_hour += 1;
+		if (t->time.tm_hour == 24) {
+			t->time.tm_hour = 0;
+			t->time.tm_mday++;
+		}
+	}
+	t->time.tm_sec = 0;
+	buf[4] = bin2bcd(t->time.tm_min);
+	buf[5] = bin2bcd(t->time.tm_hour);
+	buf[6] = bin2bcd(t->time.tm_mday);
+
+	/* set ALARM**1** to non-garbage */
+	buf[0] = 0;
+	buf[1] = 0;
+	buf[2] = 0;
+	buf[3] = 0;
+#else
 	/* set ALARM1, using 24 hour and day-of-month modes */
 	buf[0] = bin2bcd(t->time.tm_sec);
 	buf[1] = bin2bcd(t->time.tm_min);
@@ -589,6 +630,7 @@ static int ds1337_set_alarm(struct device *dev, struct rtc_wkalrm *t)
 	buf[4] = 0;
 	buf[5] = 0;
 	buf[6] = 0;
+#endif
 
 	/* disable alarms */
 	buf[7] = control & ~(DS1337_BIT_A1IE | DS1337_BIT_A2IE);
@@ -601,12 +643,21 @@ static int ds1337_set_alarm(struct device *dev, struct rtc_wkalrm *t)
 		return ret;
 	}
 
+#ifdef CONFIG_SONOS
+	/* optionally enable ALARM**2** */
+	if (t->enabled) {
+		dev_dbg(dev, "alarm IRQ armed\n");
+		buf[7] |= DS1337_BIT_A2IE;	/* only ALARM**2** is used */
+		i2c_smbus_write_byte_data(client, DS1337_REG_CONTROL, buf[7]);
+	}
+#else
 	/* optionally enable ALARM1 */
 	if (t->enabled) {
 		dev_dbg(dev, "alarm IRQ armed\n");
 		buf[7] |= DS1337_BIT_A1IE;	/* only ALARM1 is used */
 		i2c_smbus_write_byte_data(client, DS1337_REG_CONTROL, buf[7]);
 	}
+#endif
 
 	return 0;
 }

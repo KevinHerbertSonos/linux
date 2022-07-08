@@ -787,9 +787,27 @@ static int rtc_timer_enqueue(struct rtc_device *rtc, struct rtc_timer *timer)
 	if (!next || ktime_before(timer->node.expires, next->expires)) {
 		struct rtc_wkalrm alarm;
 		int err;
+#ifdef CONFIG_SONOS
+		int seconds, minutes;
+		alarm.time = rtc_ktime_to_tm(timer->node.expires);
+		alarm.enabled = 1;
+		seconds = alarm.time.tm_sec;
+		minutes = alarm.time.tm_min;
+		err = __rtc_set_alarm(rtc, &alarm);
+		if (alarm.time.tm_sec != seconds || alarm.time.tm_min != minutes) {
+			/* The low-level set code changed the seconds value or possibly
+			 * minutes (or both).  Update the "expires" value to match what the
+			 * low-level driver set.  This is necessary because we're using
+			 * alarm2 on the renesas ds1337, which does not support second
+			 * granularity.
+			 */
+			rtc->aie_timer.node.expires = rtc_tm_to_ktime(alarm.time);
+		}
+#else
 		alarm.time = rtc_ktime_to_tm(timer->node.expires);
 		alarm.enabled = 1;
 		err = __rtc_set_alarm(rtc, &alarm);
+#endif
 		if (err == -ETIME) {
 			pm_stay_awake(rtc->dev.parent);
 			schedule_work(&rtc->irqwork);
