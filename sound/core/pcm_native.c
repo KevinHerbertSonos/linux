@@ -1415,10 +1415,8 @@ static int snd_pcm_resume(struct snd_pcm_substream *substream)
 	struct snd_card *card = substream->pcm->card;
 	int res;
 
-	snd_power_lock(card);
 	if ((res = snd_power_wait(card, SNDRV_CTL_POWER_D0)) >= 0)
 		res = snd_pcm_action_lock_irq(&snd_pcm_action_resume, substream, 0);
-	snd_power_unlock(card);
 	return res;
 }
 
@@ -1442,11 +1440,10 @@ static int snd_pcm_xrun(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	int result;
 
-	snd_power_lock(card);
 	if (runtime->status->state == SNDRV_PCM_STATE_SUSPENDED) {
 		result = snd_power_wait(card, SNDRV_CTL_POWER_D0);
 		if (result < 0)
-			goto _unlock;
+			return result;
 	}
 
 	snd_pcm_stream_lock_irq(substream);
@@ -1461,8 +1458,6 @@ static int snd_pcm_xrun(struct snd_pcm_substream *substream)
 		result = -EBADFD;
 	}
 	snd_pcm_stream_unlock_irq(substream);
- _unlock:
-	snd_power_unlock(card);
 	return result;
 }
 
@@ -1575,11 +1570,9 @@ static int snd_pcm_prepare(struct snd_pcm_substream *substream,
 	else
 		f_flags = substream->f_flags;
 
-	snd_power_lock(card);
 	if ((res = snd_power_wait(card, SNDRV_CTL_POWER_D0)) >= 0)
 		res = snd_pcm_action_nonatomic(&snd_pcm_action_prepare,
 					       substream, f_flags);
-	snd_power_unlock(card);
 	return res;
 }
 
@@ -1677,11 +1670,9 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream,
 	if (runtime->status->state == SNDRV_PCM_STATE_OPEN)
 		return -EBADFD;
 
-	snd_power_lock(card);
 	if (runtime->status->state == SNDRV_PCM_STATE_SUSPENDED) {
 		result = snd_power_wait(card, SNDRV_CTL_POWER_D0);
 		if (result < 0) {
-			snd_power_unlock(card);
 			return result;
 		}
 	}
@@ -1732,7 +1723,6 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream,
 		add_wait_queue(&to_check->sleep, &wait);
 		snd_pcm_stream_unlock_irq(substream);
 		up_read(&snd_pcm_link_rwsem);
-		snd_power_unlock(card);
 		if (runtime->no_period_wakeup)
 			tout = MAX_SCHEDULE_TIMEOUT;
 		else {
@@ -1744,7 +1734,6 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream,
 			tout = msecs_to_jiffies(tout * 1000);
 		}
 		tout = schedule_timeout_interruptible(tout);
-		snd_power_lock(card);
 		down_read(&snd_pcm_link_rwsem);
 		snd_pcm_stream_lock_irq(substream);
 		remove_wait_queue(&to_check->sleep, &wait);
@@ -1768,7 +1757,6 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream,
  unlock:
 	snd_pcm_stream_unlock_irq(substream);
 	up_read(&snd_pcm_link_rwsem);
-	snd_power_unlock(card);
 
 	return result;
 }
