@@ -83,7 +83,7 @@ static long clk_pllv4_round_rate(struct clk_hw *hw, unsigned long rate,
 	}
 
 	if (!found) {
-		pr_warn("%s: unable to round rate %lu prate %lu\n",
+		pr_debug("%s: unable to round rate %lu prate %lu\n",
 			clk_hw_get_name(hw), rate, parent_rate);
 		return 0;
 	}
