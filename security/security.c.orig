@@ -27,10 +27,6 @@
 #include <linux/backing-dev.h>
 #include <net/flow.h>
 
-#ifdef CONFIG_SONOS_SECBOOT
-#include "sonos_lock.h"
-#endif
-
 #define MAX_LSM_EVM_XATTR	2
 
 /* Maximum number of letters for an LSM name string */
@@ -775,12 +771,7 @@ static inline unsigned long mmap_prot(struct file *file, unsigned long prot)
 	 * ditto if it's not on noexec mount, except that on !MMU we need
 	 * NOMMU_MAP_EXEC (== VM_MAYEXEC) in this case
 	 */
-#ifdef CONFIG_SONOS_SECBOOT
-	if (!(path_noexec(&file->f_path) && !sonos_allow_execution()))
-#else
-	if (!path_noexec(&file->f_path))
-#endif
-	{
+	if (!path_noexec(&file->f_path)) {
 #ifndef CONFIG_MMU
 		if (file->f_op->mmap_capabilities) {
 			unsigned caps = file->f_op->mmap_capabilities(file);
