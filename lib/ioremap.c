@@ -75,6 +75,8 @@ int ioremap_page_range(unsigned long addr,
 	unsigned long next;
 	int err;
 
+	(void) start;
+
 	BUG_ON(addr >= end);
 
 	start = addr;

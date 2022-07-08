@@ -173,6 +173,8 @@ void __init do_init_bootmem(void)
 	struct memblock_region *reg;
 	int boot_mapsize;
 
+	(void) boot_mapsize;
+
 	max_low_pfn = max_pfn = memblock_end_of_DRAM() >> PAGE_SHIFT;
 	total_pages = (memblock_end_of_DRAM() - memstart_addr) >> PAGE_SHIFT;
 #ifdef CONFIG_HIGHMEM

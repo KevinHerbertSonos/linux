@@ -36,6 +36,8 @@ void module_add_driver(struct module *mod, struct device_driver *drv)
 	int no_warn;
 	struct module_kobject *mk = NULL;
 
+	(void) no_warn;
+
 	if (!drv)
 		return;
 

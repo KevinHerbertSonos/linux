@@ -234,6 +234,8 @@ static int __devinit of_flash_probe(struct platform_device *dev)
 	struct mtd_info **mtd_list = NULL;
 	resource_size_t res_size;
 
+	(void) p;
+
 	match = of_match_device(of_flash_match, &dev->dev);
 	if (!match)
 		return -EINVAL;

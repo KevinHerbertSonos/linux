@@ -5509,6 +5509,8 @@ int set_migratetype_isolate(struct page *page)
 	int ret = -EBUSY;
 	int zone_idx;
 
+	(void) zone_idx;
+
 	zone = page_zone(page);
 	zone_idx = zone_idx(zone);
 

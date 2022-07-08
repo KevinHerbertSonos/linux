@@ -2182,7 +2182,7 @@ void __init udp_table_init(struct udp_table *table, const char *name)
 		table->hash = kmalloc(UDP_HTABLE_SIZE_MIN *
 				      2 * sizeof(struct udp_hslot), GFP_KERNEL);
 		if (!table->hash)
-			panic(name);
+			panic("%s", name);
 		table->log = ilog2(UDP_HTABLE_SIZE_MIN);
 		table->mask = UDP_HTABLE_SIZE_MIN - 1;
 	}

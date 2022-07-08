@@ -1143,6 +1143,8 @@ static bool bio_attempt_front_merge(struct request_queue *q,
 	const int ff = bio->bi_rw & REQ_FAILFAST_MASK;
 	sector_t sector;
 
+	(void) sector;
+
 	/*
 	 * Debug stuff, kill later
 	 */
@@ -1795,6 +1797,8 @@ static void blk_account_io_completion(struct request *req, unsigned int bytes)
 		const int rw = rq_data_dir(req);
 		struct hd_struct *part;
 		int cpu;
+
+		(void) cpu;
 
 		cpu = part_stat_lock();
 		part = req->part;

@@ -863,6 +863,8 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 	int ret, nested, shared = 0;
 	cpumask_var_t mask;
 
+	(void) old_name;
+
 	if (!desc)
 		return -EINVAL;
 

@@ -602,6 +602,8 @@ static int search_bbt(struct mtd_info *mtd, uint8_t *buf, struct nand_bbt_descr 
 	int bbtblocks;
 	int blocktopage = this->bbt_erase_shift - this->page_shift;
 
+	(void) bits;
+
 	/* Search direction top -> down ? */
 	if (td->options & NAND_BBT_LASTBLOCK) {
 		startblock = (mtd->size >> this->bbt_erase_shift) - 1;

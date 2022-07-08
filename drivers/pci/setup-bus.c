@@ -1026,6 +1026,8 @@ void pci_assign_unassigned_bridge_resources(struct pci_dev *bridge)
 	unsigned long type_mask = IORESOURCE_IO | IORESOURCE_MEM |
 				  IORESOURCE_PREFETCH;
 
+	(void) retval;
+
 	head.next = NULL;
 
 again:

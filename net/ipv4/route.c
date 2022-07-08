@@ -1389,6 +1389,8 @@ void ip_rt_send_redirect(struct sk_buff *skb)
 	struct inet_peer *peer;
 	int log_martians;
 
+	(void) log_martians;
+
 	rcu_read_lock();
 	in_dev = __in_dev_get_rcu(rt->dst.dev);
 	if (!in_dev || !IN_DEV_TX_REDIRECTS(in_dev)) {

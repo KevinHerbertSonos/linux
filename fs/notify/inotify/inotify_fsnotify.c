@@ -101,6 +101,8 @@ static int inotify_handle_event(struct fsnotify_group *group,
 	struct fsnotify_event *added_event;
 	int wd, ret = 0;
 
+	(void) to_tell;
+
 	BUG_ON(vfsmount_mark);
 
 	pr_debug("%s: group=%p event=%p to_tell=%p mask=%x\n", __func__, group,

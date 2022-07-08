@@ -106,6 +106,8 @@ int main(int argc, char *argv[])
 	int outversion = DEFAULT_FDT_VERSION;
 	long long cmdline_boot_cpuid = -1;
 
+	(void) check;
+
 	quiet      = 0;
 	reservenum = 0;
 	minsize    = 0;

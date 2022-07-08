@@ -613,6 +613,8 @@ rescan:
 		sector_t size, from;
 		struct partition_meta_info *info = NULL;
 
+		(void) info;
+
 		size = state->parts[p].size;
 		if (!size)
 			continue;

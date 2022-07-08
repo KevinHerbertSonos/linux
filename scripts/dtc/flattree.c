@@ -700,6 +700,8 @@ static struct reserve_info *flat_read_mem_reserve(struct inbuf *inb)
 	const char *p;
 	struct fdt_reserve_entry re;
 
+	(void) p;
+
 	/*
 	 * Each entry is a pair of u64 (addr, size) values for 4 cell_t's.
 	 * List terminates at an entry with size equal to zero.
