@@ -16,7 +16,7 @@
 #include "btmtk_config.h"
 #include <linux/pm_wakeup.h>
 
-#define VERSION "v0.0.1.13_2020082701"
+#define VERSION "v0.0.1.13_2020092201"
 
 #define SDIO_HEADER_LEN				4
 #define STP_HEADER_LEN				4
@@ -223,7 +223,9 @@ struct btmtk_sdio_card {
 	struct bt_cfg_struct		bt_cfg;
 	struct		wakeup_source	*woble_ws;
 	struct		wakeup_source	*eint_ws;
-
+#if LOWER_POWER_SINK
+	struct		wakeup_source	*lp_ws;
+#endif
 	/* WoBLE */
 	unsigned int wobt_irq;
 	int wobt_irqlevel;

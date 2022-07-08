@@ -1343,6 +1343,18 @@ static int btmtk_sdio_writeb(u32 offset, u8 val)
 	return ret;
 }
 
+#if LOWER_POWER_SINK
+static inline void btmtk_sdio_lp_wake_lock(struct btmtk_sdio_card *data)
+{
+	__pm_stay_awake(data->lp_ws);
+}
+
+static inline void btmtk_sdio_lp_wake_unlock(struct btmtk_sdio_card *data)
+{
+	__pm_relax(data->lp_ws);
+}
+#endif
+
 static int btmtk_sdio_readb(u32 offset, u8 *val)
 {
 	u32 ret = 0;
@@ -4258,6 +4270,10 @@ static int btmtk_sdio_process_int_status(
 		}
 	}
 
+#if LOWER_POWER_SINK
+	btmtk_sdio_lp_wake_unlock(g_card);
+#endif
+
 	btmtk_sdio_timestamp(BTMTK_SDIO_RX_CHECKPOINT_ENABLE_INTR);
 	ret = btmtk_sdio_enable_interrupt(1);
 
@@ -4283,6 +4299,9 @@ static void btmtk_sdio_interrupt(struct sdio_func *func)
 	btmtk_sdio_enable_interrupt(0);
 
 	btmtk_interrupt(priv);
+#if LOWER_POWER_SINK
+	btmtk_sdio_lp_wake_lock(g_card);
+#endif
 }
 
 static int btmtk_sdio_register_dev(struct btmtk_sdio_card *card)
@@ -4892,8 +4911,6 @@ int btmtk_sdio_driver_reset_dongle(void)
 		BTMTK_INFO("g_priv = NULL, return");
 		return -1;
 	}
-
-	need_reset_stack = 1;
 	wlan_remove_done = 0;
 
 retry_reset:
@@ -4938,7 +4955,9 @@ rst_dongle_err:
 	btmtk_clean_queue();
 	g_priv->btmtk_dev.reset_progress = 0;
 	dump_data_counter = 0;
-	BTMTK_INFO("return ret = %d", ret);
+	need_reset_stack = 1;
+	wake_up_interruptible(&inq);
+	BTMTK_INFO("need reset stack = %d, return ret = %d", need_reset_stack, ret);
 	return ret;
 }
 
@@ -5472,6 +5491,13 @@ static int btmtk_sdio_probe(struct sdio_func *func,
 		btmtk_sdio_woble_input_init(g_card);
 	}
 
+#if LOWER_POWER_SINK
+#ifdef CONFIG_MP_WAKEUP_SOURCE_SYSFS_STAT
+		g_card->lp_ws = wakeup_source_register(NULL, "btevent_lp");
+#else
+		g_card->lp_ws = wakeup_source_register("btevent_lp");
+#endif
+#endif
 	sema_init(&g_priv->wr_mtx, 1);
 	sema_init(&g_priv->rd_mtx, 1);
 
@@ -5519,6 +5545,9 @@ static void btmtk_sdio_remove(struct sdio_func *func)
 				btmtk_sdio_woble_input_deinit(g_card);
 			}
 
+#if LOWER_POWER_SINK
+			wakeup_source_unregister(card->lp_ws);
+#endif
 			btmtk_sdio_woble_free_setting();
 			btmtk_sdio_free_bt_cfg();
 			BTMTK_DBG("unregister dev");
@@ -5885,6 +5914,12 @@ static int btmtk_sdio_handle_entering_WoBLE_state(u8 is_suspend)
 
 	BTMTK_DBG("begin");
 
+#if LOWER_POWER_SINK
+	/* Can't enter woble mode */
+	BTMTK_INFO("not support woble mode for lp sink");
+	return 0;
+#endif
+
 	FOPS_MUTEX_LOCK();
 	fops_state = btmtk_fops_get_state();
 	FOPS_MUTEX_UNLOCK();
@@ -6056,6 +6091,12 @@ static int btmtk_sdio_handle_leaving_WoBLE_state(void)
 		BTMTK_ERR("g_card is NULL return");
 		goto exit;
 	}
+
+#if LOWER_POWER_SINK
+	/* Can't enter woble mode */
+	BTMTK_INFO("not support woble mode for lp sink");
+	return 0;
+#endif
 
 	FOPS_MUTEX_LOCK();
 	fops_state = btmtk_fops_get_state();
