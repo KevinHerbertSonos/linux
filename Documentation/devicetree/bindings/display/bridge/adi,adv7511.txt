@@ -53,6 +53,12 @@ Optional properties:
 - adi,embedded-sync: The input uses synchronization signals embedded in the
   data stream (similar to BT.656). Defaults to separate H/V synchronization
   signals.
+- adi,hsync-pol: ADV7533 only.  Set to either LOW (0) or HIGH (1) the driver
+  will configure the ADV7533 to internally invert the sync signal if required
+  to match the sync polarity setting for the currently selected output mode.
+- adi,hsync-pol: ADV7533 only.  Set to either LOW (0) or HIGH (1) the driver
+  will configure the ADV7533 to internally invert the sync signal if required
+  to match the sync polarity setting for the currently selected output mode.
 - adi,disable-timing-generator: Only for ADV7533. Disables the internal timing
   generator. The chip will rely on the sync signals in the DSI data lanes,
   rather than generate its own timings for HDMI output.
