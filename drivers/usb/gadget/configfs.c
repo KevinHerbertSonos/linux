@@ -9,6 +9,31 @@
 #include "u_f.h"
 #include "u_os_desc.h"
 
+#ifdef CONFIG_AMLOGIC_USB
+struct gadget_lock {
+	struct wakeup_source wakesrc;
+	bool held;
+};
+static struct gadget_lock Gadget_Lock;
+
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+static void gadget_hold(struct gadget_lock *lock)
+{
+	if (!lock->held) {
+		__pm_stay_awake(&lock->wakesrc);
+		lock->held = true;
+	}
+}
+
+static void gadget_drop(struct gadget_lock *lock)
+{
+	if (lock->held) {
+		__pm_relax(&lock->wakesrc);
+		lock->held = false;
+	}
+}
+#endif
+#endif
 int check_user_usb_string(const char *name,
 		struct usb_gadget_strings *stringtab_dev)
 {
@@ -1243,6 +1268,9 @@ static int configfs_composite_bind(struct usb_gadget *gadget,
 	/* the gi->lock is hold by the caller */
 	cdev->gadget = gadget;
 	set_gadget_data(gadget, cdev);
+#ifdef CONFIG_AMLOGIC_USB
+	wakeup_source_init(&Gadget_Lock.wakesrc, "gadget-connect");
+#endif
 	ret = composite_dev_prepare(composite, cdev);
 	if (ret)
 		return ret;
@@ -1384,6 +1412,9 @@ static void configfs_composite_unbind(struct usb_gadget *gadget)
 	purge_configs_funcs(gi);
 	composite_dev_cleanup(cdev);
 	usb_ep_autoconfig_reset(cdev->gadget);
+#ifdef CONFIG_AMLOGIC_USB
+	wakeup_source_trash(&Gadget_Lock.wakesrc);
+#endif
 	cdev->gadget = NULL;
 	set_gadget_data(gadget, NULL);
 }
