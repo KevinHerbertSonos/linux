@@ -30,9 +30,6 @@
 #include <crypto/algapi.h>
 
 #include <linux/device-mapper.h>
-#ifdef CONFIG_SONOS_SECBOOT
-#include "sect_upgrade_header.h"
-#endif
 
 #define DM_MSG_PREFIX "crypt"
 
@@ -1489,32 +1486,15 @@ static int crypt_setkey_allcpus(struct crypt_config *cc)
 	return err;
 }
 
-#ifdef CONFIG_SONOS_SECBOOT
-extern int sonos_get_rootfs_key(int type, char *keystring);
-#endif
-
 static int crypt_set_key(struct crypt_config *cc, char *key)
 {
 	int r = -EINVAL;
 	int key_string_len = strlen(key);
-	char *colon = NULL;
 
 	/* The key size may not be changed. */
 	if (cc->key_size != (key_string_len >> 1))
 		goto out;
 
-#ifdef CONFIG_SONOS_SECBOOT
-	if ( (colon = strchr(key, ':')) != NULL)
-	{
-		*colon = '\0';
-		if (strcmp(key, "mdp.rootfs.red") != 0 ||
-		    key_string_len != 32 ||
-		    !sonos_get_rootfs_key(SECT_UPGRADE_ROOTFS_FORMAT_RED_KEY,
-			                  key)) {
-			goto out;
-		}
-	}
-#endif
 	/* Hyphen (which gives a key_size of zero) means there is no key. */
 	if (!cc->key_size && strcmp(key, "-"))
 		goto out;
