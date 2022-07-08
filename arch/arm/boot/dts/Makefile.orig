@@ -770,7 +770,6 @@ dtb-$(CONFIG_MACH_DOVE) += \
 	dove-d3plug.dtb \
 	dove-dove-db.dtb \
 	dove-sbc-a510.dtb
-ifneq ($(CONFIG_SONOS),y)
 dtb-$(CONFIG_ARCH_MEDIATEK) += \
 	auto2701evb2-ivi-boot.dtb \
 	auto2701evb2-ivi-recovery.dtb \
@@ -782,13 +781,8 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += \
 	mt8135-evbp1.dtb \
 	aud8521pevb2.dtb \
 	aud8521pevb2-nand.dtb
-endif
 dtb-$(CONFIG_ARCH_ZX) += zx296702-ad1.dtb
 endif
-
-dtb-$(CONFIG_SONOS) += elrey_v7.dtb elrey_v6.dtb elrey_v5.dtb elrey_v4.dtb elrey_v3.dtb elrey_v2.dtb
-dtb-$(CONFIG_SONOS) += hideout_v8.dtb hideout_v7.dtb hideout_v6.dtb hideout_v5.dtb hideout_v4.dtb hideout_v3.dtb hideout_v2.dtb
-dtb-$(CONFIG_SONOS) += domino_v0.dtb domino_v1.dtb domino_v2.dtb domino_v3.dtb domino_v4.dtb domino_v5.dtb
 
 dtstree		:= $(srctree)/$(src)
 dtb-$(CONFIG_OF_ALL_DTBS) := $(patsubst $(dtstree)/%.dts,%.dtb, $(wildcard $(dtstree)/*.dts))
