@@ -2012,7 +2012,7 @@ static int aml_ddr_mngr_platform_probe(struct platform_device *pdev)
 		frddrs[i].chipinfo   = p_ddr_chipinfo;
 		frddrs[i].actrl      = actrl;
 
-		dev_info(&pdev->dev, "%d, irqs toddr %d, frddr %d\n",
+		dev_dbg(&pdev->dev, "%d, irqs toddr %d, frddr %d\n",
 			 i, toddrs[i].irq, frddrs[i].irq);
 
 		if (toddrs[i].irq <= 0 || frddrs[i].irq <= 0) {

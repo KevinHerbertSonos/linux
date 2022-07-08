@@ -277,7 +277,7 @@ static void lcd_power_ctrl(int status)
 	unsigned int i, index, wait;
 	int value = -1;
 
-	LCDPR("%s: %d\n", __func__, status);
+	LCDDBG("%s: %d\n", __func__, status);
 	i = 0;
 	while (i < LCD_PWR_STEP_MAX) {
 		if (status)
@@ -473,7 +473,7 @@ static void lcd_resume_work(struct work_struct *p_work)
 	mutex_lock(&lcd_driver->power_mutex);
 	aml_lcd_notifier_call_chain(LCD_EVENT_POWER_ON, NULL);
 	lcd_if_enable_retry(lcd_driver->lcd_config);
-	LCDPR("%s finished\n", __func__);
+	LCDDBG("%s finished\n", __func__);
 	mutex_unlock(&lcd_driver->power_mutex);
 }
 
@@ -881,7 +881,7 @@ static int lcd_io_open(struct inode *inode, struct file *file)
 {
 	struct lcd_cdev_s *lcd_cdev;
 
-	LCDPR("%s\n", __func__);
+	LCDDBG("%s\n", __func__);
 	lcd_cdev = container_of(inode->i_cdev, struct lcd_cdev_s, cdev);
 	file->private_data = lcd_cdev;
 	return 0;
@@ -889,7 +889,7 @@ static int lcd_io_open(struct inode *inode, struct file *file)
 
 static int lcd_io_release(struct inode *inode, struct file *file)
 {
-	LCDPR("%s\n", __func__);
+	LCDDBG("%s\n", __func__);
 	file->private_data = NULL;
 	return 0;
 }
@@ -903,7 +903,7 @@ static long lcd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	opt_info = &lcd_driver->lcd_config->optical_info;
 	mcd_nr = _IOC_NR(cmd);
-	LCDPR("%s: cmd_dir = 0x%x, cmd_nr = 0x%x\n",
+	LCDDBG("%s: cmd_dir = 0x%x, cmd_nr = 0x%x\n",
 		__func__, _IOC_DIR(cmd), mcd_nr);
 
 	argp = (void __user *)arg;
@@ -1573,7 +1573,10 @@ static int lcd_probe(struct platform_device *pdev)
 	lcd_ioremap(pdev);
 	ret = lcd_config_probe(pdev);
 
-	LCDPR("%s %s\n", __func__, (ret ? "failed" : "ok"));
+	if (ret)
+		LCDERR("%s failed\n", __func__);
+	else
+		LCDDBG("%s ok\n", __func__);
 
 	return 0;
 }
@@ -1596,7 +1599,7 @@ static int lcd_remove(struct platform_device *pdev)
 	kfree(lcd_driver);
 	lcd_driver = NULL;
 
-	LCDPR("%s\n", __func__);
+	LCDDBG("%s\n", __func__);
 	return 0;
 }
 
@@ -1629,7 +1632,7 @@ static int lcd_resume(struct platform_device *pdev)
 		lcd_resume_flag = 1;
 		aml_lcd_notifier_call_chain(LCD_EVENT_POWER_ON, NULL);
 		lcd_if_enable_retry(lcd_driver->lcd_config);
-		LCDPR("%s finished\n", __func__);
+		LCDDBG("%s finished\n", __func__);
 		mutex_unlock(&lcd_driver->power_mutex);
 	}
 
@@ -1645,7 +1648,7 @@ static int lcd_suspend(struct platform_device *pdev, pm_message_t state)
 	if (lcd_driver->lcd_status & LCD_STATUS_ENCL_ON) {
 		aml_lcd_notifier_call_chain(LCD_EVENT_POWER_OFF, NULL);
 		lcd_resume_flag = 0;
-		LCDPR("%s finished\n", __func__);
+		LCDDBG("%s finished\n", __func__);
 	}
 	mutex_unlock(&lcd_driver->power_mutex);
 	return 0;

@@ -186,7 +186,7 @@ void lcd_cpu_gpio_probe(unsigned int index)
 	ret = of_property_read_string_index(lcd_drv->dev->of_node,
 		"lcd_cpu_gpio_names", index, &str);
 	if (ret) {
-		LCDERR("failed to get lcd_cpu_gpio_names: %d\n", index);
+		LCDDBG("failed to get lcd_cpu_gpio_names: %d\n", index);
 		str = "unknown";
 	}
 	strcpy(cpu_gpio->name, str);
@@ -212,7 +212,7 @@ static int lcd_cpu_gpio_register(unsigned int index, int init_value)
 		return -1;
 	}
 	if (cpu_gpio->register_flag) {
-		LCDPR("%s: gpio %s[%d] is already registered\n",
+		LCDDBG("%s: gpio %s[%d] is already registered\n",
 			__func__, cpu_gpio->name, index);
 		return 0;
 	}
@@ -234,7 +234,7 @@ static int lcd_cpu_gpio_register(unsigned int index, int init_value)
 	cpu_gpio->gpio = devm_gpiod_get_index(lcd_drv->dev,
 		"lcd_cpu", index, value);
 	if (IS_ERR(cpu_gpio->gpio)) {
-		LCDERR("register gpio %s[%d]: %p, err: %d\n",
+		LCDDBG("register gpio %s[%d]: %p, err: %d\n",
 			cpu_gpio->name, index, cpu_gpio->gpio,
 			IS_ERR(cpu_gpio->gpio));
 		return -1;

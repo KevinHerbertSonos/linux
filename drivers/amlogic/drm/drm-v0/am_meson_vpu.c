@@ -548,7 +548,7 @@ static int am_meson_crtc_loader_protect(struct drm_crtc *crtc, bool on)
 {
 	struct am_meson_crtc *amcrtc = to_am_meson_crtc(crtc);
 
-	DRM_INFO("%s  %d\n", __func__, on);
+	DRM_DEBUG("%s  %d\n", __func__, on);
 
 	if (on) {
 		enable_irq(amcrtc->vblank_irq);
@@ -606,13 +606,13 @@ void am_meson_crtc_enable(struct drm_crtc *crtc)
 	struct drm_display_mode *adjusted_mode = &crtc->state->adjusted_mode;
 	struct am_meson_crtc *amcrtc = to_am_meson_crtc(crtc);
 
-	DRM_INFO("%s\n", __func__);
+	DRM_DEBUG("%s\n", __func__);
 	if (!adjusted_mode) {
 		DRM_ERROR("meson_crtc_enable fail, unsupport mode:%s\n",
 			adjusted_mode->name);
 		return;
 	}
-	DRM_INFO("%s: %s\n", __func__, adjusted_mode->name);
+	DRM_DEBUG("%s: %s\n", __func__, adjusted_mode->name);
 
 	name = am_meson_crtc_get_voutmode(adjusted_mode);
 	mode = validate_vmode(name);
@@ -634,7 +634,7 @@ void am_meson_crtc_disable(struct drm_crtc *crtc)
 	struct am_meson_crtc *amcrtc = to_am_meson_crtc(crtc);
 	unsigned long flags;
 
-	DRM_INFO("%s\n", __func__);
+	DRM_DEBUG("%s\n", __func__);
 	if (crtc->state->event && !crtc->state->active) {
 		spin_lock_irq(&crtc->dev->event_lock);
 		drm_crtc_send_vblank_event(crtc, crtc->state->event);
@@ -713,7 +713,7 @@ int am_meson_crtc_create(struct am_meson_crtc *amcrtc)
 	int gamma_lut_size = 0;
 	int ret;
 
-	DRM_INFO("%s\n", __func__);
+	DRM_DEBUG("%s\n", __func__);
 	ret = drm_crtc_init_with_planes(priv->drm, crtc,
 					priv->primary_plane, priv->cursor_plane,
 					&am_meson_crtc_funcs, "amlogic vpu");
@@ -762,7 +762,7 @@ static void mem_free_work(struct work_struct *work)
 {
 	if (logo_memsize > 0) {
 #ifdef CONFIG_CMA
-		pr_info("%s, free memory: addr:0x%x\n",
+		pr_debug("%s, free memory: addr:0x%x\n",
 			__func__, logo_memsize);
 
 		dma_release_from_contiguous(&(gp_dev->dev),
@@ -800,7 +800,7 @@ static int am_meson_vpu_bind(struct device *dev,
 	/* init reserved memory */
 	ret = of_reserved_mem_device_init(&pdev->dev);
 	if (ret != 0)
-		dev_err(dev, "failed to init reserved memory\n");
+		dev_dbg(dev, "failed to init reserved memory\n");
 	else {
 #ifdef CONFIG_CMA
 		gp_dev = pdev;

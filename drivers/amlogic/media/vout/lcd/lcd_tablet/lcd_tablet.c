@@ -117,7 +117,7 @@ static int lcd_vout_disable(enum vmode_e cur_vmod)
 	mutex_lock(&lcd_drv->power_mutex);
 	lcd_drv->lcd_status &= ~LCD_STATUS_VMODE_ACTIVE;
 	aml_lcd_notifier_call_chain(LCD_EVENT_POWER_OFF, NULL);
-	LCDPR("%s finished\n", __func__);
+	LCDDBG("%s finished\n", __func__);
 	mutex_unlock(&lcd_drv->power_mutex);
 
 	return 0;
@@ -193,7 +193,7 @@ static int lcd_framerate_automation_set_mode(void)
 	if (!lcd_drv)
 		return -1;
 
-	LCDPR("%s\n", __func__);
+	LCDDBG("%s\n", __func__);
 
 	/* update lcd config sync_duration, for calculate */
 	lcd_drv->lcd_config->lcd_timing.sync_duration_num =
@@ -235,12 +235,12 @@ static int lcd_set_vframe_rate_hint(int duration)
 		return -1;
 
 	if ((lcd_drv->lcd_status & LCD_STATUS_ENCL_ON) == 0) {
-		LCDPR("%s: lcd is disabled, exit\n", __func__);
+		LCDDBG("%s: lcd is disabled, exit\n", __func__);
 		return 0;
 	}
 
 	if (lcd_drv->lcd_config->lcd_timing.fr_adjust_type == 0xff) {
-		LCDPR("%s: fixed timing, exit\n", __func__);
+		LCDDBG("%s: fixed timing, exit\n", __func__);
 		return 0;
 	}
 	info = lcd_drv->lcd_info;
@@ -256,7 +256,7 @@ static int lcd_set_vframe_rate_hint(int duration)
 		n = ARRAY_SIZE(lcd_vframe_match_table_2);
 		break;
 	default:
-		LCDPR("%s: fr_auto_policy = %d, disabled\n",
+		LCDDBG("%s: fr_auto_policy = %d, disabled\n",
 			__func__, fr_policy);
 		return 0;
 	}
@@ -268,13 +268,13 @@ static int lcd_set_vframe_rate_hint(int duration)
 			duration_den = vtable[i].duration_den;
 		}
 	}
-	LCDPR("%s: policy = %d, duration = %d, fps = %d, frame_rate = %d\n",
+	LCDDBG("%s: policy = %d, duration = %d, fps = %d, frame_rate = %d\n",
 		__func__, fr_policy, duration, fps, frame_rate);
 
 	/* if the sync_duration is same as current */
 	if ((duration_num == info->sync_duration_num) &&
 		(duration_den == info->sync_duration_den)) {
-		LCDPR("%s: sync_duration is the same, exit\n", __func__);
+		LCDDBG("%s: sync_duration is the same, exit\n", __func__);
 		return 0;
 	}
 
@@ -298,7 +298,7 @@ static int lcd_set_vframe_rate_end_hint(void)
 		return -1;
 
 	if ((lcd_drv->lcd_status & LCD_STATUS_ENCL_ON) == 0) {
-		LCDPR("%s: lcd is disabled, exit\n", __func__);
+		LCDDBG("%s: lcd is disabled, exit\n", __func__);
 		return 0;
 	}
 
@@ -310,7 +310,7 @@ static int lcd_set_vframe_rate_end_hint(void)
 		LCDPR("fr_auto_policy = %d\n", lcd_drv->fr_auto_policy);
 	if (lcd_drv->fr_auto_policy) {
 		info = lcd_drv->lcd_info;
-		LCDPR("%s: return mode = %s, policy = %d\n", __func__,
+		LCDDBG("%s: return mode = %s, policy = %d\n", __func__,
 			info->name, lcd_drv->fr_auto_policy);
 
 		if (lcd_drv->fr_mode == 0) {
@@ -338,7 +338,7 @@ static int lcd_set_vframe_rate_policy(int policy)
 		return -1;
 
 	lcd_drv->fr_auto_policy = policy;
-	LCDPR("%s: %d\n", __func__, lcd_drv->fr_auto_policy);
+	LCDDBG("%s: %d\n", __func__, lcd_drv->fr_auto_policy);
 #endif
 	return 0;
 }
@@ -368,7 +368,7 @@ static int lcd_suspend(void)
 	mutex_lock(&lcd_drv->power_mutex);
 	aml_lcd_notifier_call_chain(LCD_EVENT_POWER_OFF, NULL);
 	lcd_resume_flag = 0;
-	LCDPR("%s finished\n", __func__);
+	LCDDBG("%s finished\n", __func__);
 	mutex_unlock(&lcd_drv->power_mutex);
 	return 0;
 }
@@ -399,7 +399,7 @@ static int lcd_resume(void)
 		lcd_resume_flag = 1;
 		aml_lcd_notifier_call_chain(LCD_EVENT_POWER_ON, NULL);
 		lcd_if_enable_retry(lcd_drv->lcd_config);
-		LCDPR("%s finished\n", __func__);
+		LCDDBG("%s finished\n", __func__);
 		mutex_unlock(&lcd_drv->power_mutex);
 	}
 
@@ -578,14 +578,14 @@ void lcd_tablet_vout_server_remove(void)
  */
 static void lcd_config_print(struct lcd_config_s *pconf)
 {
+	if (lcd_debug_print_flag == 0)
+		return;
+
 	LCDPR("%s, %s, %dbit, %dx%d\n",
 		pconf->lcd_basic.model_name,
 		lcd_type_type_to_str(pconf->lcd_basic.lcd_type),
 		pconf->lcd_basic.lcd_bits,
 		pconf->lcd_basic.h_active, pconf->lcd_basic.v_active);
-
-	if (lcd_debug_print_flag == 0)
-		return;
 
 	LCDPR("h_period = %d\n", pconf->lcd_basic.h_period);
 	LCDPR("v_period = %d\n", pconf->lcd_basic.v_period);
@@ -701,7 +701,7 @@ static int lcd_config_load_from_dts(struct lcd_config_s *pconf,
 
 	child = of_get_child_by_name(dev->of_node, pconf->lcd_propname);
 	if (child == NULL) {
-		LCDERR("failed to get %s\n", pconf->lcd_propname);
+		LCDDBG("failed to get %s\n", pconf->lcd_propname);
 		return -1;
 	}
 
@@ -737,7 +737,7 @@ static int lcd_config_load_from_dts(struct lcd_config_s *pconf,
 	}
 	ret = of_property_read_u32_array(child, "range_setting", &para[0], 6);
 	if (ret) {
-		LCDPR("no range_setting\n");
+		LCDDBG("no range_setting\n");
 		pconf->lcd_basic.h_period_min = pconf->lcd_basic.h_period;
 		pconf->lcd_basic.h_period_max = pconf->lcd_basic.h_period;
 		pconf->lcd_basic.v_period_min = pconf->lcd_basic.v_period;
@@ -847,7 +847,7 @@ static int lcd_config_load_from_dts(struct lcd_config_s *pconf,
 				lvdsconf->phy_preem = para[1];
 				lvdsconf->phy_clk_vswing = 0;
 				lvdsconf->phy_clk_preem = 0;
-				LCDPR("set phy vswing=0x%x, preemphasis=0x%x\n",
+				LCDDBG("set phy vswing=0x%x, preemphasis=0x%x\n",
 					lvdsconf->phy_vswing,
 					lvdsconf->phy_preem);
 			}
@@ -856,9 +856,9 @@ static int lcd_config_load_from_dts(struct lcd_config_s *pconf,
 			lvdsconf->phy_preem = para[1];
 			lvdsconf->phy_clk_vswing = para[2];
 			lvdsconf->phy_clk_preem = para[3];
-			LCDPR("set phy vswing=0x%x, preemphasis=0x%x\n",
+			LCDDBG("set phy vswing=0x%x, preemphasis=0x%x\n",
 				lvdsconf->phy_vswing, lvdsconf->phy_preem);
-			LCDPR("set phy_clk vswing=0x%x, preemphasis=0x%x\n",
+			LCDDBG("set phy_clk vswing=0x%x, preemphasis=0x%x\n",
 				lvdsconf->phy_clk_vswing,
 				lvdsconf->phy_clk_preem);
 		}
@@ -1302,11 +1302,11 @@ static int lcd_get_config(struct lcd_config_s *pconf, struct device *dev)
 			load_id = 1;
 	}
 	if (load_id) {
-		LCDPR("%s from unifykey\n", __func__);
+		LCDDBG("%s from unifykey\n", __func__);
 		lcd_drv->lcd_config_load = 1;
 		lcd_config_load_from_unifykey(pconf);
 	} else {
-		LCDPR("%s from dts\n", __func__);
+		LCDDBG("%s from dts\n", __func__);
 		lcd_drv->lcd_config_load = 0;
 		lcd_config_load_from_dts(pconf, dev);
 	}
@@ -1326,7 +1326,7 @@ static void lcd_set_vinfo(unsigned int sync_duration)
 {
 	struct aml_lcd_drv_s *lcd_drv = aml_lcd_get_driver();
 
-	LCDPR("%s: sync_duration=%d\n", __func__, sync_duration);
+	LCDDBG("%s: sync_duration=%d\n", __func__, sync_duration);
 
 	lcd_vout_notify_mode_change_pre();
 

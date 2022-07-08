@@ -127,7 +127,7 @@ static int lcd_pll_wait_lock(unsigned int reg, unsigned int lock_bit)
 	} while ((pll_lock == 0) && (wait_loop > 0));
 	if (pll_lock == 0)
 		ret = -1;
-	LCDPR("%s: pll_lock=%d, wait_loop=%d\n",
+	LCDDBG("%s: pll_lock=%d, wait_loop=%d\n",
 		__func__, pll_lock, (PLL_WAIT_LOCK_CNT - wait_loop));
 
 	return ret;
@@ -186,7 +186,7 @@ static int lcd_pll_wait_lock_g12a(int path)
 		ret = -1;
 
 pll_lock_end_g12a:
-	LCDPR("%s: path=%d, pll_lock=%d, wait_loop=%d\n",
+	LCDDBG("%s: path=%d, pll_lock=%d, wait_loop=%d\n",
 		__func__, path, pll_lock, (PLL_WAIT_LOCK_CNT_G12A - wait_loop));
 
 	return ret;
@@ -2447,7 +2447,7 @@ void lcd_pll_reset(void)
 
 lcd_pll_reset_end:
 	spin_unlock_irqrestore(&lcd_clk_lock, flags);
-	LCDPR("%s\n", __func__);
+	LCDDBG("%s\n", __func__);
 }
 
 void lcd_vlock_m_update(unsigned int vlock_m)
@@ -2544,7 +2544,7 @@ void lcd_clk_update(struct lcd_config_s *pconf)
 
 lcd_clk_update_end:
 	spin_unlock_irqrestore(&lcd_clk_lock, flags);
-	LCDPR("%s\n", __func__);
+	LCDDBG("%s\n", __func__);
 }
 
 /* for timing change */
