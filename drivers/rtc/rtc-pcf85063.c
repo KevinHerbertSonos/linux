@@ -191,11 +191,23 @@ static int pcf85063_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
 	struct rtc_device *rtc;
+	struct rtc_time *tm;
+	int	err = 0;
 
 	dev_dbg(&client->dev, "%s\n", __func__);
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
 		return -ENODEV;
+
+#ifdef CONFIG_SONOS
+	/* Check to make sure that the chip is actually there - should not register
+	 * if it's not accessible on the i2c
+	 */
+	if ((err = pcf85063_get_datetime(client, tm)) < 0) {
+		printk(KERN_ERR "Cannot access %s - errcode %d\n", pcf85063_driver.driver.name, err);
+		return -ENODEV;
+	}
+#endif
 
 	rtc = devm_rtc_device_register(&client->dev,
 				       pcf85063_driver.driver.name,
