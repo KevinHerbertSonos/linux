@@ -28,7 +28,11 @@ static int imx6sx_idle_finish(unsigned long val)
 	 * just call flush_cache_all() is fine.
 	 */
 	flush_cache_all();
-	cpu_do_idle();
+	if (psci_ops.cpu_suspend)
+		psci_ops.cpu_suspend(MX6SX_POWERDWN_IDLE_PARAM,
+				     __pa(cpu_resume));
+	else
+		imx6sx_wfi_in_iram_fn(wfi_iram_base);
 
 	return 0;
 }
@@ -36,29 +40,22 @@ static int imx6sx_idle_finish(unsigned long val)
 static int imx6sx_enter_wait(struct cpuidle_device *dev,
 			    struct cpuidle_driver *drv, int index)
 {
+	int mode = get_bus_freq_mode();
+
 	imx6_set_lpm(WAIT_UNCLOCKED);
-
-	switch (index) {
-	case 1:
+	if ((index == 1) || ((mode != BUS_FREQ_LOW) && index == 2)) {
+		index = 1;
 		cpu_do_idle();
-		break;
-	case 2:
-		imx6_enable_rbc(true);
-		imx_gpc_set_arm_power_in_lpm(true);
-		imx_set_cpu_jump(0, v7_cpu_resume);
-		/* Need to notify there is a cpu pm operation. */
-		cpu_pm_enter();
-		cpu_cluster_pm_enter();
+	} else {
+			/* Need to notify there is a cpu pm operation. */
+			cpu_pm_enter();
+			cpu_cluster_pm_enter();
 
-		cpu_suspend(0, imx6sx_idle_finish);
+			cpu_suspend(0, imx6_idle_finish);
 
-		cpu_cluster_pm_exit();
-		cpu_pm_exit();
-		imx_gpc_set_arm_power_in_lpm(false);
-		imx6_enable_rbc(false);
-		break;
-	default:
-		break;
+			cpu_cluster_pm_exit();
+			cpu_pm_exit();
+			imx6_enable_rbc(false);
 	}
 
 	imx6_set_lpm(WAIT_CLOCKED);
@@ -72,24 +69,23 @@ static struct cpuidle_driver imx6sx_cpuidle_driver = {
 	.states = {
 		/* WFI */
 		ARM_CPUIDLE_WFI_STATE,
-		/* WAIT */
+		/* WAIT MODE */
 		{
 			.exit_latency = 50,
 			.target_residency = 75,
-			.flags = CPUIDLE_FLAG_TIMER_STOP,
 			.enter = imx6sx_enter_wait,
 			.name = "WAIT",
 			.desc = "Clock off",
 		},
-		/* WAIT + ARM power off  */
+		/* LOW POWER IDLE */
 		{
 			/*
-			 * ARM gating 31us * 5 + RBC clear 65us
-			 * and some margin for SW execution, here set it
-			 * to 300us.
+			 * RBC 130us + ARM gating 93us + RBC clear 65us
+			 * + PLL2 relock 450us and some margin, here set
+			 * it to 800us.
 			 */
-			.exit_latency = 300,
-			.target_residency = 500,
+			.exit_latency = 800,
+			.target_residency = 1000,
 			.enter = imx6sx_enter_wait,
 			.name = "LOW-POWER-IDLE",
 			.desc = "ARM power off",
