@@ -1,8 +1,8 @@
 /*
- * mtk-afe-platform-driver.h  --  Mediatek afe platform driver definition
+ * mt8518-afe-debug.h  --  Mediatek 8518 audio debugfs
  *
- * Copyright (c) 2016 MediaTek Inc.
- * Author: Garlic Tseng <garlic.tseng@mediatek.com>
+ * Copyright (c) 2018 MediaTek Inc.
+ * Author: Hidalgo Huang <hidalgo.huang@mediatek.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,14 +14,13 @@
  * GNU General Public License for more details.
  */
 
-#ifndef _MTK_AFE_PLATFORM_DRIVER_H_
-#define _MTK_AFE_PLATFORM_DRIVER_H_
+#ifndef __MT8518_AFE_DEBUG_H__
+#define __MT8518_AFE_DEBUG_H__
 
-extern const struct snd_soc_platform_driver mtk_afe_pcm_platform;
-extern const struct snd_pcm_ops mtk_afe_pcm_ops;
+struct mtk_base_afe;
 
-int mtk_afe_pcm_new(struct snd_soc_pcm_runtime *rtd);
-void mtk_afe_pcm_free(struct snd_pcm *pcm);
+void mt8518_afe_init_debugfs(struct mtk_base_afe *afe);
+
+void mt8518_afe_cleanup_debugfs(struct mtk_base_afe *afe);
 
 #endif
-
