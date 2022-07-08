@@ -280,6 +280,12 @@ config MICROSEMI_PHY
 	---help---
 	  Currently supports the VSC8531 and VSC8541 PHYs
 
+config MV88E6020_PHY
+	tristate "Support for Marvell 88E6020 switch in RMII mode"
+	default n
+	help
+	  Support for the Marvell 88E6020 switch IC in RMII mode.
+
 config NATIONAL_PHY
 	tristate "National Semiconductor PHYs"
 	---help---
@@ -309,6 +315,11 @@ config TERANETICS_PHY
         tristate "Teranetics PHYs"
         ---help---
           Currently supports the Teranetics TN2020
+
+config TI_PHY
+	tristate "Drivers for TI DP8822 PHYs"
+	---help---
+	  Currently supports the TI DP8822 model
 
 config VITESSE_PHY
         tristate "Vitesse PHYs"
