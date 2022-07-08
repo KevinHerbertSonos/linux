@@ -167,7 +167,9 @@ quiet_cmd_vdso = VDSO    $@
 		 sh $(srctree)/$(src)/checkundef.sh '$(NM)' '$@'
 
 VDSO_LDFLAGS = -shared $(call ld-option, --hash-style=both) \
-	$(call ld-option, --build-id) $(call ld-option, --eh-frame-hdr) \
+	$(call cc-ldoption, -Wl$(comma)--build-id) -Wl,-Bsymbolic $(LTO_CFLAGS) \
+	$(filter --target=% --gcc-toolchain=%,$(KBUILD_CFLAGS))
+
 	-Bsymbolic
 GCOV_PROFILE := n
 

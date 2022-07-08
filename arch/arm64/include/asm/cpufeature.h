@@ -244,6 +244,13 @@ void arm64_set_ssbd_mitigation(bool state);
 static inline void arm64_set_ssbd_mitigation(bool state) {}
 #endif
 
+static inline bool system_uses_ttbr0_pan(void)
+{
+       return IS_ENABLED(CONFIG_ARM64_SW_TTBR0_PAN) &&
+               !cpus_have_cap(ARM64_HAS_PAN);
+}
+
+
 #endif /* __ASSEMBLY__ */
 
 #endif

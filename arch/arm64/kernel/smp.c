@@ -55,14 +55,25 @@
 #include <asm/ptrace.h>
 #include <asm/virt.h>
 
+#ifdef CONFIG_AMLOGIC_VMAP
+#include <linux/amlogic/vmap_stack.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/ipi.h>
+
+#ifdef CONFIG_AMLOGIC_MODIFY
+#include <asm/cputype.h>
+#endif
+DEFINE_PER_CPU_READ_MOSTLY(int, cpu_number);
+EXPORT_PER_CPU_SYMBOL(cpu_number);
 
 /*
  * as from 2.5, kernels no longer have an init_tasks structure
  * so we need some other way of telling a new secondary core
  * where to place its SVC stack
  */
+
 struct secondary_data secondary_data;
 /* Number of CPUs which aren't online, but looping in kernel text. */
 int cpus_stuck_in_kernel;
@@ -147,6 +158,7 @@ int __cpu_up(unsigned int cpu, struct task_struct *idle)
 	 * We need to tell the secondary core where to find its stack and the
 	 * page tables.
 	 */
+	secondary_data.task = idle;
 	secondary_data.stack = task_stack_page(idle) + THREAD_START_SP;
 	update_cpu_boot_status(CPU_MMU_OFF);
 	__flush_dcache_area(&secondary_data, sizeof(secondary_data));
@@ -214,7 +226,12 @@ int __cpu_up(unsigned int cpu, struct task_struct *idle)
 asmlinkage notrace void secondary_start_kernel(void)
 {
 	struct mm_struct *mm = &init_mm;
-	unsigned int cpu = smp_processor_id();
+	unsigned int cpu = task_cpu(current);
+
+        set_my_cpu_offset(per_cpu_offset(cpu));
+#ifdef CONFIG_AMLOGIC_VMAP
+        __setup_vmap_stack(my_cpu_offset);
+#endif
 
 	/*
 	 * All kernel threads share the same mm context; grab a
@@ -222,8 +239,6 @@ asmlinkage notrace void secondary_start_kernel(void)
 	 */
 	atomic_inc(&mm->mm_count);
 	current->active_mm = mm;
-
-	set_my_cpu_offset(per_cpu_offset(smp_processor_id()));
 
 	/*
 	 * TTBR0 is only used for the identity mapping at this stage. Make it
@@ -437,6 +452,9 @@ void __init smp_cpus_done(unsigned int max_cpus)
 void __init smp_prepare_boot_cpu(void)
 {
 	set_my_cpu_offset(per_cpu_offset(smp_processor_id()));
+#ifdef CONFIG_AMLOGIC_VMAP
+	__setup_vmap_stack(my_cpu_offset);
+#endif
 	/*
 	 * Initialise the static keys early as they may be enabled by the
 	 * cpufeature code.
@@ -724,6 +742,8 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	 */
 	for_each_possible_cpu(cpu) {
 
+		per_cpu(cpu_number, cpu) = cpu;
+
 		if (cpu == smp_processor_id())
 			continue;
 
@@ -821,9 +841,22 @@ static void ipi_cpu_stop(unsigned int cpu)
 
 	local_irq_disable();
 
+#ifdef CONFIG_AMLOGIC_MODIFY
+/* CORTEX-A55 need power down here for shutdown*/
+/* If A55 enter WFI here, it is possible quit from wfi,
+ *  which cause CPU PACTIVE check fail.
+ */
+#ifdef CONFIG_HOTPLUG_CPU
+	if ((read_cpuid_id() & MIDR_CPU_MODEL_MASK) == MIDR_CORTEX_A55) {
+		if (cpu_ops[cpu] && cpu_ops[cpu]->cpu_die)
+			cpu_ops[cpu]->cpu_die(cpu);
+	}
+#endif
+#endif
 	while (1)
 		cpu_relax();
 }
+
 
 /*
  * Main handler for inter-processor interrupts
@@ -928,8 +961,6 @@ void smp_send_stop(void)
 		smp_cross_call(&mask, IPI_CPU_STOP);
 	}
 
-	/* Wait up to one second for other CPUs to stop */
-	timeout = USEC_PER_SEC;
 	while (num_other_online_cpus() && timeout--)
 		udelay(1);
 
