@@ -961,7 +961,7 @@ static int mtk_nfc_do_write_page(struct mtd_info *mtd, struct nand_chip *chip,
 	nfi_writel(nfc, reg, NFI_CON);
 	nfi_writew(nfc, STAR_EN, NFI_STRDATA);
 
-	ret = wait_for_completion_timeout(&nfc->done, msecs_to_jiffies(500));
+	ret = wait_for_completion_timeout(&nfc->done, msecs_to_jiffies(1000));
 	if (!ret) {
 		dev_err(dev, "program ahb done timeout\n");
 		nfi_writew(nfc, 0, NFI_INTR_EN);
@@ -1268,7 +1268,7 @@ static inline void mtk_nfc_hw_init(struct mtk_nfc *nfc)
 	 * 07:04: write wait states
 	 * 03:00: read wait states
 	 */
-	nfi_writel(nfc, 0x10804211, NFI_ACCCON);
+	nfi_writel(nfc, 0x10801111, NFI_ACCCON);
 
 	/*
 	 * CNRNB: nand ready/busy register
