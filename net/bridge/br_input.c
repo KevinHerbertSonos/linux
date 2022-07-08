@@ -22,6 +22,25 @@
 #include <linux/rculist.h>
 #include "br_private.h"
 
+#if defined(CONFIG_SONOS)
+#include <linux/ip.h>
+#include "br_direct.h"
+#include "br_forward_sonos.h"
+#include "br_mcast.h"
+#include "br_uplink.h"
+
+/* #define DEBUG_BR_INPUT 1 */
+
+/* Make sure nobody thinks that Netfilter or IGMP Snooping will work. */
+#if defined(CONFIG_BRIDGE_NETFILTER) /* SONOS SWPBL-70338 */
+#error "No netfilter for you!"
+#endif
+#if defined(CONFIG_BRIDGE_IGMP_SNOOPING) /* SONOS SWPBL-70338 */
+#error "No IGMP snoop for you!"
+#endif
+
+#else /* !CONFIG_SONOS */
+
 /* Hook for brouter */
 br_should_route_hook_t __rcu *br_should_route_hook __read_mostly;
 EXPORT_SYMBOL(br_should_route_hook);
@@ -32,7 +51,14 @@ br_netif_receive_skb(struct net *net, struct sock *sk, struct sk_buff *skb)
 	br_drop_fake_rtable(skb);
 	return netif_receive_skb(skb);
 }
+#endif /* !defined(CONFIG_SONOS) */
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+void br_pass_frame_up(struct net_bridge *br, struct sk_buff *skb)
+{
+	sonos_pass_frame_up(br, skb);
+}
+#else
 static int br_pass_frame_up(struct sk_buff *skb)
 {
 	struct net_device *indev, *brdev = BR_INPUT_SKB_CB(skb)->brdev;
@@ -69,7 +95,9 @@ static int br_pass_frame_up(struct sk_buff *skb)
 		       dev_net(indev), NULL, skb, indev, NULL,
 		       br_netif_receive_skb);
 }
+#endif
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 static void br_do_proxy_arp(struct sk_buff *skb, struct net_bridge *br,
 			    u16 vid, struct net_bridge_port *p)
 {
@@ -125,7 +153,15 @@ static void br_do_proxy_arp(struct sk_buff *skb, struct net_bridge *br,
 		neigh_release(n);
 	}
 }
+#endif
 
+/* note: already called with rcu_read_lock (preempt_disabled) */
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+int br_handle_frame_finish(struct net_bridge_port *p, struct sk_buff *skb)
+{
+	return sonos_handle_frame_finish(p, skb);
+}
+#else
 /* note: already called with rcu_read_lock */
 int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
@@ -216,8 +252,10 @@ drop:
 	kfree_skb(skb);
 	goto out;
 }
+#endif
 EXPORT_SYMBOL_GPL(br_handle_frame_finish);
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 static void __br_handle_local_finish(struct sk_buff *skb)
 {
 	struct net_bridge_port *p = br_port_get_rcu(skb->dev);
@@ -239,7 +277,20 @@ static int br_handle_local_finish(struct net *net, struct sock *sk, struct sk_bu
 	br_pass_frame_up(skb);
 	return 0;
 }
+#endif
 
+/*
+ * Called via br_handle_frame_hook.
+ * Return NULL if skb is handled
+ * note: already called with rcu_read_lock (preempt_disabled)
+ */
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+struct sk_buff *br_handle_frame(struct net_bridge_port_list_node *pl,
+                                struct sk_buff *skb)
+{
+	return sonos_handle_frame(pl, skb);
+}
+#else
 /*
  * Return NULL if skb is handled
  * note: already called with rcu_read_lock
@@ -340,3 +391,4 @@ drop:
 	}
 	return RX_HANDLER_CONSUMED;
 }
+#endif
