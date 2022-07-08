@@ -40,6 +40,15 @@
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
 
+#ifdef CONFIG_SONOS
+#include <linux/sonos_kernel.h>
+/*
+ * Enables files in procfs for debugging
+ */
+#define ADC_PROCFS
+#include <linux/proc_fs.h>
+#endif // CONFIG_SONOS
+
 /* This will be the driver name the kernel reports */
 #define DRIVER_NAME "vf610-adc"
 
@@ -163,6 +172,9 @@ struct vf610_adc_feature {
 
 	bool	calibration;
 	bool	ovwren;
+#ifdef CONFIG_SONOS
+	bool	continuous;
+#endif
 };
 
 struct vf610_adc {
@@ -181,6 +193,12 @@ struct vf610_adc {
 
 	struct completion completion;
 	u16 buffer[8];
+#ifdef ADC_PROCFS
+	char procfs_dir_name[32];
+	struct proc_dir_entry *procfs_dir;
+	struct proc_dir_entry *procfs_regs;
+	struct proc_dir_entry *procfs_info;
+#endif // ADC_PROCFS
 };
 
 static const u32 vf610_hw_avgs[] = { 1, 4, 8, 16, 32 };
@@ -246,6 +264,9 @@ static inline void vf610_adc_cfg_init(struct vf610_adc *info)
 
 	adc_feature->calibration = true;
 	adc_feature->ovwren = true;
+#ifdef CONFIG_SONOS
+	info->adc_feature.continuous = true;
+#endif
 
 	adc_feature->res_mode = 12;
 	adc_feature->sample_rate = 1;
@@ -339,7 +360,23 @@ static void vf610_adc_cfg_set(struct vf610_adc *info)
 	if (adc_feature->conv_mode == VF610_ADC_CONV_HIGH_SPEED)
 		cfg_data |= VF610_ADC_ADHSC_EN;
 
+#ifndef CONFIG_SONOS
+	/* disable high speed */
+	cfg_data &= ~VF610_ADC_ADHSC_EN;
+#endif
 	writel(cfg_data, info->regs + VF610_REG_ADC_CFG);
+#ifdef CONFIG_SONOS
+	if (adc_feature->continuous) {
+		int gc_data = readl(info->regs + VF610_REG_ADC_GC);
+
+		/* Enable continuous mode */
+		gc_data |= VF610_ADC_ADCON;
+
+		writel(gc_data, info->regs + VF610_REG_ADC_GC);
+		/* Sample channel 1 */
+		writel(1, info->regs + VF610_REG_ADC_HC0);
+	}
+#endif /* CONFIG_SONOS */
 }
 
 static void vf610_adc_sample_set(struct vf610_adc *info)
@@ -601,6 +638,16 @@ static irqreturn_t vf610_adc_isr(int irq, void *dev_id)
 			complete(&info->completion);
 	}
 
+#ifdef CONFIG_SONOS
+	if (info->adc_feature.continuous) {
+		int gc_data;
+		/* Enable continuous mode, start conversion on HC0 */
+		gc_data = readl(info->regs + VF610_REG_ADC_GC);
+		gc_data |= VF610_ADC_ADCON;
+		writel(gc_data, info->regs + VF610_REG_ADC_GC);
+		writel(1, info->regs + VF610_REG_ADC_HC0);
+	}
+#endif /* CONFIG_SONOS */
 	return IRQ_HANDLED;
 }
 
@@ -645,6 +692,18 @@ static int vf610_read_raw(struct iio_dev *indio_dev,
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
 	case IIO_CHAN_INFO_PROCESSED:
+#ifdef CONFIG_SONOS
+		if (info->adc_feature.continuous) {
+			/* Disable continuous mode */
+			int gc_data = readl(info->regs + VF610_REG_ADC_GC);
+			gc_data &= ~VF610_ADC_ADCON;
+			writel(gc_data, info->regs + VF610_REG_ADC_GC);
+			/* Stop conversion on HC0 */
+			writel(VF610_ADC_CONV_DISABLE, info->regs + VF610_REG_ADC_HC0);
+			/* Read data to clear COCO0 flag */
+			readl(info->regs + VF610_REG_ADC_R0);
+		}
+#endif /* CONFIG_SONOS */
 		mutex_lock(&indio_dev->mlock);
 		if (iio_buffer_enabled(indio_dev)) {
 			mutex_unlock(&indio_dev->mlock);
@@ -704,6 +763,55 @@ static int vf610_read_raw(struct iio_dev *indio_dev,
 
 	return -EINVAL;
 }
+
+#ifdef CONFIG_SONOS
+/* read the given channel 1==24Vrail 0==5Vrail */
+#define RAIL_24VOLT	1
+#define RAIL_5VOLT	0
+struct vf610_adc *vf610_read_adc_info = 0;
+int vf610_read_adc(int chan, int *mvolts)
+{
+	static int value24v = 0;
+	int ret;
+	int ignore;
+	struct iio_dev *indio_dev = 0;
+
+	*mvolts = 0;
+
+	if (!vf610_read_adc_info)	// not initialized yet
+		return -EINVAL;
+
+	indio_dev = dev_get_drvdata(vf610_read_adc_info->dev);
+	if (!indio_dev)			// not initialized yet
+		return -EINVAL;
+
+	if (chan < 0 || chan > 1)
+		return -EINVAL;
+
+	if (chan == RAIL_24VOLT) {
+		/* Before reading, we need to make sure that:
+		 * a) The ADC is set up to sample the proper channel (channel 1), and
+		 * b) there is valid data for us from that channel (COCO0 bit is set).
+		 * If either of those conditions is not met, pass back the last value that we read.
+		 */
+		if ((readl(vf610_read_adc_info->regs + VF610_REG_ADC_HC0) & 0x1) &&
+		    (readl(vf610_read_adc_info->regs + VF610_REG_ADC_HS) & VF610_ADC_HS_COCO0)) {
+			value24v = vf610_adc_read_data(vf610_read_adc_info);
+		}
+		*mvolts = value24v;
+		return 0;
+	}
+	if (chan == RAIL_5VOLT) {
+		ret = vf610_read_raw(
+			indio_dev, &(vf610_adc_iio_channels[chan]),
+			mvolts, &ignore,
+			IIO_CHAN_INFO_RAW);
+	}
+
+	return (ret != IIO_VAL_INT) ? -EIO : 0;
+}
+EXPORT_SYMBOL(vf610_read_adc);
+#endif	// CONFIG_SONOS
 
 static int vf610_write_raw(struct iio_dev *indio_dev,
 			struct iio_chan_spec const *chan,
@@ -797,6 +905,152 @@ static int vf610_adc_reg_access(struct iio_dev *indio_dev,
 
 	return 0;
 }
+
+#ifdef ADC_PROCFS
+
+static int procfs_regs_show(struct seq_file *m, void *v)
+{
+	struct vf610_adc *info = m->private;
+
+	#define _SEQ_PRINTREG(name, off) seq_printf(m, "[%03x] ADC_%-4s = %08x\n", off, name, readl_relaxed(info->regs + off))
+
+	_SEQ_PRINTREG("HC0",	VF610_REG_ADC_HC0);
+	_SEQ_PRINTREG("HC1",	VF610_REG_ADC_HC1);
+	_SEQ_PRINTREG("HS",	VF610_REG_ADC_HS);
+	_SEQ_PRINTREG("R0",	VF610_REG_ADC_R0);
+	_SEQ_PRINTREG("R1",	VF610_REG_ADC_R1);
+	_SEQ_PRINTREG("CFG",	VF610_REG_ADC_CFG);
+	_SEQ_PRINTREG("GC",	VF610_REG_ADC_GC);
+	_SEQ_PRINTREG("GS",	VF610_REG_ADC_GS);
+	_SEQ_PRINTREG("CV",	VF610_REG_ADC_CV);
+	_SEQ_PRINTREG("OFS",	VF610_REG_ADC_OFS);
+	_SEQ_PRINTREG("CAL",	VF610_REG_ADC_CAL);
+	_SEQ_PRINTREG("PCTL",	VF610_REG_ADC_PCTL);
+
+	return 0;
+}
+
+static int procfs_regs_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, procfs_regs_show, PDE_DATA(inode));
+}
+
+static const struct file_operations procfs_regs_ops = {
+	.owner = THIS_MODULE,
+	.open = procfs_regs_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int procfs_info_show(struct seq_file *m, void *v)
+{
+	struct vf610_adc *info = m->private;
+	struct iio_dev *indio_dev = dev_get_drvdata(info->dev);
+	int chan;
+
+	seq_printf(m, "name         = %s\n", indio_dev->name);
+	seq_printf(m, "channels     = %d\n", indio_dev->num_channels);
+
+	for (chan = 0; chan < indio_dev->num_channels; chan++) {
+		int raw, scale, res, freq, ignore = 0;
+		int ret;
+
+		// Get raw data
+		seq_printf(m, "chan%d raw    = ", chan);
+		ret = vf610_read_raw(
+			indio_dev, &(vf610_adc_iio_channels[chan]),
+			&raw, &ignore,
+			IIO_CHAN_INFO_RAW);
+		if (ret != IIO_VAL_INT) {
+			seq_printf(m, "error %d\n", ret);
+		} else {
+			seq_printf(m, "%d\n", raw);
+		}
+
+		// Get scale and resolution
+		vf610_read_raw(
+			indio_dev, &(vf610_adc_iio_channels[chan]),
+			&scale, &res,
+			IIO_CHAN_INFO_SCALE);
+
+		seq_printf(m, "chan%d scale  = %d\n", chan, scale);
+		seq_printf(m, "chan%d res    = %d bits\n", chan, res);
+
+		// Get sample frequency
+		vf610_read_raw(
+			indio_dev, &(vf610_adc_iio_channels[chan]),
+			&freq, &ignore,
+			IIO_CHAN_INFO_SAMP_FREQ);
+
+		seq_printf(m, "chan%d freq   = %d\n", chan, freq);
+	}
+
+	return 0;
+}
+
+static int procfs_info_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, procfs_info_show, PDE_DATA(inode));
+}
+
+static const struct file_operations procfs_info_ops = {
+	.owner = THIS_MODULE,
+	.open = procfs_info_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+#define PROCFS_DIR		"driver/adc"
+#define PROCFS_REGS_FILE	"regs"
+#define PROCFS_INFO_FILE	"info"
+
+static int procfs_init(struct vf610_adc *info)
+{
+	static int adc_num = 0;
+
+	snprintf(info->procfs_dir_name, sizeof(info->procfs_dir_name), PROCFS_DIR"%d", adc_num);
+	adc_num++;
+
+	// Setup procfs dir
+	info->procfs_dir = proc_mkdir(info->procfs_dir_name, NULL);
+	if (!info->procfs_dir) {
+		dev_err(info->dev, "failed to create procfs dir %s/n", PROCFS_DIR);
+		goto failed_procfs;
+	}
+
+	info->procfs_regs = proc_create_data(PROCFS_REGS_FILE, (S_IRUSR | S_IRGRP | S_IROTH), info->procfs_dir, &procfs_regs_ops, info);
+	if (!info->procfs_regs) {
+		dev_err(info->dev, "failed to create procfs file %s\n", PROCFS_REGS_FILE);
+		goto failed_procfs;
+	}
+
+	info->procfs_info = proc_create_data(PROCFS_INFO_FILE, (S_IRUSR | S_IRGRP | S_IROTH), info->procfs_dir, &procfs_info_ops, info);
+	if (!info->procfs_info) {
+		dev_err(info->dev, "failed to create procfs file %s\n", PROCFS_INFO_FILE);
+		goto failed_procfs;
+	}
+
+	return 0;
+failed_procfs:
+	return -1;
+}
+
+static void procfs_remove(struct vf610_adc *info)
+{
+	if (info->procfs_info) {
+		remove_proc_entry(PROCFS_INFO_FILE, info->procfs_dir);
+	}
+	if (info->procfs_regs) {
+		remove_proc_entry(PROCFS_REGS_FILE, info->procfs_dir);
+	}
+	if (info->procfs_dir) {
+		remove_proc_entry(info->procfs_dir_name, NULL);
+	}
+}
+
+#endif // ADC_PROCFS
 
 static const struct iio_info vf610_adc_iio_info = {
 	.driver_module = THIS_MODULE,
@@ -914,6 +1168,16 @@ static int vf610_adc_probe(struct platform_device *pdev)
 		goto error_adc_buffer_init;
 	}
 
+#ifdef CONFIG_SONOS
+	if (!vf610_read_adc_info) {
+		vf610_read_adc_info = info;
+	}
+#endif
+
+#ifdef ADC_PROCFS
+	procfs_init(info);
+#endif // ADC_PROCFS
+
 	return 0;
 
 error_adc_buffer_init:
@@ -930,6 +1194,10 @@ static int vf610_adc_remove(struct platform_device *pdev)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(pdev);
 	struct vf610_adc *info = iio_priv(indio_dev);
+
+#ifdef ADC_PROCFS
+	procfs_remove(info);
+#endif // ADC_PROCFS
 
 	iio_device_unregister(indio_dev);
 	iio_triggered_buffer_cleanup(indio_dev);
