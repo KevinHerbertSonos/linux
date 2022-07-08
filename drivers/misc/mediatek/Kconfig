@@ -1,0 +1,198 @@
+menu "Storage: EMMC, NAND, partition..."
+
+source "drivers/misc/mediatek/cirq/Kconfig"
+
+endmenu  # Storage
+
+menu "Power, PMIC, Battery & Low Power related configs"
+
+config MTK_BASE_POWER
+	bool "MediaTek power management"
+	select PM_OPP
+	help
+	  For MediaTek power management features, such as CPU idle,
+	  CPU suspend, CPU DVFS, GPU DVFS,
+	  Select if you want to enable MediaTek power
+	  management feature.
+
+config MTK_FREQ_HOPPING
+	bool "MediaTek FREQHOPPING SUPPORT"
+	help
+	  If you want to use MediaTek freqhopping, say Y here.If unsure, say N.
+	  Please choose your desired freqhopping driver as well. E.g: MTK2712_FREQ_HOPPING=y
+
+config MTK_MEMORY_LOWPOWER
+	bool "Support Mediatek memory lowpower technology"
+	depends on CMA && ZONE_MOVABLE_CMA
+	default n
+	help
+	  Mediatek DRAM low power technology.
+	  It tries to safe DRAM power by switching
+	  different DRAM mode dynamically. It's a
+	  platform-dependent feature.
+
+config MTK_PASR
+	bool "Support Mediatek DRAM PASR mechanism"
+	depends on MTK_MEMORY_LOWPOWER && (MTK_EMI || MTK_EMI_MPU)
+	default n
+	help
+	  Mediatek DRAM PASR mechanism.
+	  It tries to turn off free DRAM segment's self-refresh.
+	  This can help system reduce power consumption.
+	  It is based on MTK_MEMORY_LOWPOWER technology.
+
+config MTK_PERIODIC_DATA_COLLECTION
+	bool "Support Mediatek memory lowpower technology"
+	depends on MTK_MEMORY_LOWPOWER
+	default n
+	help
+	  Mediatek DRAM low power technology.
+	  It tries to compact memory periodically and
+	  to create a unused contiguous memory. The
+	  DRAM can enter low power state if it is idle.
+
+source "drivers/misc/mediatek/base/power/Kconfig"
+source "drivers/misc/mediatek/freqhopping/Kconfig"
+
+config MTK_PSCI
+	bool "MediaTek PSCI boot method"
+	depends on ARM64
+	help
+	  For MediaTek PSCI wrapper feature, such as cpu_init,
+	  cpu_prepare, cpu_boot, cpu_disable, cpu_die, cpu_kill,
+	  cpu_init_idle, cpu_suspend, select if you want to enable
+	  PSCI boot method on MediaTek platform.
+
+endmenu  # Power
+
+menu "MultiMedia, Display, Camera related configs"
+
+config CUSTOM_KERNEL_IMGSENSOR
+	string "Custom image sensor driver"
+	help
+	  Kernel space image sensor driver. Define  project used all image
+	  sensors .The value is combination of CUSTOM_KERNEL_MAIN_IMGSENSOR,
+	  CUSTOM_KERNEL_MAIN_BACKUP_IMGSENSOR, CUSTOM_KERNEL_SUB_IMGSENSOR,
+	  and CUSTOM_KERNEL_SUB_BACKUP_IMGSENSOR
+
+config MTK_SEC_VIDEO_PATH_SUPPORT
+	bool "Enable MTK Secure Video Path Support"
+	depends on MTK_IN_HOUSE_TEE_SUPPORT || TRUSTONIC_TEE_SUPPORT || TRUSTY
+	help
+	  This enable MTK Secure Video Path Support. (depending on
+	  MTK In-House TEE Support or Trustonic TEE Support)
+
+config MTK_LCM_PHYSICAL_ROTATION_HW
+	bool "Rotate LCM display for 180 degree using HW"
+	help
+	  Rotate LCM display for 180 degree using mediatek hardware engine
+	  Enable it when LCM hardware is intalled upside down,
+	  and you need to rotate the display content to adapting.
+
+endmenu  # MM
+
+menu "Sensors"
+
+config MTK_SENSOR_SUPPORT
+	bool "MTK SENSOR SUPPORT"
+	help
+	  Sensor config for sensor feature in project.
+	  Please say Y here if you want to support and sensors
+	  with mediatek sensor architecture.
+	  If unsure, say N.
+
+config MTK_SENSORS_1_0
+	bool "MTK SENSORs driver 1.0 SUPPORT"
+	help
+	  This is an option for MTK SENSOR 1.0 driver.
+	  we use BIO architecture instead of linux input
+	  architecture, BIO means boost io transfer data
+	  between kernel space and user space.
+	  And we support loadble drivers
+
+endmenu  # Sensors
+
+menu "Security"
+
+config MTK_TEE_GP_SUPPORT
+	bool "Enable MTK GlobalPlatform support in TEE related modules"
+	default n
+	help
+	  GlobalPlatform defines common/consistent APIs and this option
+	  enables TEE related modules to use GPAPIs. (depending on
+	  Trustonic TEE Support or Microtrust TEE Support or Google Trusty
+	  TEE or other 3rd-party TEE)
+
+config MTK_IN_HOUSE_TEE_SUPPORT
+	bool "Enable MTK In House TEE Support"
+	help
+	  Set to yes if MTK TEE is supported. If you don't know if it is
+	  supported, set to no.
+
+config MTEE_CMA_SECURE_MEMORY
+	bool "MTEE using CMA for secure memory allocation"
+	depends on OF
+	depends on CMA
+	depends on MTK_IN_HOUSE_TEE_SUPPORT
+	help
+	  Enable allocation secure memory from CMA to free the memory
+	  back to Linux CMA when secure memory buffer was not used.
+
+source "drivers/misc/mediatek/masp/Kconfig"
+
+endmenu  # Security
+
+menu "Other Peripherals"
+
+source "drivers/misc/mediatek/auxadc/Kconfig"
+source "drivers/misc/mediatek/devapc/Kconfig"
+source "drivers/misc/mediatek/ext_gic/Kconfig"
+source "drivers/misc/mediatek/dfd/Kconfig"
+source "drivers/misc/mediatek/systracker/Kconfig"
+source "drivers/misc/mediatek/chip/Kconfig"
+source "drivers/misc/mediatek/sysenv/Kconfig"
+source "drivers/misc/mediatek/secure_efuse/Kconfig"
+source "drivers/misc/mediatek/hw_random/Kconfig"
+source "drivers/misc/mediatek/usb20/Kconfig"
+
+endmenu # Peripheral
+
+menu "Performance, Power, and Thermal"
+
+config MTK_FPSGO
+  bool "Support FPSGO framework"
+  default n
+  help
+    Support FPSGO framework for UX & Gaming FPS performance and
+    low power balance. As a perquisite to ensure FPS performance,
+    FPSGO persuades lowest power consumption for better DoU
+    endurance and gaming experience.
+    If you are not sure about this, set n.
+
+config MTK_SOC_THERMAL
+  tristate "Temperature sensor driver for mediatek SoCs"
+  depends on THERMAL
+  default y
+  help
+    Enable this option if you want to have support for SoCs thermal
+
+endmenu  # PPT
+
+menu "Misc configs"
+
+source "drivers/misc/mediatek/asrc/Kconfig"
+
+endmenu    # Misc
+
+config MTK_PLATFORM
+	string "MTK platform name"
+
+config FPGA_EARLY_PORTING
+	bool "MTK FPGA EARLY PORTING"
+	help
+	  Used for FPGA early porting to separate code segments between FPGA
+	  platform and non-FPGA platform
+
+config ARCH_MTK_PROJECT
+	string "MTK project name"
+
