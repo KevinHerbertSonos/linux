@@ -11,6 +11,7 @@ proc-$(CONFIG_MMU)	:= task_mmu.o
 proc-y       += inode.o root.o base.o generic.o array.o \
 		fd.o
 proc-$(CONFIG_TTY)      += proc_tty.o
+proc-$(CONFIG_SONOS)    += sonos_special_proc.o sonos_rollback.o
 proc-y	+= cmdline.o
 proc-y	+= consoles.o
 proc-y	+= cpuinfo.o
