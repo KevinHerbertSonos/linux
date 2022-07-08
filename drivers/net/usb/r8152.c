@@ -3250,9 +3250,6 @@ static void rtl_hw_phy_work_func_t(struct work_struct *work)
 	mutex_unlock(&tp->control);
 
 	usb_autopm_put_interface(tp->intf);
-#ifdef CONFIG_SONOS
-	sonos_announce_linkup(tp->netdev);
-#endif
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -4481,6 +4478,10 @@ static int rtl8152_probe(struct usb_interface *intf,
 		device_set_wakeup_enable(&udev->dev, false);
 
 	netif_info(tp, probe, netdev, "%s\n", DRIVER_VERSION);
+
+#ifdef CONFIG_SONOS
+	sonos_announce_linkup(tp->netdev);
+#endif
 
 	return 0;
 
