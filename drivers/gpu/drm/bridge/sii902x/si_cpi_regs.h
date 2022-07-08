@@ -47,6 +47,8 @@
 #define	BIT_TX_AUTO_CALC                    0x20
 #define	BIT_TRANSMIT_CMD                    0x10
 
+#define REG_CEC_TRANSMIT_RETRY      0x8A0
+
 #define REG_CEC_CAPTURE_ID0         0x8A2
 
 #define REG_CEC_INT_ENABLE_0        0x8A4
