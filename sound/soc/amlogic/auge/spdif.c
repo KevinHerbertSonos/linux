@@ -874,6 +874,15 @@ static snd_pcm_uframes_t aml_spdif_pointer(struct snd_pcm_substream *substream)
 	if (frames > runtime->buffer_size)
 		frames = 0;
 
+	// On capture, the pointer register has a granularity of
+	// the period size. However, it sometimes erroneously reports
+	// that the pointer has advanced before the period boundary.
+	// As this can upset time-tracking logic, if that ever happens,
+	// just round down to the nearest period size.
+	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+		frames -= (frames % runtime->period_size);
+	}
+
 	return frames;
 }
 
