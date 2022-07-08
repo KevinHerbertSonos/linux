@@ -75,6 +75,13 @@ void __init pq2_init_pci(void)
 	struct device_node *np = NULL;
 
 	ppc_md.pci_exclude_device = pq2_pci_exclude_device;
+#ifdef CONFIG_SONOS
+	/* Sonos use (bus == 0 && PCI_SLOT(devfn) == 0) as root */
+	ppc_md.pci_exclude_device = NULL;
+	
+	writel(0x00001FFF, &cpm2_immr->im_pci.pci_esr);
+	writel(0x00000FF7, &cpm2_immr->im_pci.pci_emr);
+#endif
 
 	while ((np = of_find_compatible_node(np, NULL, "fsl,pq2-pci")))
 		pq2_pci_add_bridge(np);

@@ -1728,3 +1728,15 @@ void __devinit pcibios_scan_phb(struct pci_controller *hose)
 	if (mode == PCI_PROBE_NORMAL)
 		hose->last_busno = bus->subordinate = pci_scan_child_bus(bus);
 }
+
+#ifdef CONFIG_SONOS
+void __devinit mpc8272_pci_irq_fixup(struct pci_dev *dev)
+{
+	struct device_node *np = NULL;
+
+	np = of_find_compatible_node(np, NULL, "fsl,pq2-pci");
+	if ( np ) {
+		dev->irq = of_irq_to_resource(np, 0, NULL);
+	}
+}
+#endif
