@@ -198,6 +198,9 @@ struct TCP_Server_Info {
 				   vcnumbers */
 	int capabilities; /* allow selective disabling of caps by smb sess */
 	int timeAdj;  /* Adjust for difference in server time zone in sec */
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	long timeOff;  /* adjustment from our time to server in sec */
+#endif
 	__u16 CurrentMid;         /* multiplex id - rotating counter */
 	char cryptkey[CIFS_CRYPTO_KEY_SIZE]; /* used by ntlm, ntlmv2 etc */
 	/* 16th byte of RFC1001 workstation name is always null */
@@ -277,6 +280,9 @@ struct cifsSesInfo {
 	char *user_name;
 	char *domainName;
 	char *password;
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	long timeOff;  /* session-specific adjustment of our time to server in sec */
+#endif
 	struct session_key auth_key;
 	struct ntlmssp_auth *ntlmssp; /* ciphertext, flags, server challenge */
 	bool need_reconnect:1; /* connection reset, uid now invalid */

@@ -44,8 +44,14 @@
 
 static inline int cifs_convert_flags(unsigned int flags)
 {
-	if ((flags & O_ACCMODE) == O_RDONLY)
+	if ((flags & O_ACCMODE) == O_RDONLY) {
+#ifdef CONFIG_NTLMSSP_SONOS
+		/* Sonos: Use explicit permissions rather than GENERIC_READ */
+		return (READ_CONTROL | FILE_READ_ATTRIBUTES | FILE_READ_EA | FILE_READ_DATA);
+#else
 		return GENERIC_READ;
+#endif
+	}
 	else if ((flags & O_ACCMODE) == O_WRONLY)
 		return GENERIC_WRITE;
 	else if ((flags & O_ACCMODE) == O_RDWR) {
@@ -238,8 +244,9 @@ out:
 
 struct cifsFileInfo *
 cifs_new_fileinfo(__u16 fileHandle, struct file *file,
-		  struct tcon_link *tlink, __u32 oplock)
+		  struct tcon_link *tlink)
 {
+	int oplock = 0; /* Sonos */
 	struct dentry *dentry = file->f_path.dentry;
 	struct inode *inode = dentry->d_inode;
 	struct cifsInodeInfo *pCifsInode = CIFS_I(inode);
@@ -248,6 +255,8 @@ cifs_new_fileinfo(__u16 fileHandle, struct file *file,
 	pCifsFile = kzalloc(sizeof(struct cifsFileInfo), GFP_KERNEL);
 	if (pCifsFile == NULL)
 		return pCifsFile;
+
+	oplock = REQ_OPLOCK;    /* Sonos */
 
 	pCifsFile->count = 1;
 	pCifsFile->netfid = fileHandle;
@@ -408,7 +417,7 @@ int cifs_open(struct inode *inode, struct file *file)
 			goto out;
 	}
 
-	pCifsFile = cifs_new_fileinfo(netfid, file, tlink, oplock);
+	pCifsFile = cifs_new_fileinfo(netfid, file, tlink);
 	if (pCifsFile == NULL) {
 		CIFSSMBClose(xid, tcon, netfid);
 		rc = -ENOMEM;

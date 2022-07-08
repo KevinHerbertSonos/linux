@@ -331,7 +331,7 @@ cifs_create_set_dentry:
 			goto cifs_create_out;
 		}
 
-		pfile_info = cifs_new_fileinfo(fileHandle, filp, tlink, oplock);
+		pfile_info = cifs_new_fileinfo(fileHandle, filp, tlink);
 		if (pfile_info == NULL) {
 			fput(filp);
 			CIFSSMBClose(xid, tcon, fileHandle);
@@ -596,8 +596,7 @@ cifs_lookup(struct inode *parent_dir_inode, struct dentry *direntry,
 				goto lookup_out;
 			}
 
-			cfile = cifs_new_fileinfo(fileHandle, filp, tlink,
-						  oplock);
+			cfile = cifs_new_fileinfo(fileHandle, filp, tlink);
 			if (cfile == NULL) {
 				fput(filp);
 				CIFSSMBClose(xid, pTcon, fileHandle);

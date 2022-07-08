@@ -856,8 +856,14 @@ cifs_parse_mount_options(char *options, const char *devname,
 	/* vol->retry default is 0 (i.e. "soft" limited retry not hard retry) */
 	/* default is always to request posix paths. */
 	vol->posix_paths = 1;
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	/* Sonos: The default value for vol->server_ino in our
+	   other implementations is 0, not 1. */
+	vol->server_ino = 0;
+#else
 	/* default to using server inode numbers where available */
 	vol->server_ino = 1;
+#endif
 
 	vol->actimeo = CIFS_DEF_ACTIMEO;
 
@@ -2534,6 +2540,13 @@ void reset_cifs_unix_caps(int xid, struct cifsTconInfo *tcon,
 
 		}
 	}
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	else {
+		/* Sonos: Turn off UNIX extensions if negoation failed, but do
+		 * not fail the mount */
+		tcon->unix_ext = 0;
+	}
+#endif
 }
 
 static void
@@ -3258,6 +3271,9 @@ int cifs_setup_session(unsigned int xid, struct cifsSesInfo *ses,
 	cFYI(1, "Security Mode: 0x%x Capabilities: 0x%x TimeAdjust: %d",
 		 server->secMode, server->capabilities, server->timeAdj);
 
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	ses->timeOff = server->timeOff;
+#endif
 	rc = CIFS_SessSetup(xid, ses, nls_info);
 	if (rc) {
 		cERROR(1, "Send error in SessSetup = %d", rc);
