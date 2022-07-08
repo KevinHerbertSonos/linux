@@ -233,7 +233,6 @@ static const struct mtk_mmsys_driver_data mt8518_mmsys_driver_data = {
 	.main_len = ARRAY_SIZE(mt8518_mtk_ddp_main),
 	.ext_path = mt8518_mtk_ddp_ext,
 	.ext_len = ARRAY_SIZE(mt8518_mtk_ddp_ext),
-	.shadow_register = true,
 };
 
 static int mtk_drm_kms_init(struct drm_device *drm)
