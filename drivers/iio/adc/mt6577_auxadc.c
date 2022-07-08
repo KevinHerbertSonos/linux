@@ -179,6 +179,31 @@ static int mt6577_auxadc_read_raw(struct iio_dev *indio_dev,
 	}
 }
 
+#ifdef CONFIG_SONOS
+struct iio_dev *internal_iio_dev = NULL;
+int mt6577_read_adc(int chan, int *mvolts)
+{
+	int ret;
+	int ignore;
+
+	*mvolts = 0;
+
+	if (!internal_iio_dev)
+		return -EINVAL;
+
+	if (chan < 0 || chan > 5)
+		return -EINVAL;
+
+	ret = mt6577_auxadc_read_raw(internal_iio_dev,
+					&(mt6577_auxadc_iio_channels[chan]),
+					mvolts, &ignore,
+					IIO_CHAN_INFO_PROCESSED);
+
+	return (ret != IIO_VAL_INT) ? -EIO : 0;
+}
+EXPORT_SYMBOL(mt6577_read_adc);
+#endif
+
 static const struct iio_info mt6577_auxadc_info = {
 	.driver_module = THIS_MODULE,
 	.read_raw = &mt6577_auxadc_read_raw,
@@ -244,6 +269,9 @@ static int mt6577_auxadc_probe(struct platform_device *pdev)
 		goto err_power_off;
 	}
 
+#ifdef CONFIG_SONOS
+	internal_iio_dev = indio_dev;
+#endif
 	return 0;
 
 err_power_off:
