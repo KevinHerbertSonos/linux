@@ -1484,7 +1484,7 @@ enum ethtool_link_mode_bit_indices {
 #define SPEED_56000		56000
 #define SPEED_100000		100000
 
-#define SPEED_UNKNOWN		-1
+#define SPEED_UNKNOWN		((__u32)~0U)
 
 static inline int ethtool_validate_speed(__u32 speed)
 {
