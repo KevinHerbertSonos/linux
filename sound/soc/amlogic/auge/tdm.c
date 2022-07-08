@@ -249,6 +249,7 @@ static int aml_tdm_open(struct snd_pcm_substream *substream)
 	struct aml_tdm *p_tdm;
 
 	p_tdm = (struct aml_tdm *)dev_get_drvdata(dev);
+	runtime->private_data = p_tdm;
 
 	snd_soc_set_runtime_hwparams(substream, &aml_tdm_hardware);
 
@@ -256,6 +257,7 @@ static int aml_tdm_open(struct snd_pcm_substream *substream)
 		p_tdm->fddr = aml_audio_register_frddr(dev,
 			p_tdm->actrl, aml_tdm_ddr_isr, substream);
 		if (p_tdm->fddr == NULL) {
+			runtime->private_data = NULL; /* clear private data if initialization fails. */
 			dev_err(dev, "failed to claim from ddr\n");
 			return -ENXIO;
 		}
@@ -263,12 +265,12 @@ static int aml_tdm_open(struct snd_pcm_substream *substream)
 		p_tdm->tddr = aml_audio_register_toddr(dev,
 			p_tdm->actrl, aml_tdm_ddr_isr, substream);
 		if (p_tdm->tddr == NULL) {
+			runtime->private_data = NULL; /* clear private data if initialization fails. */
 			dev_err(dev, "failed to claim to ddr\n");
 			return -ENXIO;
 		}
 	}
 
-	runtime->private_data = p_tdm;
 	return 0;
 }
 
