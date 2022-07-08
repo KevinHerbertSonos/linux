@@ -147,6 +147,15 @@ void panic(const char *fmt, ...)
 	 * after setting panic_cpu) from invoking panic() again.
 	 */
 	local_irq_disable();
+
+#ifdef CONFIG_AMLOGIC_DEBUG_FTRACE_PSTORE
+	ramoops_io_en = 0;
+#endif
+#ifdef CONFIG_AMLOGIC_MODIFY
+	trace_printk("panic: tracing_off()\n");
+	tracing_off();
+#endif
+
 	preempt_disable_notrace();
 
 	/*
@@ -254,13 +263,6 @@ void panic(const char *fmt, ...)
 
 	if (!panic_blink)
 		panic_blink = no_blink;
-
-#if defined(CONFIG_SONOS_SECBOOT)
-	// If we get to this point, we want to restart.  There may be something
-	// fundamentally wrong with the unit, but we may just have a bad install.
-	// If that's the case, we'll eventually stop restarting and fallback...
-	emergency_restart();
-#endif
 
 	if (panic_timeout > 0) {
 		/*

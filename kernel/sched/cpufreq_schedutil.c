@@ -678,20 +678,27 @@ static int sugov_init(struct cpufreq_policy *policy)
 	if (ret)
 		goto fail;
 
- out:
+out:
 	mutex_unlock(&global_tunables_lock);
 
-	cpufreq_enable_fast_switch(policy);
 	return 0;
 
- fail:
+fail:
 	policy->governor_data = NULL;
 	sugov_clear_global_tunables();
 
- free_sg_policy:
+stop_kthread:
+	sugov_kthread_stop(sg_policy);
+
+
+free_sg_policy:
 	mutex_unlock(&global_tunables_lock);
 
 	sugov_policy_free(sg_policy);
+
+disable_fast_switch:
+	cpufreq_disable_fast_switch(policy);
+
 	pr_err("initialization failed (error %d)\n", ret);
 	return ret;
 }

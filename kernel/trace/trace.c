@@ -1836,6 +1836,8 @@ static int trace_save_cmdline(struct task_struct *tsk)
 	savedcmd->map_cmdline_to_pid[idx] = tsk->pid;
 	set_cmdline(idx, tsk->comm);
 
+	saved_tgids[idx] = tsk->tgid;
+
 	arch_spin_unlock(&trace_cmdline_lock);
 
 	return 1;
@@ -1877,6 +1879,25 @@ void trace_find_cmdline(int pid, char comm[])
 
 	arch_spin_unlock(&trace_cmdline_lock);
 	preempt_enable();
+}
+
+int trace_find_tgid(int pid)
+{
+	unsigned map;
+	int tgid;
+
+	preempt_disable();
+	arch_spin_lock(&trace_cmdline_lock);
+	map = savedcmd->map_pid_to_cmdline[pid];
+	if (map != NO_CMDLINE_MAP)
+		tgid = saved_tgids[map];
+	else
+		tgid = -1;
+
+	arch_spin_unlock(&trace_cmdline_lock);
+	preempt_enable();
+
+	return tgid;
 }
 
 void tracing_record_cmdline(struct task_struct *tsk)
