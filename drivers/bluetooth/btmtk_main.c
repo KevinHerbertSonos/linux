@@ -33,37 +33,11 @@
  */
 void btmtk_interrupt(struct btmtk_private *priv)
 {
-	priv->adapter->wakeup_tries = 0;
-
 	priv->adapter->int_count++;
 
 	wake_up_interruptible(&priv->main_thread.wait_q);
 }
 EXPORT_SYMBOL_GPL(btmtk_interrupt);
-
-int btmtk_enable_hs(struct btmtk_private *priv)
-{
-	struct btmtk_adapter *adapter = priv->adapter;
-	int ret = 0;
-
-	BTMTK_INFO("begin");
-
-	ret = wait_event_interruptible_timeout(adapter->event_hs_wait_q,
-			adapter->hs_state,
-			msecs_to_jiffies(WAIT_UNTIL_HS_STATE_CHANGED));
-	if (ret < 0) {
-		BTMTK_ERR("event_hs_wait_q terminated (%d): %d,%d",
-			ret, adapter->hs_state, adapter->wakeup_tries);
-
-	} else {
-		BTMTK_DBG("host sleep enabled: %d,%d", adapter->hs_state,
-			adapter->wakeup_tries);
-		ret = 0;
-	}
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(btmtk_enable_hs);
 
 static int btmtk_tx_pkt(struct btmtk_private *priv, struct sk_buff *skb)
 {
@@ -110,10 +84,6 @@ static void btmtk_init_adapter(struct btmtk_private *priv)
 {
 	int buf_size;
 
-	skb_queue_head_init(&priv->adapter->tx_queue);
-	skb_queue_head_init(&priv->adapter->fops_queue);
-	skb_queue_head_init(&priv->adapter->fwlog_fops_queue);
-
 	buf_size = ALIGN_SZ(SDIO_BLOCK_SIZE, BTSDIO_DMA_ALIGN);
 	priv->adapter->hw_regs_buf = kzalloc(buf_size, GFP_KERNEL);
 	if (!priv->adapter->hw_regs_buf) {
@@ -126,19 +96,11 @@ static void btmtk_init_adapter(struct btmtk_private *priv)
 		BTMTK_DBG("hw_regs_buf=%p hw_regs=%p",
 			priv->adapter->hw_regs_buf, priv->adapter->hw_regs);
 	}
-
-	init_waitqueue_head(&priv->adapter->cmd_wait_q);
-	init_waitqueue_head(&priv->adapter->event_hs_wait_q);
 }
 
 static void btmtk_free_adapter(struct btmtk_private *priv)
 {
-	skb_queue_purge(&priv->adapter->tx_queue);
-
 	kfree(priv->adapter->hw_regs_buf);
-	kfree(priv->adapter);
-
-	priv->adapter = NULL;
 }
 
 /*
@@ -162,6 +124,7 @@ static int btmtk_service_main_thread(void *data)
 	int i = 0;
 	ulong flags;
 	struct sched_param param = { .sched_priority = 90 };/*RR 90 is the same as audio*/
+	int reset_flag = 0;
 
 	sched_setscheduler(current, SCHED_RR, &param);
 
@@ -211,10 +174,9 @@ static int btmtk_service_main_thread(void *data)
 			break;
 		}
 
-		if ((adapter->wakeup_tries ||
-				((!adapter->int_count) &&
+		if ((((!adapter->int_count) &&
 				(!priv->btmtk_dev.tx_dnld_rdy ||
-				skb_queue_empty(&adapter->tx_queue)))) &&
+				skb_queue_empty(&card->tx_queue)))) &&
 				(!priv->btmtk_dev.reset_dongle)) {
 			BTMTK_DBG("main_thread is sleeping...");
 			schedule();
@@ -236,11 +198,15 @@ static int btmtk_service_main_thread(void *data)
 					BTMTK_ERR(L0_RESET_TAG "hw reset dongle error <%d>", ret);
 				} else {
 					BTMTK_INFO(L0_RESET_TAG "hw reset dongle done");
+					reset_flag = 1;
 					break;
 				}
 			} else {
 				if (ret) {
 					BTMTK_ERR("btmtk_sdio_reset_dongle return %d, error", ret);
+					break;
+				} else {
+					BTMTK_INFO("hw reset dongle done");
 					break;
 				}
 			}
@@ -276,7 +242,7 @@ static int btmtk_service_main_thread(void *data)
 		}
 
 		spin_lock_irqsave(&priv->driver_lock, flags);
-		skb = skb_dequeue(&adapter->tx_queue);
+		skb = skb_dequeue(&card->tx_queue);
 		spin_unlock_irqrestore(&priv->driver_lock, flags);
 
 		if (skb) {
@@ -296,7 +262,7 @@ static int btmtk_service_main_thread(void *data)
 			kfree_skb(skb);
 		}
 
-		if (skb_queue_empty(&adapter->tx_queue)) {
+		if (skb_queue_empty(&card->tx_queue)) {
 			ret = priv->hw_set_own_back(FW_OWN);
 			if (ret) {
 				BTMTK_ERR("set fw own return fail");
@@ -308,24 +274,20 @@ static int btmtk_service_main_thread(void *data)
 	BTMTK_WARN("end");
 	thread->thread_status = 0;
 
-	if (is_mt7663(card) && priv->btmtk_dev.reset_dongle)
+	if (is_mt7663(card) && reset_flag == 1)
 		btmtk_remove_card(priv);
 
 	return 0;
 }
 
-struct btmtk_private *btmtk_add_card(void *card)
+struct btmtk_private *btmtk_add_card(void *data)
 {
+	struct btmtk_sdio_card *card = (struct btmtk_sdio_card *)data;
 	struct btmtk_private *priv;
 
 	BTMTK_INFO("begin");
-	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	if (!priv)
-		goto err_priv;
 
-	priv->adapter = kzalloc(sizeof(*priv->adapter), GFP_KERNEL);
-	if (!priv->adapter)
-		goto err_adapter;
+	priv = card->priv;
 
 	btmtk_init_adapter(priv);
 
@@ -345,12 +307,6 @@ struct btmtk_private *btmtk_add_card(void *card)
 	return priv;
 
 err_thread:
-	btmtk_free_adapter(priv);
-
-err_adapter:
-	kfree(priv);
-
-err_priv:
 	return NULL;
 }
 EXPORT_SYMBOL_GPL(btmtk_add_card);
@@ -369,8 +325,6 @@ int btmtk_remove_card(struct btmtk_private *priv)
 #endif
 
 	btmtk_free_adapter(priv);
-
-	kfree(priv);
 
 	return 0;
 }

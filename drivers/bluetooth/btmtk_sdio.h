@@ -16,7 +16,7 @@
 #include "btmtk_config.h"
 #include <linux/pm_wakeup.h>
 
-#define VERSION "v0.0.1.13_2020061801"
+#define VERSION "v0.0.1.13_2020082701"
 
 #define SDIO_HEADER_LEN				4
 #define STP_HEADER_LEN				4
@@ -74,6 +74,16 @@
 #define CARD_IO_READY                           BIT(3)
 
 #define FIRMWARE_READY                          0xfedc
+
+enum {
+	BTMTK_FOPS_STATE_UNKNOWN,	/* deinit in stpbt destroy */
+	BTMTK_FOPS_STATE_INIT,		/* init in stpbt created */
+	BTMTK_FOPS_STATE_OPENING,	/* during opening */
+	BTMTK_FOPS_STATE_OPENED,	/* opened */
+	BTMTK_FOPS_STATE_CLOSING,	/* during closing */
+	BTMTK_FOPS_STATE_CLOSED,	/* closed */
+	BTMTK_FOPS_STATE_MAX
+};
 
 struct btmtk_sdio_card_reg {
 	u8 cfg;
@@ -140,6 +150,7 @@ enum bt_sdio_dongle_state {
 	BT_SDIO_DONGLE_STATE_POWER_ON_FOR_WOBLE,
 	BT_SDIO_DONGLE_STATE_POWER_OFF,
 	BT_SDIO_DONGLE_STATE_WOBLE,
+	BT_SDIO_DONGLE_STATE_FW_DUMP,
 	BT_SDIO_DONGLE_STATE_ERROR
 };
 
@@ -164,13 +175,13 @@ struct bt_cfg_struct {
 	bool	support_woble_wakelock;		/* support when woble error, do wakelock or not */
 	bool	support_woble_for_bt_disable;		/* when bt disable, support enter susend or not */
 	bool	reset_stack_after_woble;	/* support reset stack to re-connect IOT after resume */
-	unsigned int	dongle_reset_gpio_pin;		/* BT_DONGLE_RESET_GPIO_PIN number */
+	bool	support_auto_picus;			/* support enable PICUS automatically */
+	struct	fw_cfg_struct picus_filter;	/* support on PICUS filter command customization */
+	int	dongle_reset_gpio_pin;		/* BT_DONGLE_RESET_GPIO_PIN number */
 	char	*sys_log_file_name;
 	char	*fw_dump_file_name;
-	bool	support_auto_picus;		/* support enable PICUS automatically */
-	struct fw_cfg_struct picus_filter;	/* support on PICUS filter command customization */
-	struct fw_cfg_struct wmt_cmd[WMT_CMD_COUNT];
-	struct fw_cfg_struct vendor_cmd[VENDOR_CMD_COUNT];
+	struct	fw_cfg_struct wmt_cmd[WMT_CMD_COUNT];
+	struct	fw_cfg_struct vendor_cmd[VENDOR_CMD_COUNT];
 };
 
 struct btmtk_sdio_card {
@@ -225,7 +236,11 @@ struct btmtk_sdio_card {
 	size_t bin_file_size;
 	u8 efuse_mode;
 
-	enum bt_sdio_dongle_state dongle_state;
+	struct	sk_buff_head tx_queue;
+	struct	sk_buff_head fops_queue;
+	struct	sk_buff_head fwlog_fops_queue;
+
+	enum	bt_sdio_dongle_state dongle_state;
 };
 
 struct btmtk_sdio_device {
