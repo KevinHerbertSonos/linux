@@ -187,6 +187,29 @@ static void fixup_pci(void)
 	else
 		goto unhandled;
 
+	/*
+	 * See Motorola/Freescale/NXP MPC8272RM Reference Manual.
+	 * RM pp refers to page numbers in the Reference Manual.
+	 *
+	 * The write below of pci_regs[1][0] causes machine check
+	 * silent reboot unless preceeded by writes to PCIMSK0,
+	 * PCI_BR0, PCI_EMR, and PCI_ESR, in this order.
+	 *
+	 * This is not documented in the manual, but was extracted
+	 * from the original U-boot sources. These were removed to
+	 * fit the code in a 64K OTP.
+	 */
+
+	out_be32((u32 *)&soc_regs[0x101c4], 0xC0000000); /* PCIMSK0 RM pp 3-5 */
+	out_be32((u32 *)&soc_regs[0x101ac], 0x80000001); /* PCIBR0 RM pp 4-42 */
+
+	out_le32((u32 *)&soc_regs[0x10888], 0x00000ff7); /* PCI EMR RM pp 3-8 */
+	out_le32((u32 *)&soc_regs[0x10884], 0x00001fff); /* PCI ESR RM pp 3-7 */
+
+	/*
+	 * Without the setup above, a machine check occurs below.
+	 */
+	
 	out_be32(&pci_regs[1][0], mem_base->phys_addr | 1);
 	out_be32(&pci_regs[2][0], ~(mem->size[1] + mmio->size[1] - 1));
 
