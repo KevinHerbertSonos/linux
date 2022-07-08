@@ -87,6 +87,12 @@ config GPIO_PL061
 	help
 	  Say yes here to support the PrimeCell PL061 GPIO device
 
+config GPIO_MPC8272
+	bool "Freescale MPC8272 Parallel I/O ports"
+	depends on 8272
+	help
+	  Select this to enable the MPC8272 GPIO driver
+
 config GPIO_XILINX
 	bool "Xilinx GPIO support"
 	depends on PPC_OF || MICROBLAZE
