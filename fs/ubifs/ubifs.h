@@ -150,6 +150,11 @@
 /* Maximum number of data nodes to bulk-read */
 #define UBIFS_MAX_BULK_READ 32
 
+#if defined CONFIG_SONOS_SECBOOT
+extern __u8	sonos_ubifs_crypto_key[];
+extern bool	use_ubifs_crypto_key;
+#endif
+
 /*
  * Lockdep classes for UBIFS inode @ui_mutex.
  */
@@ -1772,10 +1777,17 @@ long ubifs_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 /* compressor.c */
 int __init ubifs_compressors_init(void);
 void ubifs_compressors_exit(void);
+#if defined CONFIG_SONOS_SECBOOT
+void ubifs_compress(const struct ubifs_info *c, const void *in_buf, int in_len,
+		    void *out_buf, int *out_len, int *compr_type, const void *crypto_key);
+int ubifs_decompress(const struct ubifs_info *c, const void *buf, int len,
+		     void *out, int *out_len, int compr_type, const void *crypto_key);
+#else
 void ubifs_compress(const struct ubifs_info *c, const void *in_buf, int in_len,
 		    void *out_buf, int *out_len, int *compr_type);
 int ubifs_decompress(const struct ubifs_info *c, const void *buf, int len,
 		     void *out, int *out_len, int compr_type);
+#endif
 
 #include "debug.h"
 #include "misc.h"
