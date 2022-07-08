@@ -30,6 +30,7 @@ extern int efusekeynum;
 int efuse_getinfo(char *item, struct efusekey_info *info);
 ssize_t efuse_user_attr_show(char *name, char *buf);
 ssize_t efuse_user_attr_store(char *name, const char *buf, size_t count);
+int meson_efuse_obj_read(uint32_t obj_id, uint8_t *buff, uint32_t *size);
 #else
 int efuse_read_intlItem(char *intl_item, char *buf, int size);
 #endif
