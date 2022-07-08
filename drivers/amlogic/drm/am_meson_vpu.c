@@ -88,7 +88,7 @@ struct am_vout_mode {
 };
 
 static struct am_vout_mode am_vout_modes[] = {
-	{ "1080p60hz", VMODE_HDMI, 1920, 1080, 60, 0},
+	{ "1920x1080", VMODE_HDMI, 1920, 1080, 60, 0},
 	{ "1080p30hz", VMODE_HDMI, 1920, 1080, 30, 0},
 	{ "1080p50hz", VMODE_HDMI, 1920, 1080, 50, 0},
 	{ "1080p25hz", VMODE_HDMI, 1920, 1080, 25, 0},
@@ -100,13 +100,13 @@ static struct am_vout_mode am_vout_modes[] = {
 	{ "2160p24hz", VMODE_HDMI, 3840, 2160, 24, 0},
 	{ "1080i60hz", VMODE_HDMI, 1920, 1080, 60, DRM_MODE_FLAG_INTERLACE},
 	{ "1080i50hz", VMODE_HDMI, 1920, 1080, 50, DRM_MODE_FLAG_INTERLACE},
-	{ "720p60hz", VMODE_HDMI, 1280, 720, 60, 0},
+	{ "1280x720", VMODE_HDMI, 1280, 720, 60, 0},
 	{ "720p50hz", VMODE_HDMI, 1280, 720, 50, 0},
 	{ "480p60hz", VMODE_HDMI, 720, 480, 60, 0},
 	{ "480i60hz", VMODE_HDMI, 720, 480, 60, DRM_MODE_FLAG_INTERLACE},
 	{ "576p50hz", VMODE_HDMI, 720, 576, 50, 0},
 	{ "576i50hz", VMODE_HDMI, 720, 576, 50, DRM_MODE_FLAG_INTERLACE},
-	{ "480p60hz", VMODE_HDMI, 720, 480, 60, 0},
+	{ "640x480", VMODE_HDMI, 720, 480, 60, 0},
 };
 
 
@@ -465,7 +465,8 @@ char *am_meson_crtc_get_voutmode(struct drm_display_mode *mode)
 {
 	int i;
 
-	if (!strcmp(mode->name, "panel"))
+	if (!strcmp(mode->name, "panel") || !strcmp(mode->name, "1920x1080")
+			|| !strcmp(mode->name, "1280x720") || !strcmp(mode->name, "640x480"))
 		return "panel";
 
 	for (i = 0; i < ARRAY_SIZE(am_vout_modes); i++) {
@@ -476,6 +477,7 @@ char *am_meson_crtc_get_voutmode(struct drm_display_mode *mode)
 				(mode->flags&DRM_MODE_FLAG_INTERLACE)))
 			return am_vout_modes[i].name;
 	}
+	return "panel";
 	return NULL;
 }
 
@@ -501,6 +503,7 @@ int am_meson_crtc_set_mode(struct drm_mode_set *set)
 	struct am_meson_crtc *amcrtc;
 	int ret;
 
+	pr_info("***** %s **********\n", __func__);
 	DRM_DEBUG_DRIVER("%s\n", __func__);
 	amcrtc = to_am_meson_crtc(set->crtc);
 	ret = drm_atomic_helper_set_config(set);
@@ -566,6 +569,7 @@ void am_meson_crtc_enable(struct drm_crtc *crtc)
 	struct am_meson_crtc *amcrtc = to_am_meson_crtc(crtc);
 
 	DRM_INFO("%s\n", __func__);
+	pr_info("***** %s **********\n", __func__);
 	if (!adjusted_mode) {
 		DRM_ERROR("meson_crtc_enable fail, unsupport mode:%s\n",
 			adjusted_mode->name);
@@ -575,7 +579,7 @@ void am_meson_crtc_enable(struct drm_crtc *crtc)
 	name = am_meson_crtc_get_voutmode(adjusted_mode);
 	mode = validate_vmode(name);
 	if (mode == VMODE_MAX) {
-		DRM_ERROR("no matched vout mode\n");
+		pr_err("no matched vout mode\n");
 		return;
 	}
 

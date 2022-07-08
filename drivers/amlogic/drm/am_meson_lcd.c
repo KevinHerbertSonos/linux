@@ -23,6 +23,8 @@
 #include <drm/drm_mipi_dsi.h>
 #include <video/display_timing.h>
 #include <linux/component.h>
+#include <linux/of_graph.h>
+#include <linux/delay.h>
 #include <linux/amlogic/media/vout/lcd/lcd_vout.h>
 #include <linux/amlogic/media/vout/lcd/lcd_notify.h>
 
@@ -104,7 +106,7 @@ static int am_lcd_connector_get_modes(struct drm_connector *connector)
 
 	lcd = con_to_lcd(connector);
 
-	pr_info("***************************************************\n");
+	pr_info("***** %s **********\n", __func__);
 	pr_info("am_drm_lcd: %s: lcd mode [%s] display size: %d x %d\n",
 		__func__, lcd->mode->name,
 		lcd->mode->hdisplay, lcd->mode->vdisplay);
@@ -136,6 +138,7 @@ enum drm_mode_status am_lcd_connector_mode_valid(
 	if (!lcd->lcd_drv)
 		return MODE_ERROR;
 
+	pr_info("***** %s **********\n", __func__);
 	pr_info("am_drm_lcd: %s: mode [%s] display size: %d x %d\n",
 		__func__, mode->name, mode->hdisplay, mode->vdisplay);
 	pr_info("am_drm_lcd: %s: lcd config size: %d x %d\n",
@@ -249,6 +252,8 @@ static void am_lcd_encoder_mode_set(struct drm_encoder *encoder,
 				   struct drm_display_mode *adjusted_mode)
 {
 	pr_info("am_drm_lcd: %s %d\n", __func__, __LINE__);
+	pr_info("am_drm_lcd: adjusted_mode, h:%d w:%d\n", adjusted_mode->hdisplay, adjusted_mode->vdisplay);
+	drm_mode_copy(am_drm_lcd->mode, adjusted_mode);
 }
 
 static void am_lcd_encoder_enable(struct drm_encoder *encoder)
@@ -436,7 +441,7 @@ static int am_lcd_get_modes(struct drm_panel *panel)
 
 	drm_mode_set_name(mode);
 
-	drm_mode_probed_add(connector, mode);
+	//drm_mode_probed_add(connector, mode);
 
 	pconf = lcd->lcd_drv->lcd_config;
 	connector->display_info.bpc = pconf->lcd_basic.lcd_bits * 3;
@@ -481,6 +486,33 @@ static const struct drm_panel_funcs am_drm_lcd_funcs = {
 	.get_modes = am_lcd_get_modes,
 	.get_timings = am_lcd_get_timings,
 };
+static int aml_dsi_host_attach(struct mipi_dsi_host *host,
+			       struct mipi_dsi_device *device)
+{
+	pr_info("%s ...\n", __func__);
+/*
+	if (dsi->conn.dev)
+		drm_helper_hpd_irq_event(dsi->conn.dev);
+*/
+	return 0;
+}
+
+static int aml_dsi_host_detach(struct mipi_dsi_host *host,
+			       struct mipi_dsi_device *device)
+{
+	pr_info("%s ...\n", __func__);
+	/*
+	if (dsi->conn.dev)
+		drm_helper_hpd_irq_event(dsi->conn.dev);
+	*/
+	return 0;
+}
+
+static const struct mipi_dsi_host_ops aml_dsi_ops = {
+	.attach = aml_dsi_host_attach,
+	.detach = aml_dsi_host_detach,
+};
+
 
 static void am_drm_lcd_display_mode_timing_init(struct am_drm_lcd_s *lcd)
 {
@@ -603,9 +635,11 @@ static int am_meson_lcd_bind(struct device *dev, struct device *master,
 {
 	struct drm_device *drm = data;
 	struct drm_connector *connector;
-	struct drm_encoder *encoder;
+	struct drm_encoder *encoder = NULL;
+	struct drm_bridge *bridge = NULL;
 	int encoder_type, connector_type;
 	int ret = 0;
+	struct device_node *remote_node, *endpoint;
 
 	am_drm_lcd = kzalloc(sizeof(*am_drm_lcd), GFP_KERNEL);
 	if (!am_drm_lcd)
@@ -627,18 +661,26 @@ static int am_meson_lcd_bind(struct device *dev, struct device *master,
 
 	pr_info("am_drm_lcd: %s %d\n", __func__, __LINE__);
 
+	/*
 	ret = drm_panel_add(&am_drm_lcd->panel);
 	if (ret < 0)
 		return ret;
-
+	*/
 	pr_info("am_drm_lcd: %s %d\n", __func__, __LINE__);
 
 	am_drm_lcd->drm = drm;
 
 	encoder = &am_drm_lcd->encoder;
 	connector = &am_drm_lcd->connector;
-	encoder_type = DRM_MODE_ENCODER_LVDS;
-	connector_type = DRM_MODE_CONNECTOR_LVDS;
+	encoder_type = DRM_MODE_ENCODER_DSI;
+	connector_type = DRM_MODE_CONNECTOR_DSI;
+	
+	am_drm_lcd->dsi_host.ops = &aml_dsi_ops;
+	am_drm_lcd->dsi_host.dev = dev;
+	ret = mipi_dsi_host_register(&am_drm_lcd->dsi_host);
+	if (ret < 0) {
+		dev_err(dev, "failed to register DSI host: %d\n", ret);
+	}
 
 	/* Encoder */
 	drm_encoder_helper_add(encoder, &am_lcd_encoder_helper_funcs);
@@ -650,7 +692,7 @@ static int am_meson_lcd_bind(struct device *dev, struct device *master,
 	}
 	pr_info("am_drm_lcd: %s %d: encoder possible_crtcs=%d\n",
 		__func__, __LINE__, encoder->possible_crtcs);
-
+#if 0
 	/* Connector */
 	drm_connector_helper_add(connector, &am_lcd_connector_helper_funcs);
 	ret = drm_connector_init(drm, connector, &am_lcd_connector_funcs,
@@ -659,11 +701,37 @@ static int am_meson_lcd_bind(struct device *dev, struct device *master,
 		pr_err("error: am_drm_lcd: Failed to init lcd connector\n");
 		return ret;
 	}
+#else
+	for_each_endpoint_of_node(dev->of_node, endpoint)
+	if (endpoint) {
+		remote_node = of_graph_get_remote_port_parent(endpoint);
+		if (!remote_node) {
+			dev_err(dev, "No panel connected\n");
+			return -ENODEV;
+		}
 
+		bridge = of_drm_find_bridge(remote_node);
+		//dsi->panel = of_drm_find_panel(remote_node);
+		of_node_put(remote_node);
+		if (!bridge) {
+			dev_info(dev, "Waiting for bridge or panel driver\n");
+			//return -EPROBE_DEFER;
+		} else {
+			bridge->encoder = encoder;
+			encoder->bridge = bridge;
+			ret = drm_bridge_attach(encoder->dev, bridge);
+			if (ret) {
+				pr_err("%s drm_bridge_attach failed \n", __func__);
+			}
+		}
+	}
+	
+#endif
 	/* force possible_crtcs */
 	encoder->possible_crtcs = BIT(0);
 
-	drm_mode_connector_attach_encoder(connector, encoder);
+	if (bridge == NULL)
+		drm_mode_connector_attach_encoder(connector, encoder);
 
 	pr_info("am_drm_lcd: register ok\n");
 
