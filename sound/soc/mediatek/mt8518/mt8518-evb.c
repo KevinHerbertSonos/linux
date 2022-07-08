@@ -1938,8 +1938,13 @@ static int mt8518_evb_dev_probe(struct platform_device *pdev)
 
 	ret = devm_snd_soc_register_card(dev, card);
 	if (ret) {
-		dev_err(dev, "%s snd_soc_register_card fail %d\n",
-			__func__, ret);
+		if (ret != -EPROBE_DEFER) {
+			dev_err(dev, "%s snd_soc_register_card fail %d\n",
+				__func__, ret);
+		} else {
+			dev_dbg(dev, "%s snd_soc_register_card deferred\n",
+				__func__);
+		}
 		return ret;
 	}
 
