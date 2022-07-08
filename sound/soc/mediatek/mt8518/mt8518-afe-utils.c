@@ -559,8 +559,11 @@ static int mt8518_afe_enable_spdif_in(struct mtk_base_afe *afe)
 static int mt8518_afe_disable_spdif_in(struct mtk_base_afe *afe)
 {
 	struct mt8518_afe_private *afe_priv = afe->platform_priv;
+	unsigned long flags;
 
 	dev_dbg(afe->dev, "%s\n", __func__);
+
+	spin_lock_irqsave(&afe_priv->spdifin_ctrl_lock, flags);
 
 	regmap_update_bits(afe->regmap,
 			   AFE_SPDIFIN_CFG0,
@@ -570,6 +573,8 @@ static int mt8518_afe_disable_spdif_in(struct mtk_base_afe *afe)
 	mt8518_afe_disable_irq(afe, MT8518_AFE_IRQ2);
 
 	mt8518_afe_disable_top_cg(afe, MT8518_TOP_CG_INTDIR);
+
+	spin_unlock_irqrestore(&afe_priv->spdifin_ctrl_lock, flags);
 
 	mt8518_afe_disable_clk(afe, afe_priv->clocks[MT8518_CLK_SPDIF_IN]);
 
