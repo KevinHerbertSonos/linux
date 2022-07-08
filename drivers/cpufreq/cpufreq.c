@@ -1111,6 +1111,22 @@ static int cpufreq_init_policy(struct cpufreq_policy *policy)
 			cpufreq_parse_governor(gov->name, &new_policy.policy,
 					       NULL);
 	}
+
+#if defined(CONFIG_SONOS) && defined(SONOS_ARCH_ATTR_SOC_IS_A113)
+	/* For Monaco and Alpine, we want to limit the cpufreq to 1.3GHz.  This
+	 * was easy using the "userspace" governor, but the transition to the
+	 * "interactive" governor allows the kernel to use whatever it wants,
+	 * and the highest available frequency is 1416000.  On Monaco, this
+	 * appears to result in memory corruptions.  SWPBL-149143, HWMONACO-253.
+	 *
+	 * This change will force our policy to init the scaling_max_freq to
+	 * 1296000.  Once the kernel is up, we can change this value for Apollo,
+	 * if we choose to, and allow it the full range.
+	 */
+	new_policy.max = 1296000;
+	policy->max = 1296000;
+#endif
+
 	/* set default policy */
 	return cpufreq_set_policy(policy, &new_policy);
 }
