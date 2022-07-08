@@ -424,7 +424,7 @@ static void mtk_pcie_preinit(struct mtk_pcie *pcie)
 	mtk_foreach_port(port) {
 		if (port->link) {
 			pcie_m32(pcie, 0xffffffff, port->interrupt_en, PCIENA);
-			pcie_w32(pcie, 0x7fff0001, port->base + BAR0SETUP);
+			pcie_w32(pcie, 0xffff0001, port->base + BAR0SETUP);
 			pcie_w32(pcie, MEMORY_BASE, port->base + IMBASEBAR0);
 			pcie_w32(pcie, 0x06040001, port->base + PCIE_CLASS);
 			dev_info(pcie->dev, "PCIE%d Setup OK\n", port->id);
