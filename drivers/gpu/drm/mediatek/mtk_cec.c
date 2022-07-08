@@ -642,14 +642,13 @@ static unsigned int mtk_cec_parse_msg_data(struct mtk_cec *cec, unsigned char ms
 	cec->transmitting.offset = index;
 
 	if (size == 0) {
-		eom = false;
+		eom = true;
 		mtk_cec_clear_bits(cec, TX_EVENT, I_EN_RB | I_EN_LOW | I_EN_UN);
 	} else {
-		eom = true;
-		mtk_cec_set_bits(cec, TX_EVENT, I_EN_RB | I_EN_LOW | I_EN_UN);
+		eom = false;
+		mtk_cec_set_bits(cec, TX_EVENT, I_EN_RB | I_EN_UN);
 	}
 
-	mtk_cec_clear_bits(cec, TX_EVENT, BS | FAIL);
 	mtk_cec_set_bits(cec, TX_EVENT, I_EN_BS | I_EN_FAIL);
 
 	return cec_data;
@@ -672,6 +671,8 @@ static int mtk_cec_send_msg(struct mtk_cec *cec)
 		if (!(mtk_cec_tx_hw_status(cec) & CEC_FSM_IDLE)
 		    || mtk_cec_tx_retry_max(cec))
 			mtk_cec_hw_reset(cec);
+		mtk_cec_clear_bits(cec, TX_EVENT, I_EN_FAIL | I_EN_RB | I_EN_LOW | I_EN_UN | I_EN_BS);
+		mtk_cec_clear_bits(cec, TX_EVENT, UN | LOWB | FAIL | LOWB | BS | RB_RDY);
 
 		/* fill header */
 		mtk_cec_set_msg_header(cec, frame->msg);
@@ -682,7 +683,6 @@ static int mtk_cec_send_msg(struct mtk_cec *cec)
 	cec_data = mtk_cec_parse_msg_data(cec, msg_data_size);
 	mtk_cec_set_msg_data(cec, cec_data);
 
-	mtk_cec_clear_bits(cec, TX_EVENT, FAIL | BS);
 	mtk_cec_trigger_tx_hw(cec);
 
 	return 0;
@@ -852,22 +852,14 @@ static void mtk_cec_rx_event_handler(struct mtk_cec *cec, unsigned int rx_event)
 
 static void mtk_cec_tx_event_handler(struct mtk_cec *cec, unsigned int tx_event)
 {
-	switch (tx_event & ((0x1f << 16) | I_EN_RB)) {
-	case BS:
-		cec->transmitting.status.tx_status = CEC_TX_DONE;
-		cec_transmit_done(cec->adap, CEC_TX_STATUS_OK, 0, 0, 0, 0);
-		mtk_cec_clear_bits(cec,
-				TX_EVENT, BS | I_EN_FAIL | I_EN_RB | I_EN_LOW | I_EN_UN | I_EN_BS);
-		break;
+	if (!(tx_event & ((0x1f << 16) | I_EN_RB)))
+		return;
 
-	case I_EN_RB:
-		cec->transmitting.status.tx_status = CEC_TX_REMAIN_DATA;
-		mtk_cec_send_msg(cec);
-		break;
+	if (tx_event & RB_RDY) {
+		dev_dbg(cec->hdmi_dev, "RB_RDY\n");
+	}
 
-	case LOWB:
-	case FAIL:
-	case UN:
+	if (tx_event & (FAIL | UN | LOWB)) {
 		// FAIL status means NACK or collision.  Only report if debugging.
 		if (tx_event & (LOWB | UN)) {
 			dev_err(cec->hdmi_dev, "cec transmit msg fail (%s)\n",
@@ -876,16 +868,28 @@ static void mtk_cec_tx_event_handler(struct mtk_cec *cec, unsigned int tx_event)
 			dev_dbg(cec->hdmi_dev, "cec transmit msg fail (FAIL)\n");
 		}
 		cec->transmitting.status.tx_status = CEC_TX_FAIL;
-		mtk_cec_clear_bits(cec, TX_EVENT, UN | LOWB | FAIL | I_EN_FAIL | I_EN_BS);
+		mtk_cec_hw_reset(cec);
+		mtk_cec_clear_bits(cec, TX_EVENT, I_EN_FAIL | I_EN_RB | I_EN_LOW | I_EN_UN | I_EN_BS);
+		mtk_cec_clear_bits(cec, TX_EVENT, UN | LOWB | FAIL | LOWB | BS | RB_RDY);
 		mtk_cec_hw_reset(cec);
 		cec_transmit_done(cec->adap, CEC_TX_STATUS_NACK, 0, 0, 0, 1);
-		break;
+	}
 
-	case RB_RDY:
-		dev_err(cec->hdmi_dev, "RB_RDY\n");
-		break;
-	default:
-		break;
+	if (tx_event & BS) {
+		if (cec->transmitting.offset >= cec->transmitting.msg->len) {
+			cec->transmitting.status.tx_status = CEC_TX_DONE;
+			mtk_cec_clear_bits(cec, TX_EVENT, I_EN_FAIL | I_EN_RB | I_EN_LOW | I_EN_UN | I_EN_BS);
+			mtk_cec_clear_bits(cec, TX_EVENT, UN | LOWB | FAIL | LOWB | BS | RB_RDY);
+			cec_transmit_done(cec->adap, CEC_TX_STATUS_OK, 0, 0, 0, 0);
+		}
+		mtk_cec_clear_bits(cec, TX_EVENT, BS);
+	}
+
+	if ((tx_event & I_EN_RB) && !(tx_event & RB_RDY)) {
+		if (cec->transmitting.offset < cec->transmitting.msg->len) {
+			cec->transmitting.status.tx_status = CEC_TX_REMAIN_DATA;
+			mtk_cec_send_msg(cec);
+		}
 	}
 }
 
