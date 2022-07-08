@@ -84,8 +84,15 @@ int ieee80211_channel_to_frequency(int chan, enum nl80211_band band)
 		else
 			return 5000 + chan * 5;
 		break;
+	case NL80211_BAND_6GHZ:
+		/* see 802.11ax D6.1 27.3.23.2 */
+		if (chan == 2)
+			return MHZ_TO_KHZ(5935);
+		if (chan <= 253)
+			return 5950 + chan * 5;
+		break;
 	case NL80211_BAND_60GHZ:
-		if (chan < 5)
+		if (chan < 7)
 			return 56160 + chan * 2160;
 		break;
 	default:
@@ -100,13 +107,19 @@ int ieee80211_frequency_to_channel(int freq)
 	/* see 802.11 17.3.8.3.2 and Annex J */
 	if (freq == 2484)
 		return 14;
+	/* see 802.11ax D6.1 27.3.23.2 and Annex E */
+	else if (freq == 5935)
+		return 2;
 	else if (freq < 2484)
 		return (freq - 2407) / 5;
 	else if (freq >= 4910 && freq <= 4980)
 		return (freq - 4000) / 5;
-	else if (freq <= 45000) /* DMG band lower limit */
+	else if (freq < 5950)
 		return (freq - 5000) / 5;
-	else if (freq >= 58320 && freq <= 64800)
+	else if (freq <= 45000) /* DMG band lower limit */
+		/* see 802.11ax D6.1 27.3.22.2 */
+		return (freq - 5950) / 5;
+	else if (freq >= 58320 && freq <= 70200)
 		return (freq - 56160) / 2160;
 	else
 		return 0;
@@ -143,6 +156,7 @@ static void set_mandatory_flags_band(struct ieee80211_supported_band *sband,
 
 	switch (band) {
 	case NL80211_BAND_5GHZ:
+	case NL80211_BAND_6GHZ:
 		want = 3;
 		for (i = 0; i < sband->n_bitrates; i++) {
 			if (sband->bitrates[i].bitrate == 60 ||
@@ -1421,6 +1435,9 @@ bool ieee80211_operating_class_to_band(u8 operating_class,
 	case 115 ... 127:
 	case 128 ... 130:
 		*band = NL80211_BAND_5GHZ;
+		return true;
+	case 131 ... 135:
+		*band = NL80211_BAND_6GHZ;
 		return true;
 	case 81:
 	case 82:
