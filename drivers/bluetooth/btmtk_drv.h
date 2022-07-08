@@ -23,27 +23,31 @@
 #define BTM_HEADER_LEN                  5
 #define BTM_UPLD_SIZE                   2312
 
+#define SUPPORT_CR_WR 1
+
 #define MTK_TXDATA_SIZE 2000
 #define MTK_RXDATA_SIZE 2000
 
 /* Time to wait until Host Sleep state change in millisecond */
-#define WAIT_UNTIL_HS_STATE_CHANGED     msecs_to_jiffies(5000)
+#define WAIT_UNTIL_HS_STATE_CHANGED	msecs_to_jiffies(5000)
 /* Time to wait for command response in millisecond */
-#define WAIT_UNTIL_CMD_RESP             msecs_to_jiffies(5000)
+#define WAIT_UNTIL_CMD_RESP		msecs_to_jiffies(5000)
 
 /** For 7668 please storage cfg/bin file in ${firmware} */
 #define E2P_ACCESS_MODE_SWITCHER	"wifi.cfg"
 #define E2P_BIN_FILE			"EEPROM_MT%X.bin"
 
-#define E2P_MODE	"EfuseBufferModeCal"
-#define E2P_ACCESS_EPA	"BtUseExternalPA"
-#define E2P_ACCESS_DUPLEX	"BtDuplexMode"
-#define BIN_FILE_MODE	'1'
-#define AUTO_MODE		'2'
-#define TX_PWR_LIMIT	"BtTxPwrLimit.bin"
-#define KEEP_FULL_PWR	"KeepFullPwr"
-#define PWR_KEEP_NO_FW_OWN	'1'
+#define E2P_MODE			"EfuseBufferModeCal"
+#define E2P_ACCESS_EPA			"BtUseExternalPA"
+#define E2P_ACCESS_DUPLEX		"BtDuplexMode"
+#define TX_PWR_LIMIT			"BtTxPwrLimit.bin"
+#define KEEP_FULL_PWR			"KeepFullPwr"
+#define PWR_KEEP_NO_FW_OWN		'1'
 #define PWR_SWITCH_DRIVER_FW_OWN	'0'
+#define EFUSE_MODE			0
+#define EFUSE_BIN_FILE_MODE		1
+#define EFUSE_AUTO_MODE			2
+
 
 enum rdwr_status {
 	RDWR_STATUS_SUCCESS = 0,
@@ -101,7 +105,6 @@ struct btmtk_adapter {
 	struct sk_buff_head fwlog_tx_queue;
 	u8 fops_mode;
 	u8 psmode;
-	u8 ps_state;
 	u8 hs_state;
 	u8 wakeup_tries;
 	wait_queue_head_t cmd_wait_q;
@@ -133,6 +136,9 @@ struct btmtk_private {
 	struct task_struct *fw_dump_tsk;
 	struct task_struct *fw_dump_end_check_tsk;
 #endif
+	struct semaphore wr_mtx;
+	struct semaphore rd_mtx;
+	struct semaphore wr_fwlog_mtx;
 	bool no_fw_own;
 };
 
@@ -227,15 +233,9 @@ struct ring_buffer {
 	u32 write_p;		/* indicate the current write index */
 };
 
-#ifdef CONFIG_DEBUG_FS
-
 #define FIXED_STPBT_MAJOR_DEV_ID 111
 
-
-
 #define FW_DUMP_END_EVENT "coredump end"
-
-#endif
 
 #endif
 
