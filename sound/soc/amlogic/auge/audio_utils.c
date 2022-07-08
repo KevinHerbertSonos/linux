@@ -26,6 +26,8 @@
 #include <linux/amlogic/iomap.h>
 #include <linux/amlogic/media/sound/auge_utils.h>
 
+#include <linux/bitrev.h>
+
 struct snd_elem_info {
 	struct soc_enum *ee;
 	int reg;
@@ -303,30 +305,6 @@ static const struct soc_enum lane3_mixer_enum =
 		ARRAY_SIZE(lane3_mixer_text),
 		lane3_mixer_text);
 
-static const char * const spdif_channel_status_text[] = {
-	"Channel A Status[31:0]",
-	"Channel A Status[63:32]",
-	"Channel A Status[95:64]",
-	"Channel A Status[127:96]",
-	"Channel A Status[159:128]",
-	"Channel A Status[191:160]",
-	"Channel B Status[31:0]",
-	"Channel B Status[63:32]",
-	"Channel B Status[95:64]",
-	"Channel B Status[127:96]",
-	"Channel B Status[159:128]",
-	"Channel B Status[191:160]",
-};
-
-static const struct soc_enum spdif_channel_status_enum =
-	SOC_ENUM_SINGLE_EXT(
-		ARRAY_SIZE(spdif_channel_status_text),
-		spdif_channel_status_text);
-
-static int spdifin_channel_status;
-
-static int spdifout_channel_status;
-
 #define SPDIFIN_CHSTS_REG \
 	EE_AUDIO_SPDIFIN_STAT1
 
@@ -336,92 +314,42 @@ static int spdifout_channel_status;
 static int spdif_channel_status_info(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_info *uinfo)
 {
-	/* struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
-	 * int i;
-	 */
-
-	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
-	uinfo->value.integer.min = 0;
-	uinfo->value.integer.max = 0xffffffff;
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_IEC958;
 	uinfo->count = 1;
-
-	/*
-	 * for (i = 0; i < e->items; i++)
-	 *     pr_info("Item:%d, %s\n", i, e->texts[i]);
-	 */
-
 	return 0;
 }
 
 static int spdifin_channel_status_get(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
-	/* struct soc_enum *e = (struct soc_enum *)kcontrol->private_value; */
-	int reg, status;
-
-	/* pr_info("set which channel status you wanted to get firstly\n"); */
-	reg = SPDIFIN_CHSTS_REG;
-	status = spdif_get_channel_status(reg);
-
-	ucontrol->value.enumerated.item[0] = status;
-
-	/*channel status value in printk information*/
-	/*	pr_info("%s: 0x%x\n",
-	 *		e->texts[spdifin_channel_status],
-	 *		status
-	 *		);
-	 */
+	int *reg = (int*)ucontrol->value.iec958.status;
+	int pos;
+	for (pos = 0; pos < (sizeof(ucontrol->value.iec958.status) / sizeof(int)); pos++) {
+		spdifin_set_channel_status(0, pos);
+		*reg = htonl(bitrev32(spdif_get_channel_status(SPDIFIN_CHSTS_REG)));
+		reg++;
+	}
 	return 0;
 }
 
-static int spdifin_channel_status_set(
+static int spdif_channel_status_get_mask(
 	struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
-	int chst = ucontrol->value.enumerated.item[0];
-	int ch, valid_bits;
-
-	if (chst < 0 || chst > e->items - 1) {
-		pr_err("out of value, fixed it\n");
-
-		if (chst < 0)
-			chst = 0;
-		if (chst > e->items - 1)
-			chst = e->items - 1;
-	}
-	ch = (chst >= 6);
-	valid_bits = (chst >= 6) ? (chst - 6) : chst;
-
-	spdifin_channel_status = chst;
-	/*	pr_info("%s\n",
-	 *		e->texts[spdifin_channel_status]);
-	 */
-
-	spdifin_set_channel_status(ch, valid_bits);
-
+	memset(&(ucontrol->value.iec958), 0xFF, sizeof(ucontrol->value.iec958));
 	return 0;
 }
 
 static int spdifout_channel_status_get(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
-	/* struct soc_enum *e = (struct soc_enum *)kcontrol->private_value; */
-	int reg, status;
-
-	/* pr_info("set which channel status you wanted to get firstly\n"); */
-	reg = SPDIFOUT_CHSTS_REG(spdifout_channel_status);
-	status = spdif_get_channel_status(reg);
-
-	ucontrol->value.enumerated.item[0] = status;
-
-	/*channel status value in printk information*/
-	/*	pr_info("%s: reg:0x%x, status:0x%x\n",
-	 *		e->texts[spdifout_channel_status],
-	 *		reg,
-	 *		status
-	 *		);
-	 */
+	int *reg = (int*)ucontrol->value.iec958.status;
+	int pos;
+	for (pos = 0; pos < (sizeof(ucontrol->value.iec958.status) / sizeof(int)); pos++) {
+		/* Read left channel only */
+		*reg = htonl(bitrev32(spdif_get_channel_status(SPDIFOUT_CHSTS_REG(pos))));
+		reg++;
+	}
 	return 0;
 }
 
@@ -429,44 +357,24 @@ static int spdifout_channel_status_set(
 	struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
-	int chst = ucontrol->value.enumerated.item[0];
+	int *reg = (int*)ucontrol->value.iec958.status;
+	int pos;
 
-	if (chst < 0 || chst > e->items - 1) {
-		pr_err("out of value, fixed it\n");
-
-		if (chst < 0)
-			chst = 0;
-		if (chst > e->items - 1)
-			chst = e->items - 1;
-	}
-
-	spdifout_channel_status = chst;
-	/*	pr_info("%s\n",
-	 *		e->texts[chst]);
+	/*
+	 * Set bit 24 to 0 to use registers SPDIFOUT_CHSTS0 thru SPDIFOUT_CHSTSB
+	 * for CSB, instead of bit 30 from each sample.
+	 *
+	 * The A113 documentation claims the opposite flag polarity.
 	 */
+	audiobus_update_bits(EE_AUDIO_SPDIFOUT_CTRL0, 0x1 << 24, 0x0 << 24);
+
+	for (pos = 0; pos < (sizeof(ucontrol->value.iec958.status) / sizeof(int)); pos++) {
+		/* Write same CSB to both left and right channels */
+		audiobus_write(SPDIFOUT_CHSTS_REG(pos), ntohl(bitrev32(*reg)));
+		audiobus_write(SPDIFOUT_CHSTS_REG(pos+6), ntohl(bitrev32(*reg)));
+		reg++;
+	}
 	return 0;
-}
-
-
-#define SPDIFIN_CHSTATUS(xname, xenum)   \
-{                                        \
-	.iface = SNDRV_CTL_ELEM_IFACE_PCM,   \
-	.name  = xname,                      \
-	.info  = spdif_channel_status_info,  \
-	.get   = spdifin_channel_status_get, \
-	.put   = spdifin_channel_status_set,   \
-	.private_value = (unsigned long)&xenum \
-}
-
-#define SPDIFOUT_CHSTATUS(xname, xenum)   \
-{                                         \
-	.iface = SNDRV_CTL_ELEM_IFACE_PCM,    \
-	.name  = xname,                       \
-	.info  = spdif_channel_status_info,   \
-	.get   = spdifout_channel_status_get, \
-	.put   = spdifout_channel_status_set, \
-	.private_value = (unsigned long)&xenum\
 }
 
 static const char *const audio_locker_texts[] = {
@@ -840,8 +748,20 @@ static const struct snd_kcontrol_new snd_auge_controls[] = {
 #endif
 
 	/* SPDIFIN Channel Status */
-	SPDIFIN_CHSTATUS("SPDIFIN Channel Status",
-				spdif_channel_status_enum),
+	{
+		.iface		= SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name		= "SPDIFIN " SNDRV_CTL_NAME_IEC958("",CAPTURE,DEFAULT),
+		.access		= SNDRV_CTL_ELEM_ACCESS_READ,
+		.info		= spdif_channel_status_info,
+		.get		= spdifin_channel_status_get,
+	},
+	{
+		.iface		= SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name		= "SPDIFIN " SNDRV_CTL_NAME_IEC958("",CAPTURE,MASK),
+		.access		= SNDRV_CTL_ELEM_ACCESS_READ,
+		.info		= spdif_channel_status_info,
+		.get		= spdif_channel_status_get_mask,
+	},
 
 	/*SPDIFOUT swap*/
 	SND_SPDIFOUT_SWAP("SPDIFOUT Lane0 Left Channel Swap",
@@ -851,9 +771,22 @@ static const struct snd_kcontrol_new snd_auge_controls[] = {
 	/*SPDIFOUT mixer*/
 	SND_MIX("SPDIFOUT Mixer Channel",
 		SPDIFOUT, lane0_mixer_enum, 23, 0x1),
-	/* SPDIFIN Channel Status */
-	SPDIFOUT_CHSTATUS("SPDIFOUT Channel Status",
-				spdif_channel_status_enum),
+	/* SPDIFOUT Channel Status */
+	{
+		.iface		= SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name		= "SPDIFOUT " SNDRV_CTL_NAME_IEC958("",PLAYBACK,DEFAULT),
+		.access		= SNDRV_CTL_ELEM_ACCESS_READ | SNDRV_CTL_ELEM_ACCESS_WRITE,
+		.info		= spdif_channel_status_info,
+		.get		= spdifout_channel_status_get,
+		.put		= spdifout_channel_status_set,
+	},
+	{
+		.iface		= SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name		= "SPDIFOUT " SNDRV_CTL_NAME_IEC958("",PLAYBACK,MASK),
+		.access		= SNDRV_CTL_ELEM_ACCESS_READ,
+		.info		= spdif_channel_status_info,
+		.get		= spdif_channel_status_get_mask,
+	},
 
 	/* audio locker */
 	SOC_ENUM_EXT("audio locker enable",
