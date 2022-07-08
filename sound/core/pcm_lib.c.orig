@@ -535,7 +535,6 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 			 * derived from pointer position+delay
 			 */
 			u64 audio_frames, audio_nsecs;
-			u32 remainder;
 
 			if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 				audio_frames = runtime->hw_ptr_wrap
@@ -545,8 +544,8 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 				audio_frames = runtime->hw_ptr_wrap
 					+ runtime->status->hw_ptr
 					+ runtime->delay;
-			audio_nsecs = audio_frames * div_u64_rem(1000000000LL, runtime->rate, &remainder);
-			audio_nsecs += div_u64(audio_frames * remainder, runtime->rate);
+			audio_nsecs = div_u64(audio_frames * 1000000000LL,
+					runtime->rate);
 			audio_tstamp = ns_to_timespec(audio_nsecs);
 		}
 		runtime->status->audio_tstamp = audio_tstamp;
