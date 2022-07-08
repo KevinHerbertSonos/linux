@@ -599,14 +599,6 @@ config REGULATOR_RT5033
 	  RT5033 PMIC. The device supports multiple regulators like
 	  current source, LDO and Buck.
 
-config REGULATOR_RT8092
-	tristate "Richtek RT8092 Regulators"
-	depends on I2C && OF
-	select REGMAP_I2C
-	help
-	  This adds support for Richtek RT8092 Step-Down DC-DC converter.
-	  The device has a single PWM regulator in it.
-
 config REGULATOR_S2MPA01
 	tristate "Samsung S2MPA01 voltage regulator"
 	depends on MFD_SEC_CORE
