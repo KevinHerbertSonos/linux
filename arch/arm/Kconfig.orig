@@ -948,17 +948,6 @@ source "arch/arm/mach-zx/Kconfig"
 
 source "arch/arm/mach-zynq/Kconfig"
 
-comment "SONOS Support"
-config SONOS
-	bool "Sonos features added"
-	default n
-	help
-	  This enables support for the Sonos features in the kernel.
-
-if SONOS
-source "arch/arm/Kconfig.sonos"
-endif
-
 # ARMv7-M architecture
 config ARCH_EFM32
 	bool "Energy Micro efm32"
