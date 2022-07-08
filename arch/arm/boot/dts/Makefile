@@ -439,6 +439,18 @@ dtb-$(CONFIG_SOC_IMX7D) += \
 	imx7d-sdb.dtb \
 	imx7s-colibri-eval-v3.dtb \
 	imx7s-warp.dtb
+dtb-$(CONFIG_SOC_IMX7ULP) += \
+	imx7ulp-14x14-arm2.dtb \
+	imx7ulp-evk.dtb \
+	imx7ulp-evk-emmc.dtb \
+	imx7ulp-evk-emmc-qspi.dtb \
+	imx7ulp-evk-ft5416.dtb \
+	imx7ulp-evk-sd1.dtb \
+	imx7ulp-evk-lpuart.dtb \
+	imx7ulp-evk-qspi.dtb \
+	imx7ulp-evk-wm8960.dtb \
+	imx7ulp-evk-mipi.dtb \
+	imx7ulp-evk-sensors-to-i2c5.dtb
 dtb-$(CONFIG_SOC_LS1021A) += \
 	ls1021a-qds.dtb \
 	ls1021a-twr.dtb
