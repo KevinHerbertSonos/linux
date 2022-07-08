@@ -33,13 +33,6 @@
 #include <asm/setup.h>  /* for COMMAND_LINE_SIZE */
 #include <asm/page.h>
 
-
-#ifdef CONFIG_SONOS_DIAGS
-#define DIAG_MEM_ADJUSTMENT_16MB (16 * 1024 * 1024)
-#define DIAG_MEM_ADJUSTMENT_4MB  (4  * 1024 * 1024)
-#endif
-
-
 /*
  * of_fdt_limit_memory - limit the number of regions in the /memory node
  * @limit: maximum entries
@@ -612,10 +605,17 @@ static int __init __reserved_mem_reserve_reg(unsigned long node,
 		base = dt_mem_next_cell(dt_root_addr_cells, &prop);
 		size = dt_mem_next_cell(dt_root_size_cells, &prop);
 
-		if (size &&
-		    early_init_dt_reserve_memory_arch(base, size, nomap) == 0)
+		if (size && early_init_dt_reserve_memory_arch(base, size, nomap) == 0)
+		#ifdef CONFIG_AMLOGIC_MODIFY
+			pr_emerg("\t%08lx - %08lx, %8ld KB, %s\n",
+				(unsigned long)base,
+				(unsigned long)(base + size),
+				(unsigned long)(size >> 10),
+				uname);
+		#else
 			pr_debug("Reserved memory: reserved region for node '%s': base %pa, size %lu MiB\n",
 				uname, &base, (unsigned long)(size / SZ_1M));
+		#endif
 		else
 			pr_info("Reserved memory: failed to reserve memory for node '%s': base %pa, size %lu MiB\n",
 				uname, &base, (unsigned long)(size / SZ_1M));
@@ -1066,14 +1066,7 @@ int __init early_init_dt_scan_memory(unsigned long node, const char *uname,
 		pr_debug(" - %llx ,  %llx\n", (unsigned long long)base,
 		    (unsigned long long)size);
 
-#ifdef CONFIG_SONOS_DIAGS
-		if (size > 0x8000000) /* if memory size larger than 128MB, we reseve 16MB*/
-			early_init_dt_add_memory_arch(base, size - DIAG_MEM_ADJUSTMENT_16MB);
-		else
-			early_init_dt_add_memory_arch(base, size - DIAG_MEM_ADJUSTMENT_4MB);
-#else
 		early_init_dt_add_memory_arch(base, size);
-#endif
 	}
 
 	return 0;

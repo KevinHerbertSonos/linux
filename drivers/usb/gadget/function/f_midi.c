@@ -1352,6 +1352,8 @@ static struct usb_function *f_midi_alloc(struct usb_function_instance *fi)
 	midi->func.disable	= f_midi_disable;
 	midi->func.free_func	= f_midi_free;
 
+	fi->f = &midi->func;
+
 	return &midi->func;
 
 midi_free:

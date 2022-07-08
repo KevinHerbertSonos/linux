@@ -866,6 +866,22 @@ static void ffs_user_copy_worker(struct work_struct *work)
 					 io_data->req->actual;
 	bool kiocb_has_eventfd = io_data->kiocb->ki_flags & IOCB_EVENTFD;
 
+#ifdef CONFIG_AMLOGIC_USB
+	int i = 0;
+	struct ffs_data_buffer *buffer = NULL;
+
+	for (i = 0; i < FFS_BUFFER_MAX; i++) {
+		buffer = &(io_data->ffs->buffer[i]);
+		if (io_data->buf == buffer->data_ep) {
+			break;
+		}
+		if (i == FFS_BUFFER_MAX - 1) {
+			pr_info("io_data->buf is missing, i=%d-\n", i);
+			buffer = NULL;
+		}
+	}
+#endif
+
 	if (io_data->read && ret > 0) {
 		mm_segment_t oldfs = get_fs();
 

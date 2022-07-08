@@ -256,6 +256,10 @@ static void dvb_frontend_add_event(struct dvb_frontend *fe,
 
 	wake_up_interruptible (&events->wait_queue);
 }
+#ifdef CONFIG_AMLOGIC_DVB_COMPAT
+EXPORT_SYMBOL(dvb_frontend_add_event);
+#endif
+
 
 static int dvb_frontend_test_event(struct dvb_frontend_private *fepriv,
 				   struct dvb_fe_events *events)
@@ -1844,6 +1848,12 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 	case DTV_DELIVERY_SYSTEM:
 		r = dvbv5_set_delivery_system(fe, data);
 		break;
+#ifdef CONFIG_AMLOGIC_DVB_COMPAT
+	case DTV_DELIVERY_SUB_SYSTEM:
+		r = 0;
+		break;
+#endif
+
 	case DTV_VOLTAGE:
 		c->voltage = data;
 		r = dvb_frontend_handle_ioctl(file, FE_SET_VOLTAGE,
@@ -1950,12 +1960,84 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		if (r < 0)
 			c->lna = LNA_AUTO;
 		break;
+#ifdef CONFIG_AMLOGIC_DVB_COMPAT
+	case DTV_START_BLIND_SCAN:
+	case DTV_CANCEL_BLIND_SCAN:
+	case DTV_BLIND_SCAN_MIN_FRE:
+	case DTV_BLIND_SCAN_MAX_FRE:
+	case DTV_BLIND_SCAN_MIN_SRATE:
+	case DTV_BLIND_SCAN_MAX_SRATE:
+	case DTV_BLIND_SCAN_FRE_RANGE:
+	case DTV_BLIND_SCAN_FRE_STEP:
+	case DTV_BLIND_SCAN_TIMEOUT:
+		r = 0;
+		break;
+#endif
+
 
 	default:
 		return -EINVAL;
 	}
 
 	return r;
+}
+
+static void dtv_property_32to64(struct dtv_property *dest,
+		struct dtv_property_32 *src)
+{
+	int i = 0;
+	long tmp = 0;
+
+	dest->cmd = src->cmd;
+//	printk("%s cmd:%d\n",__func__,dest->cmd);
+ 
+	for (i = 0; i < 3; i++)
+		dest->reserved[i] = src->reserved[i];
+
+	dest->u.data = src->u.data;
+	dest->u.st.len = src->u.st.len;
+
+	for (i = 0; i < MAX_DTV_STATS; i++) {
+		dest->u.st.stat[i].scale  = src->u.st.stat[i].scale;
+		dest->u.st.stat[i].uvalue = src->u.st.stat[i].uvalue;
+		dest->u.st.stat[i].svalue = src->u.st.stat[i].svalue;
+	}
+	for (i = 0; i < 32; i++)
+		dest->u.buffer.data[i] = src->u.buffer.data[i];
+	dest->u.buffer.len = src->u.buffer.len;
+	for (i = 0; i < 3; i++)
+		dest->u.buffer.reserved1[i] = src->u.buffer.reserved1[i];
+	tmp = (long)(src->u.buffer.reserved2);
+	dest->u.buffer.reserved2 = (void *)tmp;
+	dest->result = src->result;
+}
+
+static void dtv_property_64to32(struct dtv_property_32 *dest,
+		struct dtv_property *src)
+{
+	int i = 0;
+	long tmp = 0;
+
+	dest->cmd = src->cmd;
+//	printk("%s cmd:%d\n",__func__,dest->cmd);
+	for (i = 0; i < 3; i++)
+		dest->reserved[i] = src->reserved[i];
+	dest->u.data = src->u.data;
+//	printk("%s data:%d\n",__func__,dest->u.data);
+	dest->u.st.len = src->u.st.len;
+	for (i = 0; i < MAX_DTV_STATS; i++) {
+		dest->u.st.stat[i].scale  = src->u.st.stat[i].scale;
+		dest->u.st.stat[i].uvalue = src->u.st.stat[i].uvalue;
+		dest->u.st.stat[i].svalue = src->u.st.stat[i].svalue;
+	}
+	for (i = 0; i < 32; i++)
+		dest->u.buffer.data[i] = src->u.buffer.data[i];
+	dest->u.buffer.len = src->u.buffer.len;
+	for (i = 0; i < 3; i++)
+		dest->u.buffer.reserved1[i] = src->u.buffer.reserved1[i];
+	tmp = (long)(src->u.buffer.reserved2);
+	dest->u.buffer.reserved2 = (__u32)tmp;
+	dest->result = src->result;
 }
 
 static int dvb_frontend_do_ioctl(struct file *file, unsigned int cmd,
@@ -2835,6 +2917,23 @@ static const struct file_operations dvb_frontend_fops = {
 	.compat_ioctl	= dvb_frontend_compat_ioctl,
 #endif
 };
+
++#ifdef CONFIG_AMLOGIC_DVB_COMPAT
++static long dvb_frontend_compat_ioctl(struct file *filp,
++                       unsigned int cmd, unsigned long args)
++{
++       long ret;
++
++#ifdef CONFIG_COMPAT
++       args  = (unsigned long)compat_ptr(args);
++#endif
++
++       ret = dvb_generic_ioctl(filp, cmd, args);
++
++       return ret;
++}
++#endif
++
 
 int dvb_frontend_suspend(struct dvb_frontend *fe)
 {

@@ -55,6 +55,16 @@
 #include <linux/of_mdio.h>
 #include "dwmac1000.h"
 
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+#include "stmmac_platform.h"
+#endif
+#ifdef CONFIG_DWMAC_MESON
+#include <phy_debug.h>
+#endif
+
+#include <linux/suspend.h>
+#define PM_SUSPEND_PREPARE      0x0003 /* Going to suspend the system */
+
 #define	STMMAC_ALIGN(x)		ALIGN(ALIGN(x, SMP_CACHE_BYTES), 16)
 #define	TSO_MAX_BUFF_SIZE	(SZ_16K - 1)
 
@@ -3576,8 +3586,18 @@ int stmmac_suspend(struct device *dev)
 	netif_device_detach(ndev);
 	netif_stop_queue(ndev);
 
+	/**
+         *napi_disable call might_sleep,if not irq restore
+         *It will warning bug
+         */
+	spin_unlock_irqrestore(&priv->lock, flags);
 	napi_disable(&priv->napi);
+	spin_lock_irqsave(&priv->lock, flags);
 
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+	del_timer_sync(&priv->txtimer);
+#endif
+ 
 	if (priv->eee_enabled) {
 		priv->tx_path_in_lpi_mode = false;
 		del_timer_sync(&priv->eee_ctrl_timer);
@@ -3589,7 +3609,8 @@ int stmmac_suspend(struct device *dev)
 
 	/* Enable Power down mode by programming the PMT regs */
 	if (device_may_wakeup(priv->device)) {
-		priv->hw->mac->pmt(priv->hw, priv->wolopts);
+		//priv->hw->mac->pmt(priv->hw, priv->wolopts);
+		priv->hw->mac->pmt(priv->hw, 0x1 << 5);
 		priv->irq_wake = 1;
 	} else {
 		stmmac_set_mac(priv->ioaddr, false);
