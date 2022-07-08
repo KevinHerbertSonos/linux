@@ -149,8 +149,12 @@ static u64 last_lba(struct block_device *bdev)
 {
 	if (!bdev || !bdev->bd_inode)
 		return 0;
+#if defined(CONFIG_SONOS)
+	return GPT_ALTERNATE_PARTITION_TABLE_LBA - 1ULL;
+#else
 	return div_u64(bdev->bd_inode->i_size,
 		       bdev_logical_block_size(bdev)) - 1ULL;
+#endif
 }
 
 static inline int pmbr_part_valid(gpt_mbr_record *part)
@@ -608,13 +612,21 @@ static int find_valid_gpt(struct parsed_partitions *state, gpt_header **gpt,
 		return 0;
 
 	lastlba = last_lba(state->bdev);
+#if defined(CONFIG_SONOS)
+	total_sectors = GPT_ALTERNATE_PARTITION_TABLE_LBA;
+#endif
         if (!force_gpt) {
 		/* This will be added to the EFI Spec. per Intel after v1.02. */
 		legacymbr = kzalloc(sizeof(*legacymbr), GFP_KERNEL);
 		if (!legacymbr)
 			goto fail;
 
+#ifdef CONFIG_SONOS
+		pr_info("read the MBR from LBA 0x%x\n",(GPT_PRIMARY_PARTITION_TABLE_LBA-1));
+		read_lba(state, (GPT_PRIMARY_PARTITION_TABLE_LBA-1), (u8 *)legacymbr, sizeof(*legacymbr));
+#else
 		read_lba(state, 0, (u8 *)legacymbr, sizeof(*legacymbr));
+#endif
 		good_pmbr = is_pmbr_valid(legacymbr, total_sectors);
 		kfree(legacymbr);
 
