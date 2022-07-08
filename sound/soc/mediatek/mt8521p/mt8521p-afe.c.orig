@@ -4367,7 +4367,7 @@ static u32 spdifrx_fs_interpreter(u32 fsval)
 	}
 	if (cnt > ISPDIF_FS_SUPPORT_RANGE) {
 		fs = SPDIFIN_OUT_RANGE;
-		pr_err("%s()FS Out of Detected Range!\n", __func__);
+		//pr_err("%s()FS Out of Detected Range!\n", __func__);
 	}
 	return fs;
 }
@@ -4378,20 +4378,78 @@ static void (*spdifrx_callback)(void);
  * [Programming Guide]
  * [SPDIF IN] spdif in IRQ7 callback
  */
+#define MYDEBUG 0
+#define MYDELAY 0
+#define MYTIMEOUT 0
+#define MYENABLE 1
+#if MYDEBUG
+static int p = 0;
+static void register_dump(int a)
+{
+	u32 addr = AFE_BASE + 0x500;
+	pr_notice("====register dump #%d====\n", a);
+	while (addr <= (AFE_BASE + 0x55C)) {
+		pr_notice("addr = %x, val = %x\n", addr, afe_read(addr));
+		addr += 0x4;
+	}
+	pr_notice("====register dump done #%d====\n", a);
+}
+#endif
+
+static u32 get_clear_bits(u32 v)
+{
+	u32 bits = 0;
+	/* AFE_SPDIFIN_DEBUG3 */
+	if (v & SPDIFIN_PRE_ERR_NON_STS)
+		bits |= SPDIFIN_PRE_ERR_CLEAR;				/* 0-0 */
+	if (v & SPDIFIN_PRE_ERR_B_STS)
+		bits |= SPDIFIN_PRE_ERR_B_CLEAR;			/* 1-1 */
+	if (v & SPDIFIN_PRE_ERR_M_STS)
+		bits |= SPDIFIN_PRE_ERR_M_CLEAR;			/* 2-2 */
+	if (v & SPDIFIN_PRE_ERR_W_STS)
+		bits |= SPDIFIN_PRE_ERR_W_CLEAR;			/* 3-3 */
+	if (v & SPDIFIN_PRE_ERR_BITCNT_STS)
+		bits |= SPDIFIN_PRE_ERR_BITCNT_CLEAR;			/* 4-4 */
+	if (v & SPDIFIN_PRE_ERR_PARITY_STS)
+		bits |= SPDIFIN_PRE_ERR_PARITY_CLEAR;			/* 5-5 */
+	if (v & SPDIFIN_TIMEOUT_ERR_STS)
+		bits |= SPDIFIN_TIMEOUT_INT_CLEAR;			/* 6-8 */
+	/* AFE_SPDIFIN_INT_EXT2 */
+	if (v & SPDIFIN_LRCK_CHG_INT_STS)
+		bits |= SPDIFIN_LRCK_CHANGE_CLEAR;			/* 27-16 */
+	/* AFE_SPDIFIN_DEBUG1 */
+	if (v & SPDIFIN_DATA_LATCH_ERR)
+		bits |= SPDIFIN_DATA_LATCH_CLEAR;			/* 10-17 */
+	/* not error AFE_SPDIFIN_DEBUG2*/
+	if (v & SPDIFIN_CHSTS_AUDIOBIT_PREAMPHASIS_STS)
+		bits |= SPDIFIN_CHSTS_PREAMPHASIS_CLEAR;		/* 7-9 */
+	if (v & SPDIFIN_FIFO_ERR_STS)
+		bits |= SPDIFIN_FIFO_ERR_CLEAR;
+	if (v & SPDIFIN_CHANNEL_STATUS_INT_FLAG)
+		bits |= SPDIFIN_CHSTS_COLLECTION_CLEAR;			/* 26-11 */
+	return bits;
+}
+
 void afe_spdifrx_isr(void)
 {
-	u32 regval1, regval2, regval3, regval4, fsval, fsvalod, chsintflag;
+	u32 regval1, regval2, regval3, fsval, fsvalod, chsintflag;
 	int i, j;
-	bool err;
+	u32 err, noterr, clear_bits;
 
 	regval1 = afe_read(AFE_SPDIFIN_DEBUG3);
 	regval2 = afe_read(AFE_SPDIFIN_INT_EXT2);
 	regval3 = afe_read(AFE_SPDIFIN_DEBUG1);
-	regval4 = afe_read(AFE_SPDIFIN_CFG1);
 	chsintflag = afe_read(AFE_SPDIFIN_DEBUG2);
-	err = (regval1 & SPDIFIN_ALL_ERR_ERR_STS) ||
-		(regval2 & SPDIFIN_LRCK_CHG_INT_STS) || (regval3 & SPDIFIN_DATA_LATCH_ERR);
-	if (err) {
+	err = (regval1 & SPDIFIN_ALL_ERR_ERR_STS) |	(regval2 & SPDIFIN_LRCK_CHG_INT_STS) | \
+		(regval3 & SPDIFIN_DATA_LATCH_ERR) | (chsintflag & SPDIFIN_FIFO_ERR_STS);
+	noterr = (regval1 & SPDIFIN_CHSTS_AUDIOBIT_PREAMPHASIS_STS) | (chsintflag & SPDIFIN_CHANNEL_STATUS_INT_FLAG);
+	clear_bits = get_clear_bits(err);
+	if (err != 0) {
+#if MYDEBUG
+		pr_notice("#1-unlock, err = %08x\n", err);
+		//register_dump(1);
+		p = 0;
+#endif
 		if (spdifrx_state.rate > 0) {
 			pr_debug("%s Spdif Rx unlock!\n", __func__);
 			if (regval1 & SPDIFIN_ALL_ERR_ERR_STS)
@@ -4405,21 +4463,36 @@ void afe_spdifrx_isr(void)
 			if (spdifrx_callback)
 				spdifrx_callback();
 		}
+#if MYDELAY
+		mdelay(100);
+#endif
+
 		/*Disable SpdifRx interrupt disable*/
 		afe_msk_write(AFE_SPDIFIN_CFG0, SPDIFIN_INT_DIS | SPDIFIN_DIS, SPDIFIN_INT_EN_MASK | SPDIFIN_EN_MASK);
-		/*Clear interrupt bits*/
-		afe_msk_write(AFE_SPDIFIN_EC, SPDIFIN_INT_CLEAR_ALL, SPDIFIN_INT_ERR_CLEAR_MASK);
+#if MYTIMEOUT
 		/*Disable TimeOut Interrupt*/
-		afe_msk_write(AFE_SPDIFIN_CFG1, 0, SPDIFIN_TIMEOUT_INT_EN);
+		afe_msk_write(AFE_SPDIFIN_CFG1, SPDIFIN_TIMEOUT_INT_DIS, SPDIFIN_TIMEOUT_INT_EN);
+#endif
+		/*Clear interrupt bits*/
+		afe_write(AFE_SPDIFIN_EC, clear_bits);
+		/*Enable SpdifRx interrupt disable*/
+		afe_msk_write(AFE_SPDIFIN_CFG0, SPDIFIN_INT_EN | SPDIFIN_EN, SPDIFIN_INT_EN_MASK | SPDIFIN_EN_MASK);
 	} else {
+#if MYDEBUG
+		if (p == 0) {
+			pr_notice("#2-unlock, noterr = %08x\n", noterr);
+			register_dump(2);
+		}
+#endif
+#if MYTIMEOUT
 		/*Enable Timeout Interrupt*/
 		afe_msk_write(AFE_SPDIFIN_CFG1, SPDIFIN_TIMEOUT_INT_EN, SPDIFIN_TIMEOUT_INT_EN);
+#endif
+
 		fsval = afe_read(AFE_SPDIFIN_BR_DBG1);
 		fsval = spdifrx_fs_interpreter(fsval);
 		if (fsval != SPDIFIN_OUT_RANGE) {
-			afe_write(AFE_SPDIFIN_INT_EXT2, (afe_read(AFE_SPDIFIN_INT_EXT2) &
-				 (~SPDIFIN_LRCK_CHG_INT_EN) & (~SPDIFIN_LRC_MASK)) |
-				  SPDIFIN_LRCK_CHG_INT_EN | _u4LRCKCmp594M[fsval-SPDIFIN_32K]);
+			afe_msk_write(AFE_SPDIFIN_INT_EXT2, _u4LRCKCmp594M[fsval-SPDIFIN_32K], SPDIFIN_LRC_MASK);
 			fsvalod = spdifrx_state.rate;
 			spdifrx_state.rate = fsval;
 			pr_debug("%s spdifrx_state.rate =0x%x.\n", __func__, spdifrx_state.rate);
@@ -4427,12 +4500,14 @@ void afe_spdifrx_isr(void)
 				spdifrx_callback();
 
 		}
-		if (((chsintflag & SPDIFIN_CHANNEL_STATUS_INT_FLAG) != 0) &&
-			((regval4 & SPDIFIN_CHSTS_COLLECTION_EN) != 0) && (fsval != SPDIFIN_OUT_RANGE)) {
+		if (((chsintflag & SPDIFIN_CHANNEL_STATUS_INT_FLAG) != 0) && (fsval != SPDIFIN_OUT_RANGE)) {
 			for (i = 0; i < 6; i++) {
 				u32 temp = afe_read(AFE_SPDIFIN_CHSTS1 + i * 0x4);
 
 				if (temp != spdifrx_state.c_bit[i]) {
+#if MYDEBUG
+					pr_notice("AFE_SPDIFIN_CHSTS1 + %d * 0x4 =  0x%08x --- new = 0x%08x\n", i, spdifrx_state.c_bit[i], temp);
+#endif
 					spdifrx_state.c_bit[i] =  temp;
 					if (spdifrx_callback)
 						spdifrx_callback();
@@ -4450,12 +4525,26 @@ void afe_spdifrx_isr(void)
 				}
 			}
 		}
+#if MYENABLE
+		if (fsval == SPDIFIN_OUT_RANGE)
+			/*Disable SpdifRx interrupt disable*/
+			afe_msk_write(AFE_SPDIFIN_CFG0, SPDIFIN_INT_DIS | SPDIFIN_DIS, SPDIFIN_INT_EN_MASK | SPDIFIN_EN_MASK);
+#endif
 		/*Clear interrupt bits*/
-		afe_msk_write(AFE_SPDIFIN_EC, SPDIFIN_INT_CLEAR_ALL, SPDIFIN_INT_ERR_CLEAR_MASK);
-	}
-	if (err) {
-		/*Enable SpdifRx interrupt disable*/
-		afe_msk_write(AFE_SPDIFIN_CFG0, SPDIFIN_INT_EN | SPDIFIN_EN, SPDIFIN_INT_EN_MASK | SPDIFIN_EN_MASK);
+		afe_write(AFE_SPDIFIN_EC, SPDIFIN_INT_CLEAR_ALL);
+#if MYENABLE
+		if (fsval == SPDIFIN_OUT_RANGE)
+			/* enable spdif  */
+			afe_msk_write(AFE_SPDIFIN_CFG0, SPDIFIN_INT_EN | SPDIFIN_EN, SPDIFIN_INT_EN_MASK | SPDIFIN_EN_MASK);
+#endif
+
+#if MYDEBUG
+		if (fsval != SPDIFIN_OUT_RANGE && p == 0) {
+			pr_notice("#3-lock\n");
+			register_dump(3);
+			p = 1;
+		}
+#endif
 	}
 }
 
@@ -4515,7 +4604,7 @@ static void spdifrx_init(enum afe_spdifrx_port port)
 	afe_write(AFE_SPDIFIN_FREQ_INF_3, 0x5A4);
 	/*Bitclk recovery enable and lowbound*/
 	afe_msk_write(AFE_SPDIFIN_BR,
-		      1 | AFE_SPDIFIN_BR_FS_256 | AFE_SPDIFIN_BR_SUBFRAME_256 | AFE_SPDIFIN_BR_TUNE_MODE1 | 0x19 << 12,
+		      1 | AFE_SPDIFIN_BR_FS_256 | AFE_SPDIFIN_BR_SUBFRAME_256 | AFE_SPDIFIN_BR_TUNE_MODE1_D | 0x19 << 12,
 		      AFE_SPDIFIN_BRE_MASK | AFE_SPDIFIN_BR_FS_MASK | AFE_SPDIFIN_BR_SUBFRAME_MASK |
 		      AFE_SPDIFIN_BR_TUNE_MODE_MASK | AFE_SPDIFIN_BR_LOWBOUND_MASK);
 	afe_write(AFE_SPDIFIN_INT_EXT2, (afe_read(AFE_SPDIFIN_INT_EXT2)&(~SPDIFIN_LRCK_CHG_INT_EN)&(~SPDIFIN_LRC_MASK))|
@@ -4524,6 +4613,10 @@ static void spdifrx_init(enum afe_spdifrx_port port)
 	afe_power_on_intdir(1);
 	spdifrx_select_port(port);
 	spdifrx_irq_enable(1);
+#if MYTIMEOUT
+#else
+	afe_msk_write(AFE_SPDIFIN_CFG1, SPDIFIN_TIMEOUT_INT_EN, SPDIFIN_TIMEOUT_INT_EN);
+#endif
 	spdifrx_inited = 1;
 }
 

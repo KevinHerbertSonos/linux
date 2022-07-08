@@ -378,6 +378,8 @@ struct afe_i2s_in_config {
 	int fpga_test_loop2;	/* sdata,lrck,bck: out2 -> in1 */
 	int use_asrc;
 	int dsd_mode;
+	int couple_mode;
+	int one_heart_mode;
 	int slave;
 	enum afe_i2s_format fmt;
 	int mclk;
