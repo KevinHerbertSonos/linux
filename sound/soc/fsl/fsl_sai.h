@@ -170,8 +170,8 @@
 #define FSL_SAI_CLK_BIT		5
 
 /* SAI data transfer numbers per DMA request */
-#define FSL_SAI_MAXBURST_TX 6
-#define FSL_SAI_MAXBURST_RX 6
+#define FSL_SAI_MAXBURST_TX 8
+#define FSL_SAI_MAXBURST_RX 8
 
 #define SAI_FLAG_PMQOS   BIT(0)
 
