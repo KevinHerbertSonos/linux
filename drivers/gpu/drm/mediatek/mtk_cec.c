@@ -193,7 +193,7 @@
 #define	PAD_ENABLE			BIT(30)
 #define DATA_FINISH_IRQ_ENABLE		BIT(14)
 #define TX_COMP_TIM			(0x1f << 0)
-#define COMPARE_TIMING			0x19
+#define COMPARE_TIMING			0x08
 
 enum cec_tx_status {
 	CEC_TX_START,
@@ -455,6 +455,7 @@ static void mtk_cec_tx_config(struct mtk_cec *cec, enum cec_inner_clock clk_src)
 	mtk_cec_write(cec, TX_T_DATA_R, tx_data_rising_conf);
 	mtk_cec_write(cec, TX_T_DATA_F, tx_data_falling_conf);
 	mtk_cec_write(cec, TX_ARB, tx_arb_timing_conf);
+	mtk_cec_mask(cec, TR_TEST, COMPARE_TIMING, TX_COMP_TIM);
 
 	/* turn off interrupt of general mode */
 	mtk_cec_write(cec, TX_GEN_INTR, 0x00000000);
