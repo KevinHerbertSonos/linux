@@ -530,7 +530,9 @@ void mt_cpufreq_thermal_protect(unsigned int limited_power)
 		g_limited_max_freq = g_max_freq_by_ptp;
 
 		cpufreq_driver_target(policy, g_limited_max_freq, CPUFREQ_RELATION_L);
+#ifdef CONFIG_MTK_CPU_HOTPLUG_STRATEGY
 		hps_set_cpu_num_limit(LIMIT_THERMAL, g_limited_max_ncpu, 0);
+#endif
 
 		cpufreq_dbg("thermal limit g_limited_max_freq = %d, g_limited_max_ncpu = %d\n",
 			    g_limited_max_freq, g_limited_max_ncpu);
@@ -563,7 +565,9 @@ void mt_cpufreq_thermal_protect(unsigned int limited_power)
 		cpufreq_dbg("thermal limit g_limited_max_freq = %d, g_limited_max_ncpu = %d\n",
 			    g_limited_max_freq, g_limited_max_ncpu);
 
+#ifdef CONFIG_MTK_CPU_HOTPLUG_STRATEGY
 		hps_set_cpu_num_limit(LIMIT_THERMAL, g_limited_max_ncpu, 0);
+#endif
 
 		cpufreq_driver_target(policy, g_limited_max_freq, CPUFREQ_RELATION_L);
 	}
