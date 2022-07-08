@@ -14,7 +14,6 @@
 #ifndef __BTMTK_CONFIG_H__
 #define __BTMTK_CONFIG_H__
 
-#include <linux/usb.h>
 #include <linux/version.h>
 
 /* It's for reset procedure */
