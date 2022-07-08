@@ -1239,32 +1239,7 @@ retry:
 	}
 	spin_unlock(&ubi->wl_lock);
 
-#if defined(CONFIG_SONOS)
-	/* The default UBI behavior is to schedule the erases with the wear-level
-	   worker thread.  What we have seen, in a very small number of cases, is that
-	   if there is a power cut at the wrong point, some of the scheduled erases
-	   have not yet taken place, and some of the update writes have, and the result
-	   is an inconsistent_vid_hdr error, and a failure to mount any of the UBI
-	   devices.  So we'll check for the updating condition and if we see it,
-	   we're doing a VOLUP, and we'll do the erases synchronously.
-	*/
-
-	if ((vol_id >= 0 && vol_id <= (UBI_MAX_VOLUMES+UBI_INT_VOL_COUNT)) && (ubi->volumes[vol_id] != NULL))
-		if ( ubi->volumes[vol_id]->updating )
-			/*
-			 * This volume is being updated and the LEBs are being
-			 * erased. Need to do the erases synchronously, to
-			 * ensure against inconsistent_vid_hdr errors in case
-			 * of a power-cut.
-			 */
-			err = do_sync_erase(ubi, e, vol_id, lnum, torture);
-		else
-			/* Not updating - just schedule the erase */
-			err = schedule_erase(ubi, e, vol_id, lnum, torture);
-	else
-		/* The layout volume or a deleted volume - just schedule the erase */
-#endif
-		err = schedule_erase(ubi, e, vol_id, lnum, torture);
+	err = schedule_erase(ubi, e, vol_id, lnum, torture);
 	if (err) {
 		spin_lock(&ubi->wl_lock);
 		wl_tree_add(e, &ubi->used);
