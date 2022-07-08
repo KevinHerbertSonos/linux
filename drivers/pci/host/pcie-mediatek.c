@@ -443,17 +443,23 @@ static void mtk_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
 		(int)data->hwirq, msg->address_hi, msg->address_lo);
 }
 
+/**
+ * Do not use irq_set_affinity_hint() here as
+ * tries to lock the irq spinlock that is already held
+ * when we get here. It will cause a CPU deadlock.
+ */
 static int mtk_msi_set_affinity(struct irq_data *irq_data,
 				const struct cpumask *mask, bool force)
 {
 	struct mtk_pcie_port *port = irq_data_get_irq_chip_data(irq_data);
-	int ret;
+	struct irq_desc *desc = irq_to_desc(port->irq);
 
-	ret = irq_set_affinity_hint(port->irq, mask);
-	if (!ret)
-		return ret;
+	if (!desc)
+		return -EINVAL;
 
-	return -EINVAL;
+	desc->affinity_hint = mask;
+ 
+	return 0;
 }
 
 static void mtk_msi_ack_irq(struct irq_data *data)
