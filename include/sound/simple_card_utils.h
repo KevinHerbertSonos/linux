@@ -20,6 +20,7 @@ struct asoc_simple_dai {
 	unsigned int tx_slot_mask;
 	unsigned int rx_slot_mask;
 	struct clk *clk;
+	int clk_id;
 };
 
 int asoc_simple_card_parse_daifmt(struct device *dev,
