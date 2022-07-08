@@ -1320,6 +1320,12 @@ netdev_tx_t usbnet_start_xmit (struct sk_buff *skb,
 	unsigned long		flags;
 	int retval;
 
+#ifdef CONFIG_SONOS
+	if ( !netif_carrier_ok(net) ) {
+		goto drop;
+	}
+#endif
+
 	if (skb)
 		skb_tx_timestamp(skb);
 
@@ -1562,6 +1568,10 @@ void usbnet_disconnect (struct usb_interface *intf)
 
 	net = dev->net;
 	unregister_netdev (net);
+#ifdef CONFIG_SONOS
+	if ( netif_carrier_ok(net) )
+		sonos_announce_linkup(net);
+#endif
 
 	cancel_work_sync(&dev->kevent);
 
@@ -1908,6 +1918,9 @@ EXPORT_SYMBOL(usbnet_manage_power);
 
 void usbnet_link_change(struct usbnet *dev, bool link, bool need_reset)
 {
+#ifdef CONFIG_SONOS
+	sonos_announce_linkup(dev->net);
+#endif
 	/* update link after link is reseted */
 	if (link && !need_reset)
 		netif_carrier_on(dev->net);
