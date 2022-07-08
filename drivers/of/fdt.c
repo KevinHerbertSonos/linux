@@ -31,6 +31,13 @@
 #include <asm/setup.h>  /* for COMMAND_LINE_SIZE */
 #include <asm/page.h>
 
+
+#ifdef CONFIG_SONOS_DIAGS
+#define DIAG_MEM_ADJUSTMENT_16MB (16 * 1024 * 1024)
+#define DIAG_MEM_ADJUSTMENT_4MB  (4  * 1024 * 1024)
+#endif
+
+
 /*
  * of_fdt_limit_memory - limit the number of regions in the /memory node
  * @limit: maximum entries
@@ -1057,7 +1064,14 @@ int __init early_init_dt_scan_memory(unsigned long node, const char *uname,
 		pr_debug(" - %llx ,  %llx\n", (unsigned long long)base,
 		    (unsigned long long)size);
 
+#ifdef CONFIG_SONOS_DIAGS
+		if (size > 0x8000000) /* if memory size larger than 128MB, we reseve 16MB*/
+			early_init_dt_add_memory_arch(base, size - DIAG_MEM_ADJUSTMENT_16MB);
+		else
+			early_init_dt_add_memory_arch(base, size - DIAG_MEM_ADJUSTMENT_4MB);
+#else
 		early_init_dt_add_memory_arch(base, size);
+#endif
 	}
 
 	return 0;
