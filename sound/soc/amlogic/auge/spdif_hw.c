@@ -265,7 +265,7 @@ void aml_spdif_fifo_ctrl(
 
 		aml_audiobus_write(actrl,
 			EE_AUDIO_SPDIFIN_CTRL1,
-			0xff << 20 | (spdifin_clk / 10000) << 0);
+			0x04 << 20 | (spdifin_clk / 10000) << 0);
 
 		aml_audiobus_write(actrl,
 			EE_AUDIO_SPDIFIN_CTRL2,
@@ -297,7 +297,7 @@ void aml_spdif_fifo_ctrl(
 		aml_audiobus_update_bits(actrl,
 			EE_AUDIO_SPDIFIN_CTRL0,
 			0x1 << 25 | 0x1 << 24 | 0xfff << 12,
-			0x1 << 25 | 0x0 << 24 | 0xff << 12);
+			0x0 << 25 | 0x0 << 24 | 0xff << 12);
 	}
 
 }
