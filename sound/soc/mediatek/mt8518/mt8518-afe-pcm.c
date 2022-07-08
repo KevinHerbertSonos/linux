@@ -9615,6 +9615,75 @@ static unsigned int get_spdif_in_sample_rate(struct mtk_base_afe *afe)
 	return fs;
 }
 
+struct spdif_in_sample_rate_tolrence {
+	int rate;
+	int tolerance;
+};
+
+/* tolrence: 624M/ FS/2 * 3% */
+static const struct spdif_in_sample_rate_tolrence
+	spdif_in_rate_tolrence_range[] = {
+	{8000, 0x492},
+	{11025, 0x351},
+	{12000, 0x30c},
+	{16000, 0x249},
+	{22050, 0x1a8},
+	{24000, 0x186},
+	{32000, 0x125},
+	{44100, 0xd4},
+	{48000, 0xc3},
+	{88200, 0x6a},
+	{96000, 0x62},
+	{176400, 0x35},
+	{192000, 0x31},
+};
+
+static void set_spdif_in_sample_rate_change_tolerance
+	(struct mtk_base_afe *afe, int rate)
+{
+	int idx = 0;
+	int tolerance = 0;
+	int range_num = ARRAY_SIZE(spdif_in_rate_tolrence_range);
+
+	if (rate == 0)
+		goto INVALID_RATE;
+
+	for (idx = 0; idx < range_num; idx++) {
+		if (rate == spdif_in_rate_tolrence_range[idx].rate) {
+			tolerance = spdif_in_rate_tolrence_range[idx].tolerance;
+			break;
+		}
+	}
+
+	if (idx == range_num) {
+		dev_dbg(afe->dev, "%s not matched rate.\n", __func__);
+		goto INVALID_RATE;
+	}
+
+	regmap_update_bits(afe->regmap,
+			   AFE_SPDIFIN_INT_EXT2,
+			   AFE_SPDIFIN_INT_EXT2_LRCK_CHANGE_EN_MASK,
+			   0x0);
+
+	regmap_update_bits(afe->regmap,
+			   AFE_SPDIFIN_INT_EXT2,
+			   AFE_SPDIFIN_INT_EXT2_LRCK_COMPARE_MASK,
+			   tolerance);
+
+	regmap_update_bits(afe->regmap,
+			   AFE_SPDIFIN_INT_EXT2,
+			   AFE_SPDIFIN_INT_EXT2_LRCK_CHANGE_EN_MASK,
+			   AFE_SPDIFIN_INT_EXT2_LRCK_CHANGE_EN);
+
+	return;
+
+INVALID_RATE:
+	regmap_update_bits(afe->regmap,
+			   AFE_SPDIFIN_INT_EXT2,
+			   AFE_SPDIFIN_INT_EXT2_LRCK_CHANGE_EN_MASK,
+			   0x0);
+}
+
 static void spdif_in_reset_and_clear_error(struct mtk_base_afe *afe,
 	unsigned int err_bits)
 {
