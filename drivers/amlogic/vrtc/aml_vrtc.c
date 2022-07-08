@@ -184,14 +184,22 @@ static int aml_vrtc_probe(struct platform_device *pdev)
 	ret = of_property_read_u32(pdev->dev.of_node,
 			"timer_e_addr", &paddr);
 	ret = of_property_read_string(pdev->dev.of_node, "init_date", &str);
+
+	/* Sonos - refactored - as originally written, would only check for a HW
+	 * default if it was also specified in the dtb.  Modified to use dtb
+	 * value if it exists, and go to HW if it doesn't.
+	 */
 	if (!ret) {
 		pr_debug("init_date: %s\n", str);
+		(void)vrtc_val;
+		parse_init_date(str);
+	} else {
 		if (!scpi_get_vrtc(&vrtc_val)) {
 			vrtc_init_date = vrtc_val;
 			pr_debug("get vrtc: %us\n", vrtc_init_date);
-		} else
-			parse_init_date(str);
+		}
 	}
+
 	device_init_wakeup(&pdev->dev, 1);
 	vrtc = rtc_device_register("aml_vrtc", &pdev->dev,
 		&aml_vrtc_ops, THIS_MODULE);

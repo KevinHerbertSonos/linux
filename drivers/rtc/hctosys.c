@@ -47,7 +47,18 @@ static int __init rtc_hctosys(void)
 
 	}
 
+#if !defined(CONFIG_SONOS)
 	tv64.tv_sec = rtc_tm_to_time64(&tm);
+#else
+	{
+		/* SONOS - use the local_clock value as timeofday
+		 * so that printk/timeinfo/blackbox all match.
+		 */
+		u64 local = local_clock();
+		tv64.tv_sec = do_div(local, 1000000000);
+		tv64.tv_nsec = local - tv64.tv_sec * 1000000000;
+	}
+#endif
 
 	err = do_settimeofday64(&tv64);
 
