@@ -34,6 +34,10 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
+#ifdef CONFIG_SONOS
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#endif
 
 #define MEMORY_BASE	0x80000000
 
@@ -77,6 +81,12 @@ static struct mtk_pcie_port {
 	int irq;
 	int eint_irq;
 	u32 link;
+#ifdef CONFIG_SONOS
+	int conn_ldo_gpio;
+	int pcie_reset;
+	int clk_req_gpio;
+	int wakeup;
+#endif
 } mtk_pcie_port[] = {
 	{ 0, 0, PCIEP0_BASE, PHY_P0_CTL, BIT(1), RSTCTL_PCIE0_RST, BIT(20) },
 	{ 1, 0, PCIEP1_BASE, PHY_P1_CTL, BIT(2), RSTCTL_PCIE1_RST, BIT(21) },
@@ -354,6 +364,16 @@ static void mtk_pcie_preinit(struct mtk_pcie *pcie)
 	bus.sysdata = (void *)&sys;
 	sys.private_data = (void *)pcie;
 
+#ifdef CONFIG_SONOS
+	mtk_foreach_port(port) {
+		if (port->enable) {
+			if (gpio_is_valid(port->conn_ldo_gpio)) {
+				gpio_set_value_cansleep(port->conn_ldo_gpio, 1);
+			}
+		}
+	}
+#endif
+
 	pcibios_min_io = 0;
 	pcibios_min_mem = 0;
 
@@ -390,6 +410,21 @@ static void mtk_pcie_preinit(struct mtk_pcie *pcie)
 	usleep_range(1000, 2000);
 	dev_dbg(pcie->dev, "%s: PCICFG=0x%x\n", __func__,
 			pcie_r32(pcie, PCICFG));
+
+#ifdef CONFIG_SONOS
+	mtk_foreach_port(port) {
+		if (port->enable) {
+			if (gpio_is_valid(port->pcie_reset)) {
+				gpio_set_value_cansleep(port->pcie_reset, 1);
+				gpio_free(port->pcie_reset);
+			}
+			if (gpio_is_valid(port->conn_ldo_gpio)) {
+				gpio_free(port->conn_ldo_gpio);
+			}
+		}
+	}
+#endif
+
 	msleep(100);
 
 	/* check the link status */
@@ -565,6 +600,35 @@ static int mtk_pcie_parse_dt(struct mtk_pcie *pcie)
 		if (!of_device_is_available(port))
 			continue;
 		mtk_pcie_port[index].eint_irq = of_irq_get(port, 0);
+
+#ifdef CONFIG_SONOS
+		mtk_pcie_port[index].conn_ldo_gpio = of_get_named_gpio(port, "conn-ldo-gpio", 0);
+		if (gpio_is_valid(mtk_pcie_port[index].conn_ldo_gpio)) {
+			int val;
+			val = gpio_request_one(mtk_pcie_port[index].conn_ldo_gpio,
+				GPIOF_OUT_INIT_LOW, "PCIe Reset");
+			if ( val ) {
+				pr_err("Could not request %d enable gpio: %d\n",
+					mtk_pcie_port[index].conn_ldo_gpio, val);
+				continue;
+			}
+        		gpio_set_value_cansleep(mtk_pcie_port[index].conn_ldo_gpio, 0);
+		}
+		mtk_pcie_port[index].pcie_reset = of_get_named_gpio(port, "rst-gpio", 0);
+		if (gpio_is_valid(mtk_pcie_port[index].pcie_reset)) {
+			int val;
+			val = gpio_request_one(mtk_pcie_port[index].pcie_reset,
+				GPIOF_OUT_INIT_LOW, "LDO Reset");
+			if ( val ) {
+				pr_err("Could not request %d enable gpio: %d\n",
+					mtk_pcie_port[index].pcie_reset, val);
+				continue;
+			}
+        		gpio_set_value_cansleep(mtk_pcie_port[index].pcie_reset, 0);
+		}
+		mtk_pcie_port[index].clk_req_gpio = of_get_named_gpio(port, "clk-req-gpio", 0);
+		mtk_pcie_port[index].wakeup = of_get_named_gpio(port, "wake-gpio", 0);
+#endif
 		mtk_pcie_port[index].enable = 1;
 	}
 	return 0;
