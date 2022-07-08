@@ -622,8 +622,6 @@ static int sii902x_get_modes(struct drm_connector *connector)
 		phy_addr = cec_get_edid_phys_addr((u8 *)edid,
 						  EDID_LENGTH * (1 + (edid->extensions)),
 						  NULL);
-
-		kfree(edid);
 	}
 
 	ret = drm_display_info_set_bus_formats(&connector->display_info,
@@ -641,8 +639,12 @@ static int sii902x_get_modes(struct drm_connector *connector)
 error_out:
 	mutex_unlock(&sii902x->mutex);
 
-	/* Setting physical address must be outside the lock as it may call back into this driver */
-	cec_s_phys_addr(cec->adap, phy_addr, false);
+	if (edid) {
+		/* Setting physical address must be outside the lock as it may call back into this driver */
+		cec_s_phys_addr(cec->adap, phy_addr, false);
+
+		kfree(edid);
+	}
 
 	return ret;
 }
