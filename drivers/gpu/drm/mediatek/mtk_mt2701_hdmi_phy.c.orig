@@ -204,15 +204,6 @@ static int mtk_hdmi_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 	mtk_hdmi_pll_mask(hdmi_phy, HDMI_CON1, 0, RG_HDMITX_PRED_IMP);
 	mtk_hdmi_pll_mask(hdmi_phy, HDMI_CON1, (0x3 << RG_HDMITX_PRED_IBIAS),
 			  RG_HDMITX_PRED_IBIAS_MASK);
-#ifdef CONFIG_SONOS
-	mtk_hdmi_pll_mask(hdmi_phy, HDMI_CON0, (0xf << RG_HDMITX_EN_IMP),
-			  RG_HDMITX_EN_IMP_MASK);
-	mtk_hdmi_pll_mask(hdmi_phy, HDMI_CON1, (0x28 << RG_HDMITX_DRV_IMP),
-			  RG_HDMITX_DRV_IMP_MASK);
-	mtk_hdmi_pll_mask(hdmi_phy, HDMI_CON4, 0x282828, RG_HDMITX_RESERVE_MASK);
-	mtk_hdmi_pll_mask(hdmi_phy, HDMI_CON0, (0xd << RG_HDMITX_DRV_IBIAS),
-			  RG_HDMITX_DRV_IBIAS_MASK);
-#else
 	mtk_hdmi_pll_mask(hdmi_phy, HDMI_CON0, (0x0 << RG_HDMITX_EN_IMP),
 			  RG_HDMITX_EN_IMP_MASK);
 	mtk_hdmi_pll_mask(hdmi_phy, HDMI_CON1, (0x28 << RG_HDMITX_DRV_IMP),
@@ -220,7 +211,6 @@ static int mtk_hdmi_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 	mtk_hdmi_pll_mask(hdmi_phy, HDMI_CON4, 0x28, RG_HDMITX_RESERVE_MASK);
 	mtk_hdmi_pll_mask(hdmi_phy, HDMI_CON0, (0xa << RG_HDMITX_DRV_IBIAS),
 			  RG_HDMITX_DRV_IBIAS_MASK);
-#endif
 	return 0;
 }
 
