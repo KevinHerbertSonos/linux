@@ -1,0 +1,83 @@
+/*
+ * Copyright (c) 2021-2022, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * v0	- Optimo1 p1a
+ * v1	- Optimo1 p1b
+ * v2	- Optimo1 p2a with TI amps
+ * v3	- Optimo1 p2a with Richtek amps
+ * v4	- Optimo1 p2b - added BT sync gpio change
+ * v5	- Optimo1 EVT - lumissil led, renesas rtc, ntc/adc temp sensors, bosch accelerometer
+ */
+
+/dts-v1/;
+
+#include "optimo_common.dtsi"
+
+/ {
+	model = "Optimo1 V5";
+
+        sonos-product-id = <0x01>;
+
+	sonos-platform {
+		thermal-mgmt {
+			   CPU {
+                                compatible = "sonos,temp-ncu15";
+                                adc-channel = <1>;
+                                fault-temperature = <100>;
+                                warn-temperature = <95>;
+                                temperature-map {
+                                        num-ranges = <10>;
+                                        // max mV for range, a in range, b in range
+                                        //   (linear ax +- b)
+                                        //
+                                        map-values = <  1500	249	273050
+							2000	254	279520
+							2400	271	313370
+							2750	305	395220
+							3000	358	540770
+							3250	448	811180
+							3500	605	1323700
+							3700	883	2324500
+							3800	1346	4033300
+							4096	1808	5786900 >;
+                                };
+			};
+			/delete-node/ AMP;
+		};
+	};
+
+	thermal-zones {
+                /delete-node/ cputhermal;
+                /delete-node/ ampthermal;
+        };
+
+	soc {
+		cbus@ffd00000 {
+			i2c@1f000 {
+				/delete-node/ tmp102@49;
+				rt9120s@18 {
+					status = "okay";
+				};
+				rt9120s@19 {
+					/delete-property/ parallel-play;
+					init-sequence-length2 = <15>;
+					reg-init2 = < 0x63 0xDE 0x6C 0xC0 0x07 0x36 0x65 0x66 0x06 0x28
+						0x02 0x03 0xA0 0x01 0xA1 0x08 0xA2 0x0C 0x27 0x01B0 0x20 0x0180 0x0c 0x38 0x09 0x81 0x6e 0x1d 0x10 0x00>;
+					status = "okay";
+				};
+			};
+			i2c@1d000 {
+				/delete-node/ tmp102@48;
+			};
+		};
+		aobus@ff800000 {
+			i2c@5000 {
+				/delete-node/ lp5562@0 ;
+			};
+		};
+	};
+};
+
+#include "optimo1_captouch.dtsi"

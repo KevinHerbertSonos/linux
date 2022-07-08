@@ -1,0 +1,37 @@
+/*
+ * Copyright (c) 2022, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * v0	- Prima P0, P1a
+ * v1   - Prima P2a
+ */
+
+/dts-v1/;
+
+#include "prima_common.dtsi"
+
+/ {
+	model = "Prima V1";
+
+    sonos-product-id = <0x04>;
+
+    ccg6_swd: ccg6-swd {
+        compatible = "sonos,psoc-swd";
+        xres-gpio = <&gpio GPIOH_4 GPIO_ACTIVE_HIGH>;
+        io-gpio   = <&gpio GPIOX_13 GPIO_ACTIVE_HIGH>;
+        scl-gpio  = <&gpio GPIOX_12 GPIO_ACTIVE_HIGH>;
+        image-name = "prima_pmu_p2.hex";
+        gpio-reg = <0xff634400 0x20 0x17 0x18 0x1000 0x17 0x18 0x2000>;
+    };
+
+    ccg6-pmu {
+        compatible = "sonos,ccg6";
+        swd = <&ccg6_swd>;
+        ccg6-hw-version = <2>;
+        i2c-device = <&i2c1 0x55>;
+        irq-gpio = <&gpio GPIOH_0 GPIO_ACTIVE_HIGH>;
+    };
+};
+
+#include "prima_p2a_psoc_images.dtsi"

@@ -1,0 +1,115 @@
+/*
+ * Copyright (c) 2022, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * v0	- Optimo2 p1a
+ * v1	- Optimo2 p1b - board-only build
+ * v2	- Optimo2 p2a - secure build, TI amps
+ * v3	- Optimo2 p2a-2 - secure build, Richtek amps
+ * v4	- Optimo2 p2b - added BT sync gpio change
+ * v5	- Optimo2 p2c - lumissil led, renesas rtc, ntc/adc temp sensors, bosch accelerometer
+ * v6	- Optimo2 EVT - i2c temp-sensors removed
+ */
+
+/dts-v1/;
+
+#include "optimo_common.dtsi"
+
+/ {
+	model = "Optimo2 V6";
+
+        sonos-product-id = <0x03>;
+
+	dolby_fw {
+		status = "okay";
+	};
+
+	sonos-platform {
+		thermal-mgmt {
+			   CPU {
+                                compatible = "sonos,temp-ncu15";
+                                adc-channel = <1>;
+                                fault-temperature = <100>;
+                                warn-temperature = <95>;
+                                temperature-map {
+                                        num-ranges = <10>;
+                                        // max mV for range, a in range, b in range
+                                        //   (linear ax +- b)
+                                        //
+                                        map-values = <  1500	249	273050
+							2000	254	279520
+							2400	271	313370
+							2750	305	395220
+							3000	358	540770
+							3250	448	811180
+							3500	605	1323700
+							3700	883	2324500
+							3800	1346	4033300
+							4096	1808	5786900 >;
+                                };
+			};
+                        AMP {
+                                compatible = "sonos,temp-ncu15";
+                                adc-channel = <2>;
+                                fault-temperature = <100>;
+                                warn-temperature = <95>;
+                                temperature-map {
+                                        num-ranges = <10>;
+                                        // max mV for range, a in range, b in range
+                                        //   (linear ax +- b)
+                                        //
+                                        map-values = <  1500	249	273050
+							2000	254	279520
+							2400	271	313370
+							2750	305	395220
+							3000	358	540770
+							3250	448	811180
+							3500	605	1323700
+							3700	883	2324500
+							3800	1346	4033300
+							4096	1808	5786900 >;
+                                };
+			};
+		};
+	};
+
+	thermal-zones {
+                /delete-node/ cputhermal;
+                /delete-node/ ampthermal;
+        };
+
+        soc {
+                cbus@ffd00000 {
+                        i2c@1f000 {
+				/delete-node/ tmp102@49;
+				rt9120s@18 {
+					status = "okay";
+				};
+				rt9120s@19 {
+					status = "okay";
+				};
+				rt9120s@1a {
+					status = "okay";
+				};
+				rt9120s@1b {
+					status = "okay";
+				};
+			};
+			i2c@1d000 {
+				/delete-node/ tmp102@48;
+				lis2hh12@0 {
+					optimo2-orientation;
+				};
+                                bma420@0 {
+					optimo2-orientation;
+				};
+			};
+		};
+		aobus@ff800000 {
+			i2c@5000 {
+				/delete-node/ lp5562@0 ;
+			};
+		};
+	};
+};

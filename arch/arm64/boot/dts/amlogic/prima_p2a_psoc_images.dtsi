@@ -1,0 +1,15 @@
+&i2c_AO {
+	sge@0 {  // Sigdetail Gesture Engine
+		psoc-images {
+			image@0 {
+				model-num = <4025>;
+				ident = <0x59>;
+				flash-rows = <256>;
+				flash-row-size = <128>;
+				flash-protection-size = <32>;
+		      };
+		};
+	};
+};
+
+

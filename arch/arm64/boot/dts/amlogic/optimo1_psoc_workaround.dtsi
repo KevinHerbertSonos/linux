@@ -1,0 +1,20 @@
+/*
+ * Copyright (c) 2021, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * Common definition for the Optimo1 PSoC workaround.
+ *
+ */
+
+&i2c_AO {
+	sge@0 {  // Sigdetail Gesture Engine
+		psoc-images {
+			image@0 {
+				/* Optimo1 P2a and older needs a different image since a few sensors are not connected
+				   correctly. This will be fixed in P2b */
+				ident = <0x89>;
+			};
+		};
+	};
+};

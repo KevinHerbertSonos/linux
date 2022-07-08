@@ -1,0 +1,57 @@
+/*
+ * Copyright (c) 2022, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * v0	- Prima P0
+ */
+
+/dts-v1/;
+
+#include "prima_common.dtsi"
+
+/ {
+	model = "Prima V0";
+
+    sonos-product-id = <0x04>;
+
+    ccg6_swd: ccg6-swd {
+        compatible = "sonos,psoc-swd";
+        xres-gpio = <&gpio GPIOH_4 GPIO_ACTIVE_HIGH>;
+        io-gpio   = <&gpio GPIOX_13 GPIO_ACTIVE_HIGH>;
+        scl-gpio  = <&gpio GPIOX_12 GPIO_ACTIVE_HIGH>;
+        image-name = "prima_pmu_p1.hex";
+        gpio-reg = <0xff634400 0x20 0x17 0x18 0x1000 0x17 0x18 0x2000>;
+    };
+
+    ccg6-pmu {
+        compatible = "sonos,ccg6";
+        swd = <&ccg6_swd>;
+        ccg6-hw-version = <1>;
+        i2c-device = <&i2c1 0x55>;
+        irq-gpio = <&gpio GPIOH_0 GPIO_ACTIVE_HIGH>;
+    };
+};
+
+&i2c_AO {
+	sge@0 {  // Sigdetail Gesture Engine
+		psoc-images {
+			image@0 {
+				model-num = <4025>;
+				ident = <0x57>;
+				flash-rows = <256>;
+				flash-row-size = <128>;
+				flash-protection-size = <32>;
+			};
+			image@1 {
+				model-num = <4025>;
+				ident = <0x58>;
+				flash-rows = <256>;
+				flash-row-size = <128>;
+				flash-protection-size = <32>;
+		      };
+		};
+	};
+};
+
+

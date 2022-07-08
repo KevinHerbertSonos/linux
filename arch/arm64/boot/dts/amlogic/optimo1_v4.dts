@@ -1,0 +1,51 @@
+/*
+ * Copyright (c) 2021, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ * v0	- Optimo1 p1a
+ * v1	- Optimo1 p1b
+ * v2	- Optimo1 p2a with TI amps
+ * v3	- Optimo1 p2a with Richtek amps
+ * v4	- Optimo1 p2b - added BT sync gpio change
+ */
+
+/dts-v1/;
+
+#include "optimo_common.dtsi"
+
+/ {
+	model = "Optimo1 V4";
+
+        sonos-product-id = <0x01>;
+
+	sonos-platform {
+		thermal-mgmt {
+			/delete-node/ AMP;
+		};
+	};
+
+	soc {
+		cbus@ffd00000 {
+			i2c@1f000 {
+				rt9120s@18 {
+					status = "okay";
+				};
+				rt9120s@19 {
+					/delete-property/ parallel-play;
+					init-sequence-length2 = <15>;
+					reg-init2 = < 0x63 0xDE 0x6C 0xC0 0x07 0x36 0x65 0x66 0x06 0x28
+						0x02 0x03 0xA0 0x01 0xA1 0x08 0xA2 0x0C 0x27 0x01B0 0x20 0x0180 0x0c 0x38 0x09 0x81 0x6e 0x1d 0x10 0x00>;
+					status = "okay";
+				};
+			};
+		};
+		aobus@ff800000 {
+			i2c@5000 {
+				/delete-node/ lp5562@0 ;
+			};
+		};
+	};
+};
+
+#include "optimo1_captouch.dtsi"
