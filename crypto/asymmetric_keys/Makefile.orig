@@ -68,25 +68,3 @@ $(obj)/mscode_parser.o: $(obj)/mscode-asn1.h $(obj)/mscode-asn1.h
 $(obj)/mscode-asn1.o: $(obj)/mscode-asn1.c $(obj)/mscode-asn1.h
 
 clean-files	+= mscode-asn1.c mscode-asn1.h
-
-ifdef CONFIG_SONOS_SECBOOT
-obj-y += sonos_signature_common_linux.o
-obj-y += sonos_signature_keys.o
-obj-y += sonos_signature_keys_domino.o
-obj-y += sonos_signature_keys_elrey.o
-obj-y += sonos_signature_keys_hideout.o
-obj-y += sonos_signature_verify_linux.o
-
-# rawrsa handling
-obj-y += rawrsa_key_parser.o
-rawrsa_key_parser-y := \
-	rawrsa-asn1.o \
-	rawrsa_parser.o \
-	rawrsa_public_key.o
-
-$(obj)/rawrsa_parser.o: $(obj)/rawrsa-asn1.h
-$(obj)/rawrsa-asn1.o: $(obj)/rawrsa-asn1.c $(obj)/rawrsa-asn1.h
-
-clean-files	+= rawrsa-asn1.c rawrsa-asn1.h
-
-endif
