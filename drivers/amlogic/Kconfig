@@ -134,5 +134,7 @@ source "drivers/amlogic/defendkey/Kconfig"
 
 source "drivers/amlogic/aes_hwkey_gcm/Kconfig"
 
+source "drivers/amlogic/dolby_fw/Kconfig"
+
 endmenu
 endif

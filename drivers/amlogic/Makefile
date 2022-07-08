@@ -123,4 +123,6 @@ obj-$(CONFIG_AMLOGIC_DEBUG) += debug/
 
 obj-$(CONFIG_AMLOGIC_DEFENDKEY) += defendkey/
 
+obj-$(CONFIG_DOLBY_FW) += dolby_fw/
+
 obj-$(CONFIG_AES_HWKEY_GCM) += aes_hwkey_gcm/
