@@ -85,6 +85,7 @@ struct scp_domain_data {
 	u32 bus_prot_mask;
 	enum clk_id clk_id[MAX_CLKS];
 	bool active_wakeup;
+	bool disabled;
 };
 
 struct scp;
@@ -99,6 +100,7 @@ struct scp_domain {
 	u32 sram_pdn_ack_bits;
 	u32 bus_prot_mask;
 	bool active_wakeup;
+	bool disabled;
 };
 
 struct scp {
@@ -140,6 +142,11 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 	u32 val;
 	int ret;
 	int i;
+
+	if (scpd->disabled) {
+		dev_info(scp->dev, "Skipping power on for disabled domain %s\n", genpd->name);
+		return 0;
+	}
 
 	for (i = 0; i < MAX_CLKS && scpd->clk[i]; i++) {
 		ret = clk_prepare_enable(scpd->clk[i]);
@@ -235,6 +242,11 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 	u32 val;
 	int ret;
 	int i;
+
+	if (scpd->disabled) {
+		dev_info(scp->dev, "Skipping power off for disabled domain %s\n", genpd->name);
+		return 0;
+	}
 
 	if (scpd->bus_prot_mask) {
 		ret = mtk_infracfg_set_bus_protection(scp->infracfg,
@@ -412,6 +424,7 @@ static struct scp *init_scp(struct platform_device *pdev,
 		scpd->sram_pdn_ack_bits = data->sram_pdn_ack_bits;
 		scpd->bus_prot_mask = data->bus_prot_mask;
 		scpd->active_wakeup = data->active_wakeup;
+		scpd->disabled = data->disabled;
 		for (j = 0; j < MAX_CLKS && data->clk_id[j]; j++)
 			scpd->clk[j] = clk[data->clk_id[j]];
 
@@ -463,12 +476,18 @@ static void mtk_register_power_domains(struct platform_device *pdev,
  */
 
 static const struct scp_domain_data scp_domain_data_mt2701[] = {
+
 	[MT2701_POWER_DOMAIN_CONN] = {
 		.name = "conn",
 		.sta_mask = PWR_STATUS_CONN,
 		.ctl_offs = SPM_CONN_PWR_CON,
 		.bus_prot_mask = 0x0104,
 		.active_wakeup = true,
+#ifdef CONFIG_SONOS
+		/* Sonos does not use the MT6625 PMIC so the
+		 * "conn" interconnect is not needed. */
+		.disabled = true,
+#endif /* CONFIG_SONOS */
 	},
 	[MT2701_POWER_DOMAIN_DISP] = {
 		.name = "disp",
