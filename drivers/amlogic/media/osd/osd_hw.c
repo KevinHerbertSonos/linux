@@ -4400,7 +4400,6 @@ static void osd_update_enable(u32 index)
 				(1 & 0x1) << 20);
 	}
 	remove_from_update_list(index, OSD_ENABLE);
-	VSYNCOSD_WR_MPEG_REG(osd_reg->osd_blk0_cfg_w1, 0x077F0000);
 }
 
 static void osd_update_disp_osd_reverse(u32 index)
