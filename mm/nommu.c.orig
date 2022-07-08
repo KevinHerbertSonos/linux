@@ -42,10 +42,6 @@
 #include <asm/mmu_context.h>
 #include "internal.h"
 
-#ifdef CONFIG_SONOS_SECBOOT
-#include "sonos_lock.h"
-#endif
-
 void *high_memory;
 EXPORT_SYMBOL(high_memory);
 struct page *mem_map;
@@ -1039,12 +1035,7 @@ static int validate_mmap_request(struct file *file,
 
 		/* handle executable mappings and implied executable
 		 * mappings */
-#ifdef CONFIG_SONOS_SECBOOT
-		if (path_noexec(&file->f_path) && !sonos_allow_execution())
-#else
-		if (path_noexec(&file->f_path))
-#endif
-		{
+		if (path_noexec(&file->f_path)) {
 			if (prot & PROT_EXEC)
 				return -EPERM;
 		} else if ((prot & PROT_READ) && !(prot & PROT_EXEC)) {
