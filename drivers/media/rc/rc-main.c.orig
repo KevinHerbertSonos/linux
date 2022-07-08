@@ -1275,11 +1275,8 @@ static int rc_dev_uevent(struct device *device, struct kobj_uevent_env *env)
  */
 static RC_PROTO_ATTR(protocols, S_IRUGO | S_IWUSR,
 		     show_protocols, store_protocols, RC_FILTER_NORMAL);
-/* Unused variable. compiling out... */
-#if 0
 static RC_PROTO_ATTR(wakeup_protocols, S_IRUGO | S_IWUSR,
 		     show_protocols, store_protocols, RC_FILTER_WAKEUP);
-#endif
 static RC_FILTER_ATTR(filter, S_IRUGO|S_IWUSR,
 		      show_filter, store_filter, RC_FILTER_NORMAL, false);
 static RC_FILTER_ATTR(filter_mask, S_IRUGO|S_IWUSR,
@@ -1298,8 +1295,6 @@ static struct attribute_group rc_dev_protocol_attr_grp = {
 	.attrs	= rc_dev_protocol_attrs,
 };
 
-/* Unused variables. compiling out... */
-#if 0
 static struct attribute *rc_dev_wakeup_protocol_attrs[] = {
 	&dev_attr_wakeup_protocols.attr.attr,
 	NULL,
@@ -1308,7 +1303,6 @@ static struct attribute *rc_dev_wakeup_protocol_attrs[] = {
 static struct attribute_group rc_dev_wakeup_protocol_attr_grp = {
 	.attrs	= rc_dev_wakeup_protocol_attrs,
 };
-#endif
 
 static struct attribute *rc_dev_filter_attrs[] = {
 	&dev_attr_filter.attr.attr,
