@@ -42,9 +42,6 @@ enum audio_system_gpio_type {
 	GPIO_SPDIF_IN0_MODE1_SPDIF,
 	GPIO_SPDIF_IN1_MODE0_GPIO,
 	GPIO_SPDIF_IN1_MODE1_SPDIF,
-#ifdef CONFIG_SONOS
-	GPIO_I2S0_PINS,
-#endif
 	GPIO_NUM
 };
 
@@ -67,9 +64,6 @@ static struct audio_gpio_attr aud_gpios[GPIO_NUM] = {
 	[GPIO_SPDIF_IN0_MODE1_SPDIF] = {"audspdifin0-mode1-spdif", false, NULL},
 	[GPIO_SPDIF_IN1_MODE0_GPIO] = {"audspdifin1-mode0-gpio", false, NULL},
 	[GPIO_SPDIF_IN1_MODE1_SPDIF] = {"audspdifin1-mode1-spdif", false, NULL},
-#ifdef CONFIG_SONOS
-	[GPIO_I2S0_PINS] = {"aud_pins_i2s0", false, NULL},
-#endif
 };
 
 int aud_i2s0_lrck_gpio = -1;
@@ -99,17 +93,6 @@ void mt8521p_gpio_probe(void *dev)
 		}
 		aud_gpios[i].gpio_prepare = true;
 	}
-
-#ifdef CONFIG_SONOS
-	if (aud_gpios[GPIO_I2S0_PINS].gpio_prepare) {
-		int retval;
-		retval =
-			pinctrl_select_state(pinctrlaud, aud_gpios[GPIO_I2S0_PINS].gpioctrl);
-		if (retval)
-			pr_err("could not set aud_gpios[GPIO_I2S0_PINS] pins\n");
-	} else
-		pr_err("does not prepare aud_gpios[GPIO_I2S0_PINS] pins\n");
-#endif
 
 	aud_i2s0_lrck_gpio = of_get_named_gpio(pdev->of_node, "aud-i2s0-lrck-gpio", 0);
 	if (gpio_is_valid(aud_i2s0_lrck_gpio)) {
