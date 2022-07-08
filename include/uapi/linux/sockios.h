@@ -128,6 +128,8 @@
 #define SIOCSHWTSTAMP	0x89b0		/* set and get config		*/
 #define SIOCGHWTSTAMP	0x89b1		/* get config			*/
 
+#define SIOCGIFSTATS	0x89c0		/* SONOS */
+
 /* Device private ioctl calls */
 
 /*
