@@ -165,13 +165,6 @@ void panic(const char *fmt, ...)
 	if (!panic_blink)
 		panic_blink = no_blink;
 
-#if defined(CONFIG_SONOS_SECBOOT)
-	// If we get to this point, we want to restart.  There may be something
-	// fundamentally wrong with the unit, but we may just have a bad install.
-	// If that's the case, we'll eventually stop restarting and fallback...
-	emergency_restart();
-#endif
-
 	if (panic_timeout > 0) {
 		/*
 		 * Delay timeout seconds before rebooting the machine.
