@@ -12,6 +12,14 @@ obj-y     = fork.o exec_domain.o panic.o \
 	    async.o range.o smpboot.o ucount.o
 
 obj-$(CONFIG_SONOS) += sonos.o
+ifeq ($(CONFIG_SONOS_SECBOOT), y)
+  obj-y += sonos_sec_fs_keys.o
+  obj-y += sonos_sec_unlock.o
+  obj-y += sonos_sec_soc_$(SONOS_SOC_ARCH).o
+  CFLAGS_sonos_sec_soc_mt8518s.o = \
+    -I$(srctree)/drivers/misc/mediatek/include/mt-plat \
+    -I$(srctree)/drivers/misc/mediatek/mtee
+endif
 
 obj-$(CONFIG_MULTIUSER) += groups.o
 
