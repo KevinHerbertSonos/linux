@@ -66,10 +66,6 @@
 
 #include <trace/events/sched.h>
 
-#ifdef CONFIG_SONOS_SECBOOT
-#include "sonos_lock.h"
-#endif
-
 int suid_dumpable = 0;
 
 static LIST_HEAD(formats);
@@ -142,11 +138,7 @@ SYSCALL_DEFINE1(uselib, const char __user *, library)
 		goto exit;
 
 	error = -EACCES;
-#ifdef CONFIG_SONOS_SECBOOT
-	if (path_noexec(&file->f_path) && !sonos_allow_execution())
-#else
 	if (path_noexec(&file->f_path))
-#endif
 		goto exit;
 
 	fsnotify_open(file);
@@ -791,11 +783,7 @@ static struct file *do_open_execat(int fd, struct filename *name, int flags)
 	if (!S_ISREG(file_inode(file)->i_mode))
 		goto exit;
 
-#ifdef CONFIG_SONOS_SECBOOT
-	if (path_noexec(&file->f_path) && !sonos_allow_execution())
-#else
 	if (path_noexec(&file->f_path))
-#endif
 		goto exit;
 
 	err = deny_write_access(file);

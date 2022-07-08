@@ -26,9 +26,6 @@
 #include <linux/task_work.h>
 #include "pnode.h"
 #include "internal.h"
-#ifdef CONFIG_SONOS_SECBOOT
-#include "sonos_lock.h"
-#endif
 
 static unsigned int m_hash_mask __read_mostly;
 static unsigned int m_hash_shift __read_mostly;
@@ -2400,13 +2397,7 @@ static int do_new_mount(struct path *path, const char *fstype, int flags,
 		/* Only in special cases allow devices from mounts
 		 * created outside the initial user namespace.
 		 */
-#ifdef CONFIG_SONOS_SECBOOT
-		// If force is set, make everything NODEV
-		if (!(type->fs_flags & FS_USERNS_DEV_MOUNT) || sonos_force_nodev())
-#else
-		if (!(type->fs_flags & FS_USERNS_DEV_MOUNT))
-#endif
-		{
+		if (!(type->fs_flags & FS_USERNS_DEV_MOUNT)) {
 			flags |= MS_NODEV;
 			mnt_flags |= MNT_NODEV | MNT_LOCK_NODEV;
 		}
@@ -2651,88 +2642,6 @@ char *copy_mount_string(const void __user *data)
 	return data ? strndup_user(data, PAGE_SIZE) : NULL;
 }
 
-#ifdef CONFIG_SONOS_SECBOOT
-// for now we will just return UBIFS_CRYPT_TYPE_NONE
-
-// Determine the correct crypto_key for the jffs partition to use before
-// mounting it.
-#if defined(SONOS_ARCH_ATTR_SOC_IS_MT8521P)
-#define UBIFS_CRYPT_OFFSET	0x00900000
-#elif defined(SONOS_ARCH_ATTR_SOC_IS_IMX6)
-#define UBIFS_CRYPT_OFFSET	0x00580000
-#else
-#error "unsupported secure boot ARCH type"
-#endif
-#define UBIFS_CRYPT_STRIDE	0x00020000
-#define UBIFS_CRYPT_MAGIC	0x2b654543
-#include <linux/sonos_kernel.h>
-#include "mdp.h"
-/**
- * struct ubifs_encryption_type
- * @jffs_crypt_magic: rb-tree node
- * @crypt_type: type of encryption in use for jffs partition
- */
-struct ubifs_encryption_type {
-	__u32 jffs_crypt_magic;
-	__u32 crypt_type;
-};
-
-// Open a well-known location in the flash and retrieve the jffs encryption type.  The
-// calling function is responsible for setting and fixing the address space to enable
-// this functionality.
-static __u32 get_ubifs_crypt_type(void)
-{
-	int     fd;
-	int     bytes_read;
-	int	seek_stat;
-	__u32	retval = UBIFS_CRYPT_TYPE_NONE;
-	int	retries;
-	struct ubifs_encryption_type	crypt;
-
-	mm_segment_t old_fs = get_fs();
-	set_fs(KERNEL_DS);
-	if ( (fd = sys_open((char __user *) "/dev/mtd0",O_RDONLY,0777)) < 0 ) {
-		printk(KERN_INFO "Cannot open /dev/mtd0 [%d]\n", fd);
-		goto get_crypt_failed;
-	}
-
-	// Opened the raw mtd device.  Go read the crypt_type.  Since it's raw,
-	// we need to account for the possibility of a bad block, so try four
-	// times, if necessary, at OFFSET + STRIDE*retries.  The crypt_init
-	// originally only programmed one, but should be doing all four.
-	for ( retries = 0;retries < 4;retries++ ) {
-		if ( (seek_stat = sys_lseek(fd, UBIFS_CRYPT_OFFSET + (retries * UBIFS_CRYPT_STRIDE), SEEK_SET)) < 0 ) {
-			// If we cannot seek to the offset, we may be on a board with the old
-			// flash layout.  In any event, we can't continue - assume plaintext...
-			printk(KERN_INFO "Seek to crypt offset failed [%d]\n", seek_stat);
-			break;
-		}
-		bytes_read = sys_read(fd, (char __user*) &crypt, sizeof(struct ubifs_encryption_type));
-		if ( bytes_read < sizeof(struct ubifs_encryption_type) ) {
-			printk(KERN_INFO "read of ubifs_encryption_type returned %d\n",bytes_read);
-			continue;
-		}
-
-		if ( crypt.jffs_crypt_magic != UBIFS_CRYPT_MAGIC ) {
-			// Bad magic number - assume plaintext - maybe it's right, maybe it isn't
-			printk(KERN_INFO "x%x is not the correct magic number\n", crypt.jffs_crypt_magic);
-			continue;
-		}
-
-		// Ok, we've read the structure and the magic number is right.  Set the value into
-		// the procfs attribute, and return it...
-		sonos_set_proc_crypt(crypt.crypt_type);
-		retval = crypt.crypt_type;
-		break;
-	}
-
-	sys_close(fd);
-get_crypt_failed:
-	set_fs(old_fs);
-	return retval;
-}
-#endif
-
 /*
  * Flags is a 32-bit value that allows up to 31 non-fs dependent flags to
  * be given to the mount() call (ie: read-only, no-dev, no-suid etc).
@@ -2753,18 +2662,6 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	struct path path;
 	int retval = 0;
 	int mnt_flags = 0;
-#ifdef CONFIG_SONOS_SECBOOT
-	// largest string we care about plus its null byte plus one extra
-	// (to be able to detect if we truncated something longer)
-	char k_dir_name[sizeof("/dev/pts") + 1];
-	static int devtmpfs_mnt_cnt = 0;
-
-	memset(k_dir_name, 0, sizeof(k_dir_name));
-	if (strncpy_from_user(k_dir_name,
-			      dir_name, sizeof(k_dir_name) - 1) < 0) {
-		k_dir_name[0] = '\0';
-	}
-#endif
 
 	/* Discard magic */
 	if ((flags & MS_MGC_MSK) == MS_MGC_VAL)
@@ -2773,21 +2670,6 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	/* Basic sanity checks */
 	if (data_page)
 		((char *)data_page)[PAGE_SIZE - 1] = 0;
-
-#ifdef CONFIG_SONOS_SECBOOT
-	// Manage the encryption of the /jffs directory...
-	if (strcmp(k_dir_name, "/jffs") == 0) {
-		__u32 type;
-		// Before we mount the jffs directory, we need to set up the
-		// crypto_flag for the ubifs driver.  The jffs may be plaintext
-		// or aes encrypted, and there are multiple possible keys.
-		type = get_ubifs_crypt_type();
-		printk(KERN_INFO "Mounting /jffs...crypt_type = %d\n", (int) type);
-		if (!sonos_set_ubifs_key(type)) {
-			printk(KERN_INFO "Invalid CRYPT_TYPE in ubifs structure\n");
-		}
-	}
-#endif
 
 	/* ... and get the mountpoint */
 	retval = user_path(dir_name, &path);
@@ -2808,32 +2690,10 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	/* Separate the per-mountpoint flags */
 	if (flags & MS_NOSUID)
 		mnt_flags |= MNT_NOSUID;
-#ifdef CONFIG_SONOS_SECBOOT
-	// If force is set, make everything NODEV except some
-	// hard-coded exceptions. devtmpfs is only allowed to be mounted once.
-	if ((flags & MS_NODEV) ||
-			(sonos_force_nodev() &&
-			!(strcmp("/dev/pts", k_dir_name) == 0))) {
-		// devtmpfs is mounted once during the initramfs mount(sonos_force_nodev return 0) and after the "real" rootfs is mounted;
-		// increment "devtmpfs_mnt_cnt" so that devtmpfs mounts beyond the one during "real" rootfs mount will have NODEV set.
-		if (strcmp("devtmpfs", dev_name) == 0 &&
-				strcmp("dev", k_dir_name) == 0 &&
-				strcmp("devtmpfs", type_page) == 0 &&
-				(devtmpfs_mnt_cnt < 1)) {
-			devtmpfs_mnt_cnt++;
-		} else {
-			mnt_flags |= MNT_NODEV;
-		}
-	}
-
-	if ((flags & MS_NOEXEC) || sonos_forbid_execution())
-		mnt_flags |= MNT_NOEXEC;
-#else
 	if (flags & MS_NODEV)
 		mnt_flags |= MNT_NODEV;
 	if (flags & MS_NOEXEC)
 		mnt_flags |= MNT_NOEXEC;
-#endif
 	if (flags & MS_NOATIME)
 		mnt_flags |= MNT_NOATIME;
 	if (flags & MS_NODIRATIME)

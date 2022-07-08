@@ -25,6 +25,9 @@ proc-y	+= softirqs.o
 proc-y	+= namespaces.o
 proc-y	+= self.o
 proc-y	+= thread_self.o
+ifeq ($(CONFIG_SONOS_SECBOOT), y)
+proc-y += sonos_lock.o sonos_rollback.o
+endif
 proc-$(CONFIG_PROC_SYSCTL)	+= proc_sysctl.o
 proc-$(CONFIG_NET)		+= proc_net.o
 proc-$(CONFIG_PROC_KCORE)	+= kcore.o
