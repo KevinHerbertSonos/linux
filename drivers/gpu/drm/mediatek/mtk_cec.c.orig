@@ -574,7 +574,9 @@ static void mtk_cec_trigger_tx_hw(struct mtk_cec *cec)
 	mtk_cec_set_bits(cec, TX_EVENT, RB_RDY);
 }
 
-
+/* Unused Function. The calls to this function are all commented out in this file.
+ * Let's compile out the definition as well. */
+#if 0
 static void mtk_cec_print_cec_frame(struct cec_frame *frame)
 {
 	struct cec_msg *msg = frame->msg;
@@ -586,6 +588,7 @@ static void mtk_cec_print_cec_frame(struct cec_frame *frame)
 	pr_err("cec message length is %d\n", msg->len);
 	pr_err("cec message opcode is 0x%x\n", msg->msg[1]);
 }
+#endif
 
 static void mtk_cec_mark_header_data_eom(struct mtk_cec *cec, unsigned char size)
 {
