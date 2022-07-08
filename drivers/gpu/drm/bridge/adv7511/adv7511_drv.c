@@ -443,9 +443,11 @@ static void adv7511_hpd_work(struct work_struct *work)
 
 	if (adv7511->connector.status != status) {
 		adv7511->connector.status = status;
+#ifndef CONFIG_SONOS
 		if ((status == connector_status_disconnected) &&
 		    (!IS_ERR_OR_NULL(adv7511->cec_adap)))
 			cec_s_phys_addr(adv7511->cec_adap, CEC_PHYS_ADDR_INVALID, false);
+#endif /* !CONFIG_SONOS */
 		drm_kms_helper_hotplug_event(adv7511->connector.dev);
 	}
 }
