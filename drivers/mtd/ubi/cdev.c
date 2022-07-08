@@ -672,6 +672,24 @@ static int verify_rsvol_req(const struct ubi_device *ubi,
 	return 0;
 }
 
+#if defined(CONFIG_SONOS)
+/**
+ * verify_get_vol_info_req - verify volume re-size request.
+ * @ubi: UBI device description object
+ * @req: the request to check
+ *
+ * This function returns zero if the request is correct, and %-EINVAL if not.
+ */
+static int verify_get_vol_info_req(const struct ubi_device *ubi,
+			    const struct ubi_get_vol_info_req *req)
+{
+	if (req->vol_id < 0 || req->vol_id >= ubi->vtbl_slots)
+		return -EINVAL;
+
+	return 0;
+}
+#endif
+
 /**
  * rename_volumes - rename UBI volumes.
  * @ubi: UBI device description object
@@ -966,6 +984,49 @@ static long ubi_cdev_ioctl(struct file *file, unsigned int cmd,
 		kfree(req);
 		break;
 	}
+#if defined(CONFIG_SONOS)
+	/* Get information about volume geometry and available pebs.  This enables sufficient
+	 * information for a user-space utility to implement volume resize safely.
+	 */
+	case UBI_IOCGETVOLINFO:
+	{
+		struct ubi_get_vol_info_req req;
+
+		dbg_gen("get volume information");
+		err = copy_from_user(&req, argp, sizeof(struct ubi_get_vol_info_req));
+		if (err) {
+			err = -EFAULT;
+			break;
+		}
+
+		err = verify_get_vol_info_req(ubi, &req);
+		if (err)
+			break;
+
+		desc = ubi_open_volume(ubi->ubi_num, req.vol_id, UBI_EXCLUSIVE);
+		if (IS_ERR(desc)) {
+			err = PTR_ERR(desc);
+			break;
+		}
+
+		/* UBI device information */
+		req.device_available_pebs = ubi->avail_pebs;
+		/* volume-specific information */
+		req.volume_reserved_pebs = ubi->volumes[req.vol_id]->reserved_pebs;
+		req.volume_used_bytes = ubi->volumes[req.vol_id]->used_bytes;
+		req.peb_usable_bytes = ubi->volumes[req.vol_id]->usable_leb_size;
+
+		ubi_close_volume(desc);
+
+		err = copy_to_user((__user char *)arg, &req, sizeof(struct ubi_get_vol_info_req));
+		if (err) {
+			err = -EFAULT;
+			break;
+		}
+
+		break;
+	}
+#endif
 
 	default:
 		err = -ENOTTY;

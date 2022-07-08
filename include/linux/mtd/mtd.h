@@ -349,6 +349,9 @@ struct mtd_info {
 	struct module *owner;
 	struct device dev;
 	int usecount;
+#ifdef CONFIG_SONOS
+	int devid;
+#endif
 };
 
 int mtd_ooblayout_ecc(struct mtd_info *mtd, int section,
