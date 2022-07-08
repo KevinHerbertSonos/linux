@@ -154,14 +154,12 @@ void aml_spdifin_clr_irq(struct aml_audio_controller *actrl,
 	bool is_all_bits, int clr_bits_val)
 {
 	if (is_all_bits) {
-		aml_audiobus_update_bits(actrl,
-				EE_AUDIO_SPDIFIN_CTRL0,
-				1 << 26,
-				1 << 26);
-		aml_audiobus_update_bits(actrl,
-				EE_AUDIO_SPDIFIN_CTRL0,
-				1 << 26,
-				0);
+		int val = aml_audiobus_read(actrl, EE_AUDIO_SPDIFIN_CTRL0);
+
+		val |= 0x1 << 26;
+		aml_audiobus_write(actrl, EE_AUDIO_SPDIFIN_CTRL0, val);
+		val &= ~(0x1 << 26);
+		aml_audiobus_write(actrl, EE_AUDIO_SPDIFIN_CTRL0, val);
 	} else
 		aml_audiobus_update_bits(actrl,
 				EE_AUDIO_SPDIFIN_CTRL6,
