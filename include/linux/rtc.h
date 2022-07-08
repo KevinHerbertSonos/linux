@@ -153,6 +153,9 @@ struct rtc_device {
 	unsigned int uie_task_active:1;
 	unsigned int uie_timer_active:1;
 #endif
+#ifdef CONFIG_RTC_DRV_DS1307
+	unsigned int resume_cntr;
+#endif
 };
 #define to_rtc_device(d) container_of(d, struct rtc_device, dev)
 
