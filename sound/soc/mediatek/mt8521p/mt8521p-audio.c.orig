@@ -333,6 +333,7 @@ static irqreturn_t afe_isr(int irq, void *dev)
 	struct mt_private *priv = (struct mt_private *)dev;
 	u32 status = afe_irq_status();
 
+	afe_irq_clear(status);
 	if (lp_substream) {
 		/* lp-audio high frequency timer */
 		if (status & (0x1 << (IRQ_AFE_IRQ1 - IRQ_AFE_IRQ1)))
@@ -344,7 +345,6 @@ static irqreturn_t afe_isr(int irq, void *dev)
 				call_isr(&priv->irqs[id]);
 		}
 	}
-	afe_irq_clear(status);
 	return IRQ_HANDLED;
 }
 

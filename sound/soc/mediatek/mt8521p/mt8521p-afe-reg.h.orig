@@ -112,10 +112,31 @@ extern void *pctrl_base_address;
 #define PCTRL_BASE_ADDR ((u32)0x10005000)
 
 #define AUDIO_HW_PHYS_BASE_ADDR  ((u32)0x11220000)
+#define CMSYS_REG00  (CMSYS_BASE + 0x00)
+#define CPU_RST_SW_MASK           (0x1 << 0)
+#define CPU_RST_SW_RESET          (0x0 << 0)
+#define CPU_RST_SW_RELEASE_RESET  (0x1 << 0)
+#define CMSYS_REG01  (CMSYS_BASE + 0x04)
+#define CMSYS_REG02  (CMSYS_BASE + 0x08)
+#define CPUCK_EN_MASK  (0x1 << 0)
+#define CPUCK_DISABLE  (0x0 << 0)
+#define CPUCK_ENABLE   (0x1 << 0)
+#define CLK_CFG_14     (TOPCKGEN_BASE + 0xE0)
+
  #else
 #define CMSYS_BASE  ((u32)0x11018000)
 #define TOPCKGEN_BASE ((u32)0x10000000)
 #define AUDIO_HW_PHYS_BASE  ((u32)0x11220000)
+#define CMSYS_REG00  (CMSYS_BASE + 0x00)
+#define CPU_RST_SW_MASK           (0x1 << 0)
+#define CPU_RST_SW_RESET          (0x0 << 0)
+#define CPU_RST_SW_RELEASE_RESET  (0x1 << 0)
+#define CMSYS_REG01  (CMSYS_BASE + 0x04)
+#define CMSYS_REG02  (CMSYS_BASE + 0x08)
+#define CPUCK_EN_MASK  (0x1 << 0)
+#define CPUCK_DISABLE  (0x0 << 0)
+#define CPUCK_ENABLE   (0x1 << 0)
+
 #endif
 
 #define CLK_AUDDIV_0   (TOPCKGEN_BASE + 0x120)
