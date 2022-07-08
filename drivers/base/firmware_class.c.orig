@@ -1044,7 +1044,7 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 		}
 	}
 
-	if (!fw_get_filesystem_firmware(device, fw->priv) && !nowait)
+	if (!fw_get_filesystem_firmware(device, fw->priv))
 		ret = fw_load_from_user_helper(fw, name, device,
 					       uevent, nowait, timeout);
 	if (!ret)
@@ -1087,23 +1087,6 @@ request_firmware(const struct firmware **firmware_p, const char *name,
                  struct device *device)
 {
 	return _request_firmware(firmware_p, name, device, true, false);
-}
-
-/**
- * request_firmware_direct: - load firmware directly without usermode helper
- * @firmware_p: pointer to firmware image
- * @name: name of firmware file
- * @device: device for which firmware is being loaded
- *
- * This function works pretty much like request_firmware(), but this doesn't
- * fall back to usermode helper even if the firmware couldn't be loaded
- * directly from fs.  Hence it's useful for loading optional firmwares, which
- * aren't always present, without extra long timeouts of udev.
- **/
-int request_firmware_direct(const struct firmware **firmware_p,
-			    const char *name, struct device *device)
-{
-	return _request_firmware(firmware_p, name, device, true, true);
 }
 
 /**
@@ -1565,7 +1548,6 @@ module_exit(firmware_class_exit);
 
 EXPORT_SYMBOL(release_firmware);
 EXPORT_SYMBOL(request_firmware);
-EXPORT_SYMBOL_GPL(request_firmware_direct);
 EXPORT_SYMBOL(request_firmware_nowait);
 EXPORT_SYMBOL_GPL(cache_firmware);
 EXPORT_SYMBOL_GPL(uncache_firmware);
