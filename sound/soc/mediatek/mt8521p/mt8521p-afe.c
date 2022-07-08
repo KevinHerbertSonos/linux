@@ -1625,6 +1625,9 @@ int afe_i2s_in_configurate(enum afe_i2s_in_id id, const struct afe_i2s_in_config
 	      | (mode << 8)
 	      | (config->slave << 2)
 	      | (0x1 << 31)	/* enable phase-shift fix */
+	      | (config->one_heart_mode << 24)	/* one heart mode */
+	      | (config->one_heart_mode << 28)	/* uplink sync mode */
+	      | (config->couple_mode << 17)	/* couple mode */
 	      ;
 	if (config->dsd_mode)
 		val |= (0x0 << 1);	/* must be 32cycle */
@@ -1678,7 +1681,11 @@ int afe_i2s_in_configurate(enum afe_i2s_in_id id, const struct afe_i2s_in_config
 	      | (0x1 << 1)	/* cycle */
 	      | (0x1 << 3) | (0x1 << 14)/* fmt */
 	      | (0x1 << 5)		/* LR Invert */
-	      | (0x1 << 31);	/* phase-shift fix */
+	      | (0x1 << 31)	/* phase-shift fix */
+	      | (0x1 << 24)	/* one-heart mode */
+	      | (0x1 << 28)	/* uplink sync mode */
+	      | (0x1 << 17)	/* couple mode */
+	      ;
 	/*
 	 * [Programming Guide]
 	 * [I2S] I2S in config

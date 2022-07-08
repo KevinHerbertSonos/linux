@@ -478,6 +478,14 @@ enum afe_sample_asrc_rx_id {
 	SAMPLE_ASRC_IN_NUM = 7
 };
 
+enum afe_i2s_asrc_clock_source {
+	CLK_ASM_HIGH,
+	CLK_ASM_MID,
+	CLK_ASM_LOW,
+	CLK_A1SYS,
+	CLK_A2SYS
+};
+
 int afe_power_on_sample_asrc_tx(enum afe_sample_asrc_tx_id id, int on);
 int afe_sample_asrc_tx_configurate(enum afe_sample_asrc_tx_id id,
 				   const struct afe_sample_asrc_config *config);
@@ -487,6 +495,7 @@ int afe_power_on_sample_asrc_rx(enum afe_sample_asrc_rx_id id, int on);
 int afe_sample_asrc_rx_configurate(enum afe_sample_asrc_rx_id id,
 				   const struct afe_sample_asrc_config *config);
 int afe_sample_asrc_rx_enable(enum afe_sample_asrc_rx_id id, int en);
+void afe_i2s_out_asrc_clock_sel(enum afe_i2s_out_id id, enum afe_i2s_asrc_clock_source source);
 
 /******************** merge interface ********************/
 
@@ -795,11 +804,15 @@ struct lp_info {
 	unsigned int rate; /* set by AP */
 	unsigned int channels; /* set by AP */
 	unsigned int bitwidth; /* set by AP */
+	int i2s_id;
 	unsigned int cm4_state; /* updated by CM4 */
+	int draining;
+	enum audio_irq_id irq_id;
+	int  use_i2s_slave_clock;
 };
 
-int lp_configurate(volatile struct lp_info *lp, u32 base, u32 size,
-		   unsigned int rate, unsigned int channels, unsigned int bitwidth);
+int lp_configurate(volatile struct lp_info *lp, u32 base, u32 size, unsigned int rate, unsigned int channels,
+		    unsigned int bitwidth, int i2s_id, enum audio_irq_id irq_id, int slave_clock);
 u32 lp_hw_offset(volatile struct lp_info *lp);
 int lp_cmd_excute(volatile struct lp_info *lp, unsigned int cmd);
 int lp_switch_mode(unsigned int mode);

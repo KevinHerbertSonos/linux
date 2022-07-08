@@ -1740,11 +1740,12 @@ int afe_i2s_out_configurate(enum afe_i2s_out_id id, const struct afe_i2s_out_con
 	*/
 	mode = config->slave ? FS_8000HZ : config->mode;
 	addr = ASYS_I2SO1_CON + id * 4;
-	val = (config->fpga_test_loop << 21)
+	val = (1 << 31)
+	      | (config->fpga_test_loop << 21)
 	      | (config->data_from_sine << 20)
 	      | (config->use_asrc << 19)
 	      | (config->dsd_mode << 18)
-	      | (0 /*config->couple_mode */  << 17)
+	      | (config->couple_mode  << 17)
 	      | (config->one_heart_mode << 16)
 	      | (mode << 8)
 	      | (config->slave << 2);
@@ -1791,7 +1792,8 @@ int afe_i2s_out_configurate(enum afe_i2s_out_id id, const struct afe_i2s_out_con
 			break;
 		}
 	}
-	msk = (0x1 << 21)	/* fpga_test_loop */
+	msk = (1 << 31)
+	      | (0x1 << 21)	/* fpga_test_loop */
 	      | (0x1 << 20)	/* data_from_sine */
 	      | (0x1 << 19)	/* use_asrc */
 	      | (0x1 << 18)	/* dsd_mode */
