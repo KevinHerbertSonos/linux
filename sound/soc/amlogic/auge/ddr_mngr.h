@@ -80,9 +80,11 @@ void aml_toddr_select_src(struct toddr *to, enum toddr_src);
 void aml_toddr_enable(struct toddr *to, bool enable);
 void aml_toddr_set_fifos(struct toddr *to, unsigned int thresh);
 void aml_toddr_set_format(struct toddr *to, struct toddr_fmt *fmt);
+void aml_toddr_update_width(struct toddr *to, int type, int msb, int lsb);
 void aml_toddr_insert_chanum(struct toddr *to);
 unsigned int aml_toddr_read(struct toddr *to);
 void aml_toddr_write(struct toddr *to, unsigned int val);
+bool aml_toddr_burst_finished(struct toddr *to);
 
 /* resample */
 void aml_resample_enable(bool enable, int resample_module);
