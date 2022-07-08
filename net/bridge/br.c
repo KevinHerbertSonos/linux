@@ -11,96 +11,80 @@
  *	2 of the License, or (at your option) any later version.
  */
 
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,18)
+#include <generated/autoconf.h>
+#else
+#include <linux/config.h>
+#endif
+
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/inetdevice.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/init.h>
-#include <linux/llc.h>
-#include <net/llc.h>
-#include <net/stp.h>
 
 #include "br_private.h"
 
-static const struct stp_proto br_stp_proto = {
-	.rcv	= br_stp_rcv,
+static struct pernet_operations br_net_ops = {
+    .exit   = br_net_exit,
 };
 
-static struct pernet_operations br_net_ops = {
-	.exit	= br_net_exit,
-};
+int (*br_should_route_hook)(struct sk_buff *skb) = NULL;
 
 static int __init br_init(void)
 {
-	int err;
+	br_fdb_init();
 
-	err = stp_proto_register(&br_stp_proto);
-	if (err < 0) {
-		pr_err("bridge: can't register sap for STP\n");
-		return err;
-	}
-
-	err = br_fdb_init();
-	if (err)
-		goto err_out;
-
-	err = register_pernet_subsys(&br_net_ops);
-	if (err)
-		goto err_out1;
-
-	err = br_netfilter_init();
-	if (err)
-		goto err_out2;
-
-	err = register_netdevice_notifier(&br_device_notifier);
-	if (err)
-		goto err_out3;
-
-	err = br_netlink_init();
-	if (err)
-		goto err_out4;
-
-	brioctl_set(br_ioctl_deviceless_stub);
-
-#if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
-	br_fdb_test_addr_hook = br_fdb_test_addr;
+#ifdef CONFIG_BRIDGE_NETFILTER
+	if (br_netfilter_init())
+		return 1;
 #endif
+	brioctl_set(br_ioctl_deviceless_stub);
+	br_handle_frame_hook = br_handle_frame;
+
+	// KLUDGE: Only used by ATM so no porting: br_fdb_get_hook = br_fdb_get;
+	// KLUDGE: Only used by ATM so no porting: br_fdb_put_hook = br_fdb_put;
+
+	register_netdevice_notifier(&br_device_notifier);
+#ifdef CONFIG_SONOS_BRIDGE_PROXY
+	register_inetaddr_notifier(&br_inetaddr_notifier);
+#endif
+	register_pernet_subsys(&br_net_ops);
+
+	br_netlink_init();
 
 	return 0;
-err_out4:
-	unregister_netdevice_notifier(&br_device_notifier);
-err_out3:
-	br_netfilter_fini();
-err_out2:
-	unregister_pernet_subsys(&br_net_ops);
-err_out1:
-	br_fdb_fini();
-err_out:
-	stp_proto_unregister(&br_stp_proto);
-	return err;
 }
 
 static void __exit br_deinit(void)
 {
-	stp_proto_unregister(&br_stp_proto);
+#ifdef CONFIG_BRIDGE_NETFILTER
+	br_netfilter_fini();
+#endif
 
 	br_netlink_fini();
+
 	unregister_netdevice_notifier(&br_device_notifier);
+#ifdef CONFIG_SONOS_BRIDGE_PROXY
+	unregister_inetaddr_notifier(&br_inetaddr_notifier);
+#endif
 	brioctl_set(NULL);
 
 	unregister_pernet_subsys(&br_net_ops);
 
-	rcu_barrier(); /* Wait for completion of call_rcu()'s */
+	synchronize_net();
 
-	br_netfilter_fini();
-#if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
-	br_fdb_test_addr_hook = NULL;
-#endif
+	// KLUDGE: Only used by ATM so no porting: br_fdb_get_hook = NULL;
+	// KLUDGE: Only used by ATM so no porting: br_fdb_put_hook = NULL;
 
+	br_handle_frame_hook = NULL;
 	br_fdb_fini();
 }
+
+EXPORT_SYMBOL(br_should_route_hook);
 
 module_init(br_init)
 module_exit(br_deinit)
 MODULE_LICENSE("GPL");
-MODULE_VERSION(BR_VERSION);

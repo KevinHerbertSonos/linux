@@ -13,64 +13,64 @@
 
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
-#include <linux/netpoll.h>
-#include <linux/etherdevice.h>
-#include <linux/ethtool.h>
-#include <linux/list.h>
-#include <linux/netfilter_bridge.h>
-
+#include <linux/module.h>
+#include <linux/rculist.h>
 #include <asm/uaccess.h>
 #include "br_private.h"
 
-/* net device transmit always called with BH disabled */
+static struct net_device_stats *br_dev_get_stats(struct net_device *dev)
+{
+	struct net_bridge *br = netdev_priv(dev);
+	return &br->statistics;
+}
+
 netdev_tx_t br_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_bridge *br = netdev_priv(dev);
 	const unsigned char *dest = skb->data;
 	struct net_bridge_fdb_entry *dst;
-	struct net_bridge_mdb_entry *mdst;
-	struct br_cpu_netstats *brstats = this_cpu_ptr(br->stats);
 
-#ifdef CONFIG_BRIDGE_NETFILTER
-	if (skb->nf_bridge && (skb->nf_bridge->mask & BRNF_BRIDGED_DNAT)) {
-		br_nf_pre_routing_finish_bridge_slow(skb);
-		return NETDEV_TX_OK;
-	}
-#endif
+	br->statistics.tx_packets++;
+	br->statistics.tx_bytes += skb->len;
 
-	u64_stats_update_begin(&brstats->syncp);
-	brstats->tx_packets++;
-	brstats->tx_bytes += skb->len;
-	u64_stats_update_end(&brstats->syncp);
-
-	BR_INPUT_SKB_CB(skb)->brdev = dev;
-
-	skb_reset_mac_header(skb);
+	skb->mac_header = skb->data;
 	skb_pull(skb, ETH_HLEN);
 
 	rcu_read_lock();
-	if (is_multicast_ether_addr(dest)) {
-		if (unlikely(netpoll_tx_running(dev))) {
-			br_flood_deliver(br, skb);
-			goto out;
-		}
-		if (br_multicast_rcv(br, NULL, skb)) {
-			kfree_skb(skb);
-			goto out;
-		}
 
-		mdst = br_mdb_get(br, skb);
-		if (mdst || BR_INPUT_SKB_CB_MROUTERS_ONLY(skb))
-			br_multicast_deliver(mdst, skb);
-		else
-			br_flood_deliver(br, skb);
-	} else if ((dst = __br_fdb_get(br, dest)) != NULL)
-		br_deliver(dst->dst, skb);
-	else
-		br_flood_deliver(br, skb);
+	if (br->uplink_mode) {
 
-out:
-	rcu_read_unlock();
+		/* Uplink */
+		br_uplink_xmit(br, skb, dest);
+
+	} else if (dest[0] & 1) {
+
+		/* Multicast/broadcast */
+		br_flood_deliver(br, 0, skb, 0);
+
+	} else {
+
+		/* Unicast */
+		dst = __br_fdb_get(br, dest);
+
+		if (dst) {
+			/* Known address */
+			if (0 == skb->priority) {
+				skb->priority = dst->priority;
+			}
+
+			br_direct_unicast(0, dst, skb,
+                                          br_deliver,
+                                          br_deliver_direct);
+
+		} else {
+			/* Unknown address */
+			br_flood_deliver(br, 0, skb, 0);
+		}
+	}
+
+        rcu_read_unlock();
+
 	return NETDEV_TX_OK;
 }
 
@@ -78,94 +78,67 @@ static int br_dev_open(struct net_device *dev)
 {
 	struct net_bridge *br = netdev_priv(dev);
 
-	netif_carrier_off(dev);
-
 	br_features_recompute(br);
 	netif_start_queue(dev);
 	br_stp_enable_bridge(br);
-	br_multicast_open(br);
 
 	return 0;
 }
 
 static void br_dev_set_multicast_list(struct net_device *dev)
 {
+	struct net_bridge *br = netdev_priv(dev);
+	struct netdev_hw_addr *ha;
+
+        spin_lock_bh(&br->lock);
+
+        /* the netdev has the updated list of MAC multicast groups of which
+           the device has been configured to be a member. */
+        br->num_mcast_groups = 0;
+
+	netdev_for_each_mc_addr(ha, dev) {
+		/* keep certain 'system' multicast MAC addresses out of the list */
+		if (0 == memcmp(igmp_ah_addr,    ha->addr, 6) ||
+		    0 == memcmp(igmp_ar_addr,    ha->addr, 6) ||
+		    0 == memcmp(igmp_amr_addr,   ha->addr, 6) ||
+		    0 == memcmp(broadcast_addr,  ha->addr, 6) ||
+		    0 == memcmp(rincon_gmp_addr, ha->addr, 6) ||
+		    0 == memcmp(mdns_addr,       ha->addr, 6) ||
+		    0 == memcmp(upnp_addr,       ha->addr, 6))
+			continue;
+
+		memcpy(br->mcast_groups[br->num_mcast_groups], ha->addr, 6);
+		if (++(br->num_mcast_groups) >= BR_MAX_MCAST_GROUPS)
+			break;
+	}
+
+        br_mcast_transmit_grouplist(br);
+
+        spin_unlock_bh(&br->lock);
 }
 
 static int br_dev_stop(struct net_device *dev)
 {
-	struct net_bridge *br = netdev_priv(dev);
-
-	netif_carrier_off(dev);
-
-	br_stp_disable_bridge(br);
-	br_multicast_stop(br);
+	br_stp_disable_bridge(netdev_priv(dev));
 
 	netif_stop_queue(dev);
 
 	return 0;
 }
 
-static struct rtnl_link_stats64 *br_get_stats64(struct net_device *dev,
-						struct rtnl_link_stats64 *stats)
-{
-	struct net_bridge *br = netdev_priv(dev);
-	struct br_cpu_netstats tmp, sum = { 0 };
-	unsigned int cpu;
-
-	for_each_possible_cpu(cpu) {
-		unsigned int start;
-		const struct br_cpu_netstats *bstats
-			= per_cpu_ptr(br->stats, cpu);
-		do {
-			start = u64_stats_fetch_begin(&bstats->syncp);
-			memcpy(&tmp, bstats, sizeof(tmp));
-		} while (u64_stats_fetch_retry(&bstats->syncp, start));
-		sum.tx_bytes   += tmp.tx_bytes;
-		sum.tx_packets += tmp.tx_packets;
-		sum.rx_bytes   += tmp.rx_bytes;
-		sum.rx_packets += tmp.rx_packets;
-	}
-
-	stats->tx_bytes   = sum.tx_bytes;
-	stats->tx_packets = sum.tx_packets;
-	stats->rx_bytes   = sum.rx_bytes;
-	stats->rx_packets = sum.rx_packets;
-
-	return stats;
-}
-
 static int br_change_mtu(struct net_device *dev, int new_mtu)
 {
-	struct net_bridge *br = netdev_priv(dev);
-	if (new_mtu < 68 || new_mtu > br_min_mtu(br))
+	if (new_mtu < 68 || new_mtu > br_min_mtu(netdev_priv(dev)))
 		return -EINVAL;
 
 	dev->mtu = new_mtu;
-
-#ifdef CONFIG_BRIDGE_NETFILTER
-	/* remember the MTU in the rtable for PMTU */
-	dst_metric_set(&br->fake_rtable.dst, RTAX_MTU, new_mtu);
-#endif
-
 	return 0;
 }
 
 /* Allow setting mac address to any valid ethernet address. */
-static int br_set_mac_address(struct net_device *dev, void *p)
+static int br_dev_set_mac_address(struct net_device *dev, void *p)
 {
-	struct net_bridge *br = netdev_priv(dev);
-	struct sockaddr *addr = p;
-
-	if (!is_valid_ether_addr(addr->sa_data))
-		return -EINVAL;
-
-	spin_lock_bh(&br->lock);
-	memcpy(dev->dev_addr, addr->sa_data, ETH_ALEN);
-	br_stp_change_bridge_id(br, addr->sa_data);
-	br->flags |= BR_SET_MAC_ADDR;
-	spin_unlock_bh(&br->lock);
-
+	printk("br: set_mac_address");
 	return 0;
 }
 
@@ -179,40 +152,19 @@ static void br_getinfo(struct net_device *dev, struct ethtool_drvinfo *info)
 
 static int br_set_sg(struct net_device *dev, u32 data)
 {
-	struct net_bridge *br = netdev_priv(dev);
-
-	if (data)
-		br->feature_mask |= NETIF_F_SG;
-	else
-		br->feature_mask &= ~NETIF_F_SG;
-
-	br_features_recompute(br);
+	printk("br: set_sg: %lu\n", (unsigned long)data);
 	return 0;
 }
 
 static int br_set_tso(struct net_device *dev, u32 data)
 {
-	struct net_bridge *br = netdev_priv(dev);
-
-	if (data)
-		br->feature_mask |= NETIF_F_TSO;
-	else
-		br->feature_mask &= ~NETIF_F_TSO;
-
-	br_features_recompute(br);
+	printk("br: set_tso: %lu\n", (unsigned long)data);
 	return 0;
 }
 
 static int br_set_tx_csum(struct net_device *dev, u32 data)
 {
-	struct net_bridge *br = netdev_priv(dev);
-
-	if (data)
-		br->feature_mask |= NETIF_F_NO_CSUM;
-	else
-		br->feature_mask &= ~NETIF_F_ALL_CSUM;
-
-	br_features_recompute(br);
+	printk("br: set_tx_csum: %lu\n", (unsigned long)data);
 	return 0;
 }
 
@@ -335,8 +287,8 @@ static const struct net_device_ops br_netdev_ops = {
 	.ndo_open		 = br_dev_open,
 	.ndo_stop		 = br_dev_stop,
 	.ndo_start_xmit		 = br_dev_xmit,
-	.ndo_get_stats64	 = br_get_stats64,
-	.ndo_set_mac_address	 = br_set_mac_address,
+	.ndo_get_stats	 = br_dev_get_stats,
+	.ndo_set_mac_address	 = br_dev_set_mac_address,
 	.ndo_set_multicast_list	 = br_dev_set_multicast_list,
 	.ndo_change_mtu		 = br_change_mtu,
 	.ndo_do_ioctl		 = br_dev_ioctl,
@@ -351,15 +303,13 @@ static const struct net_device_ops br_netdev_ops = {
 
 static void br_dev_free(struct net_device *dev)
 {
-	struct net_bridge *br = netdev_priv(dev);
-
-	free_percpu(br->stats);
+	//struct net_bridge *br = netdev_priv(dev);
 	free_netdev(dev);
 }
 
 void br_dev_setup(struct net_device *dev)
 {
-	random_ether_addr(dev->dev_addr);
+	memset(dev->dev_addr, 0, ETH_ALEN);
 	ether_setup(dev);
 
 	dev->netdev_ops = &br_netdev_ops;
