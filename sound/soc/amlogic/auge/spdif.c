@@ -146,36 +146,36 @@ static const unsigned int spdifin_extcon[] = {
 };
 
 /* current sample mode and its sample rate */
-static const char *const spdifin_samplerate[] = {
-	"N/A",
-	"32000",
-	"44100",
-	"48000",
-	"88200",
-	"96000",
-	"176400",
-	"192000"
+int sample_mode[] = {
+	32000,
+	44100,
+	48000,
+	88200,
+	96000,
+	176400,
+	192000,
 };
 
-static int spdifin_samplerate_get_enum(struct snd_kcontrol *kcontrol,
+static int spdifin_samplerate_info(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	return 0;
+}
+
+static int spdifin_samplerate_get(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
 	int val = spdifin_get_sample_rate();
 
-	if (val == 0x7)
-		val = 0;
+	if (val >= 0x7)
+		ucontrol->value.integer.value[0] = 0;
 	else
-		val += 1;
-
-	ucontrol->value.integer.value[0] = val;
+		ucontrol->value.integer.value[0] += sample_mode[val];
 
 	return 0;
 }
-
-static const struct soc_enum spdifin_sample_rate_enum[] = {
-	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(spdifin_samplerate),
-			spdifin_samplerate),
-};
 
 /* spdif in audio format detect: LPCM or NONE-LPCM */
 struct sppdif_audio_info {
@@ -245,9 +245,12 @@ static int spdifin_audio_type_get_enum(
 
 static const struct snd_kcontrol_new snd_spdif_controls[] = {
 
-	SOC_ENUM_EXT("SPDIFIN Sample Rate", spdifin_sample_rate_enum,
-				spdifin_samplerate_get_enum,
-				NULL),
+	{
+		.iface		= SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name		= "SPDIFIN Sample Rate",
+		.info		= spdifin_samplerate_info,
+		.get		= spdifin_samplerate_get,
+	},
 
 	SOC_ENUM_EXT("SPDIFIN Audio Type",
 			 spdif_audio_type_enum,
@@ -504,8 +507,8 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 			*/
 		} else if (mode >= 0) {
 			if (p_spdif->last_sample_rate_mode != mode) {
-				pr_info("Event: EXTCON_SPDIFIN_SAMPLERATE, new sample rate:%s\n",
-					spdifin_samplerate[mode + 1]);
+				pr_debug("Event: EXTCON_SPDIFIN_SAMPLERATE, new sample rate:%d\n",
+					sample_mode[mode]);
 
 				/* resample enable, by hw */
 				if (!spdifin_check_audiotype_by_sw(p_spdif))
