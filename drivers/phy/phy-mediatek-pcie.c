@@ -186,6 +186,11 @@ static int mtk_pcie_phy_power_on(struct phy *phy)
 	val |= RG_SSUSB_RXDET_STB2_P3_VAL(0x10);
 	phy_write(mtk_phy, val, B2_PHYD_RXDET2);
 
+#ifdef CONFIG_SONOS
+	/* disable SSC */
+	phy_write(mtk_phy, 0x40008200, PCIE_SIFSLV_PHYD_BASE + 0x38);
+#endif
+
 	/* wait for PCIe subsys register to active */
 	usleep_range(2500, 3000);
 

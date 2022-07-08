@@ -90,6 +90,10 @@ struct mtk_pcie_port {
 	int wake;
 	u32 lane;
 	u32 index;
+#ifdef CONFIG_SONOS
+	int pcie_reset;
+#endif
+
 };
 
 /**
@@ -220,6 +224,18 @@ static void mtk_pcie_configure_rc(struct mtk_pcie_port *port)
 	u32 slot = PCI_SLOT(port->index << 3);
 	u32 val;
 
+#ifdef CONFIG_SONOS
+	/* configure RC Link Speed to gen1 */
+	writel(PCIE_CONF_ADDR(0xa0, func, slot, 0),
+		pcie->base + PCIE_CFG_ADDR);
+	val = readl(pcie->base + PCIE_CFG_DATA);
+	val &= ~PCI_EXP_LNKSTA_CLS;
+	val |= PCI_EXP_LNKSTA_CLS_2_5GB;
+	writel(PCIE_CONF_ADDR(0xa0, func, slot, 0),
+		pcie->base + PCIE_CFG_ADDR);
+	writel(val, pcie->base + PCIE_CFG_DATA);
+#endif
+
 	/* enable interrupt */
 	val = readl(pcie->base + PCIE_INT_ENABLE);
 	val |= PCIE_PORT_INT_EN(port->index);
@@ -291,6 +307,13 @@ static void mtk_pcie_enable_ports(struct mtk_pcie_port *port)
 
 	mtk_pcie_assert_ports(port);
 
+#ifdef CONFIG_SONOS
+	if (gpio_is_valid(port->pcie_reset)) {
+        	gpio_set_value_cansleep(port->pcie_reset, 1);
+		gpio_free(port->pcie_reset);
+	}
+#endif
+
 	/* if link up, then setup root port configuration space */
 	if (mtk_pcie_link_up(port)) {
 		mtk_pcie_configure_rc(port);
@@ -359,7 +382,8 @@ static int mtk_pcie_parse_ports(struct mtk_pcie *pcie,
 	snprintf(name, sizeof(name), "sys_ck%d", index);
 	port->sys_ck = devm_clk_get(dev, name);
 	if (IS_ERR(port->sys_ck)) {
-		dev_err(dev, "failed to get port%d clock\n", index);
+		if (PTR_ERR(port->sys_ck) != -EPROBE_DEFER)
+			dev_err(dev, "failed to get port%d clock\n", index);
 		return PTR_ERR(port->sys_ck);
 	}
 
@@ -384,6 +408,20 @@ static int mtk_pcie_parse_ports(struct mtk_pcie *pcie,
 	INIT_LIST_HEAD(&port->list);
 	list_add_tail(&port->list, &pcie->ports);
 
+#ifdef CONFIG_SONOS
+	port->pcie_reset = of_get_named_gpio(node, "rst-gpio", 0);
+	if (gpio_is_valid(port->pcie_reset)) {
+		int val;
+		val = gpio_request_one(port->pcie_reset,
+				GPIOF_OUT_INIT_LOW, "WIFI Reset");
+		if ( val ) {
+			pr_err("Could not request %d enable gpio: %d\n",
+				port->pcie_reset,  val);
+			return 0;
+		}
+        	gpio_set_value_cansleep(port->pcie_reset, 0);
+	}
+#endif
 	return 0;
 }
 
