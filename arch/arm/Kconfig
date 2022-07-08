@@ -1193,6 +1193,12 @@ config SONOS_SDD
        help
          Support for Sonos SDD driver
 
+config SONOS_CYPRESS_PSOC
+       tristate "Sonos Cypress PSoC driver"
+       default n
+       help
+         Support for Sonos Cypress PSoC driver
+
 config SONOS_LEDCTL
        tristate "Sonos LED control driver"
        default n

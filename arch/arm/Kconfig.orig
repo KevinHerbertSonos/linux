@@ -1029,6 +1029,393 @@ source "arch/arm/mach-w90x900/Kconfig"
 
 source "arch/arm/mach-zynq/Kconfig"
 
+comment "SONOS Support"
+
+config SONOS
+        bool "Sonos features added"
+        default n
+        help
+          This enables support for the Sonos features in the kernel.
+
+config SONOS_SECBOOT
+        bool "Sonos Secure Boot"
+        depends on SONOS
+        depends on CRYPTO
+        depends on CRYPTO_CBC
+        depends on CRYPTO_CTR
+        depends on CRYPTO_AES
+        depends on CRYPTO_SHA1
+        depends on CRYPTO_SHA256
+        depends on ASYMMETRIC_KEY_TYPE
+        depends on ASYMMETRIC_PUBLIC_KEY_SUBTYPE
+        depends on PUBLIC_KEY_ALGO_RSA
+        depends on X509_CERTIFICATE_PARSER
+        default n
+        help
+          Support for Sonos Secure Boot stuff
+
+config SONOS_BRIDGE_PROXY
+        bool "Sonos Bridge Proxy"
+        depends on SONOS
+        default n
+        help
+          Support for Sonos Bridge Proxy
+
+config SONOS_SOLBASE
+        bool "Sonos Sol"
+        depends on SONOS
+        depends on SONOS_SECBOOT
+	depends on SONOS_BRIDGE_PROXY
+        default n
+        help
+          Support for Sonos Sol-specific stuff
+
+config SONOS_ENCORE
+        bool "Sonos Encore"
+        depends on SONOS
+        depends on SONOS_SECBOOT
+        default n
+        help
+          Support for Sonos Encore-specific stuff
+
+config SONOS_ROYALE
+        bool "Sonos Royale"
+        depends on SONOS
+        depends on SONOS_SECBOOT
+        default n
+        help
+          Support for Sonos Royale-specific stuff
+
+config SONOS_BOOTLEG
+        bool "Sonos Bootleg"
+        depends on SONOS
+        depends on SONOS_SECBOOT
+        default n
+        help
+          Support for Sonos Bootleg-specific stuff
+
+config SONOS_PARAMOUNT
+        bool "Sonos Paramount"
+        depends on SONOS
+        depends on SONOS_SECBOOT
+        default n
+        help
+          Support for Sonos Paramount-specific stuff
+
+config SONOS_CHAPLIN
+        bool "Sonos Chaplin"
+        depends on SONOS
+        depends on SONOS_SECBOOT
+        default n
+	select WIRELESS_EXT
+        help
+          Support for Sonos Chaplin-specific stuff
+
+config SONOS_NEPTUNE
+        bool "Sonos Neptune"
+        depends on SONOS
+        depends on SONOS_SECBOOT
+        default n
+	select WIRELESS_EXT
+	select REGMAP_I2C
+        help
+          Support for Sonos Neptune-specific stuff
+
+config SONOS_ROOTFS_ADJUSTMENT
+	hex "Sonos rootfs adjustment"
+	depends on SONOS
+	depends on SONOS_SECBOOT
+	default 0x0
+	default 0x70000000 if SONOS_BOOTLEG
+
+config SONOS_DIAGS
+        bool "Sonos diags"
+        depends on SONOS
+        default n
+        help
+          Support for Sonos diagnostics
+
+config SONOS_EVENT_QUEUE
+        tristate "Sonos Event Queue"
+        depends on SONOS
+        default n
+        help
+          Support for Sonos event queue module
+
+config SONOS_LLA
+        tristate "Sonos LLA"
+        depends on SONOS && m
+        default n
+        help
+          Support for Sonos Low Latency Audio module
+
+config SONOS_IMX6_SOUND
+        bool "Sonos i.MX6 Sound"
+        depends on SONOS
+        depends on SONOS_LLA
+        default n
+        help
+          Support for Sonos i.MX6 audio driver
+
+config SONOS_APPLE_AUTH
+       tristate "Sonos Apple Authentication Chip driver"
+       default n
+       help
+         Support for Sonos Apple auth driver
+
+config SONOS_SENSORS
+       tristate "Sonos Sensors driver"
+       default n
+       help
+         Support for Sonos Sensors driver
+
+config SONOS_S5851
+       tristate "Sonos S5851 driver"
+       default n
+       help
+         Support for Sonos S5851 driver
+
+config SONOS_THERMAL_MGMT
+       tristate "Sonos Thermal Management driver"
+       default n
+       help
+         Support for Sonos Thermal Management driver
+
+config SONOS_MMA8453Q
+       tristate "Sonos MMA8453Q driver"
+       default n
+       help
+         Support for Sonos MMA8453Q driver
+
+config SONOS_SDD
+       tristate "Sonos SDD driver"
+       default n
+       help
+         Support for Sonos SDD driver
+
+config SONOS_LEDCTL
+       tristate "Sonos LED control driver"
+       default n
+       help
+         Support for Sonos LED control module
+
+config SONOS_ADP8863
+        tristate "Sonos ADP8863"
+        depends on SONOS
+        select SONOS_LEDCTL
+        default n
+        help
+          Support for Sonos ADP8863 driver
+
+config SONOS_PWM_LED
+        tristate "Sonos PWM LEDs"
+        depends on SONOS
+        select SONOS_LEDCTL
+        default n
+        help
+          Support for Sonos PWM LED driver
+
+config SONOS_LP5562
+        tristate "Sonos LP5562"
+        depends on SONOS
+        select SONOS_LEDCTL
+        default n
+        help
+          Support for Sonos LP5562 driver
+
+config SONOS_AMPCTL
+       tristate "Sonos amp control driver"
+       default n
+       help
+         Support for Sonos amp control module
+
+config SONOS_AK4458
+        bool "Sonos AK4458"
+        depends on SONOS
+        depends on SONOS_AMPCTL
+        default n
+        help
+          Support for Sonos AK4458 driver
+
+config SONOS_AK4613
+        bool "Sonos AK4613"
+        depends on SONOS
+        depends on SONOS_AMPCTL
+        default n
+        help
+          Support for Sonos AK4613 driver
+
+config SONOS_CS4265
+        bool "Sonos CS4265"
+        depends on SONOS
+        depends on SONOS_AMPCTL
+        default n
+        help
+          Support for Sonos CS4265 driver
+
+config SONOS_GPIO_MIC
+        bool "Sonos GPIO Mic"
+        depends on SONOS
+        depends on SONOS_AMPCTL
+        default n
+        help
+          Support for Sonos GPIO microphone control
+
+config SONOS_I2C_AMPCTL
+       tristate "Sonos amp control driver for I2C dac/amp"
+       default n
+       help
+         Support for Sonos amp control module
+
+config SONOS_AK4490
+        bool "Sonos AK4490"
+        depends on SONOS
+        depends on SONOS_I2C_AMPCTL
+        default n
+        help
+          Support for Sonos AK4490 driver
+
+config SONOS_CS43130
+        bool "Sonos CS43130"
+        depends on SONOS
+        depends on SONOS_I2C_AMPCTL
+        default n
+        help
+          Support for Sonos AK4490 driver
+
+config SONOS_MICCTL
+       tristate "Sonos mic control driver"
+       default n
+       help
+         Support for Sonos mic control module
+
+config SONOS_PCM1864
+        tristate "Sonos PCM1864"
+        depends on SONOS
+        depends on SONOS_AMPCTL
+        default n
+        help
+          Support for Sonos PCM1864 driver
+
+config SONOS_BLACKBOX
+       tristate "Sonos blackbox kernel trace module"
+       depends on SONOS
+       default n
+       help
+         Support for Sonos blackbox module
+
+config SONOS_LINEIN_OVERVOLT
+        tristate "Sonos Line-in overvolt"
+        depends on SONOS
+        default n
+        help
+          Support for Sonos line-in overvolt driver
+
+config SONOS_CABLE_GPIO_DETECT
+        tristate "Sonos GPIO cable detection"
+        depends on SONOS
+        default n
+        help
+          Support for Sonos GPIO cable detection driver
+
+config SONOS_BUTTONS
+        bool "Sonos Buttons"
+        depends on SONOS
+        depends on SONOS_SENSORS
+        default n
+        help
+          Support for Sonos generalied buttons driver
+
+config SONOS_GPIO_BUTTONS
+        tristate "Sonos Physical Buttons"
+        depends on SONOS
+        default n
+        help
+          Support for Sonos physical buttons driver
+
+config SONOS_PSMON
+       tristate "Sonos power supply monitoring (brownout detection) module"
+       depends on SONOS
+       default n
+       help
+         Support for Sonos power supply monitoring
+
+config SONOS_CAAMKEYS
+       tristate "Sonos i.MX6 CAAM module"
+       depends on SONOS
+       default n
+       help
+         Support for Sonos CAAM driver
+
+config SONOS_M4
+       tristate "Sonos M4 module"
+       depends on SONOS
+       default n
+       help
+         Support for Sonos M4 driver
+
+config SONOS_CHK
+       tristate "Sonos check module"
+       depends on SONOS
+       default n
+       help
+         Support for Sonos check driver
+
+config SONOS_SDD_RT_PINCTRL
+       tristate "Sonos SDD run-time pinmuxing"
+       depends on SONOS
+       default n
+       help
+         Support for Sonos hardware platforms that require bypassing Linux Pin Control (iMX6SX/Chaplin/Neptune)
+
+config SONOS_SGE_ENCORE
+       bool "Sonos Encore SGE/PSoC image"
+       depends on SONOS
+       default n
+       help
+         Support for Sonos Encore SGE/PSoC image
+
+config SONOS_SGE_BOOTLEG_PSOC4100
+       bool "Sonos Bootleg SGE/PSoC-4146 image"
+       depends on SONOS
+       default n
+       help
+         Support for Sonos Bootleg SGE/PSoC-4146 image
+
+config SONOS_SGE_BOOTLEG_PSOC4200
+       tristate "Sonos Bootleg SGE/PSoC-4245 image"
+       depends on SONOS
+       default n
+       help
+         Support for Sonos Bootleg SGE/PSoC-4245 image
+
+config SONOS_SGE_NEPTUNE
+       tristate "Sonos Neptune SGE/PSoC-4147 image"
+       depends on SONOS
+       default n
+       help
+         Support for Sonos Neptune SGE/PSoC-4147 image
+
+config SONOS_SGE_CAPTOUCH
+       tristate "SGE image supports captouch"
+       depends on SONOS
+       default n
+       help
+         Support for captouch
+
+config SONOS_EEPROM
+       tristate "Sonos WiFi Card eeprom driver"
+       default n
+       help
+         Support for Sonos WiFi Card eeprom driver
+
+config SONOS_SGE_CHAPLIN
+       tristate "Sonos Chaplin SGE/PSoC-4247 image"
+       depends on SONOS
+       default n
+       help
+         Support for Sonos Chaplin SGE/PSoC-4247 image
+
 # Definitions to make life easier
 config ARCH_ACORN
 	bool
@@ -1622,7 +2009,7 @@ config ARCH_NR_GPIO
 source kernel/Kconfig.preempt
 
 config HZ
-	int
+	int "Jiffies per second"
 	default 200 if ARCH_EBSA110 || ARCH_S3C24XX || ARCH_S5P64X0 || \
 		ARCH_S5PV210 || ARCH_EXYNOS4
 	default AT91_TIMER_HZ if ARCH_AT91
