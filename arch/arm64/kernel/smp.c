@@ -961,6 +961,27 @@ void smp_send_stop(void)
 		smp_cross_call(&mask, IPI_CPU_STOP);
 	}
 
+#if defined(CONFIG_SONOS)
+	/* SONOS - HWALPINE-421
+	 *
+	 * We have seen two cases in this function.  In the ~99.2% case, the
+	 * num_online_cpus is 1 when this check happens, and we never go through
+	 * this loop at all.  In the extremely rare case, one of the secondary CPUs
+	 * doesn't go down and allow the M3 power-down functionality to be performed
+	 * prior to the power rails going down, which results in the system failing
+	 * to wake from "OFF" state via rtc.  In order to ensure that we get a
+	 * chance to complete our power-down, we are cutting the wait time from
+	 * one second to 100 ms, which should still be far more time than
+	 * necessary to get the secondary CPUs down.  If they still aren't down
+	 * when the timeout expires, we log that to the console and continue
+	 * the power-down sequence, which seems to work just fine.
+	 */
+	timeout = (USEC_PER_SEC/10);
+#else
+        /* Wait up to one second for other CPUs to stop */
+        timeout = USEC_PER_SEC;
+#endif
+
 	while (num_other_online_cpus() && timeout--)
 		udelay(1);
 
