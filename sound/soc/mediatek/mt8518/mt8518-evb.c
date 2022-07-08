@@ -1600,6 +1600,8 @@ static void mt8518_evb_parse_of(struct snd_soc_card *card,
 		{"pcm-intf", DAI_LINK_BE_PCM_INTF},
 		{"dmic", DAI_LINK_BE_DMIC},
 		{"multi-in", DAI_LINK_BE_MULTI_IN},
+		{"spdif-in", DAI_LINK_BE_SPDIF_IN},
+		{"spdif-out", DAI_LINK_BE_SPDIF_OUT},
 #ifdef CONFIG_SND_SOC_MT8518_CODEC
 		{"int-adda", DAI_LINK_BE_INT_ADDA},
 #endif
