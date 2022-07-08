@@ -1,0 +1,349 @@
+/*
+ * Sonos Bootleg DTB
+ *
+ * Sonos Bootleg specific changes to the generic imx6q dtb, which is
+ * defined in imx6q.dtsi and imx6qdl.dtsi.
+ */
+
+/dts-v1/;
+
+#include "imx6q.dtsi"
+#include "dt-bindings/interrupt-controller/irq.h"
+#include "sonos_platform.dtsi"
+
+/ {
+	#address-cells = <1>;
+	#size-cells = <1>;
+	model = "Sonos i.MX6 Quad Bootleg";
+	compatible = "sonos,bootleg", "fsl,imx6q";
+
+	sonos-platform {
+		/* Sonos platform specific values for shared driver source & binaries */
+		sonos-ampctl {
+			/* Bootleg has one amp fault.  It has three control lines.
+			 */
+			status = "okay";
+			amprail-adc-port = <1>;
+			amprail-adc-scale = <8905>;
+
+			sonos-ampfaults {
+				num-faults = <0x01>;
+				status = "okay";
+
+				ampfault@0 {
+					fault-gpio = <&gpio1 20 0>;
+				} ;
+			} ;
+
+			sonos-ampctl-signals {
+				num-ctl-signals = <3>;
+				sonos-ampsignal@0 {		// DACRESET
+					config = <1>;
+					on-time = <4>;
+					off-time = <4>;
+					supports-off = <1>;
+					active-low = <1>;
+					sig-gpio = <&gpio1 21 0>;
+				} ;
+				sonos-ampsignal@1 {		// POWER
+					on-time = <15>;
+					off-time = <0>;
+					supports-off = <1>;
+					sig-gpio = <&gpio1 3 0>;
+				} ;
+				sonos-ampsignal@2 {		// AMP MUTE
+					config = <1>;
+					on-time = <4>;
+					off-time = <1>;
+					supports-off = <1>;
+					sig-gpio = <&gpio1 4 0>;
+				} ;
+			} ;
+		} ;
+
+		misc-gpio {
+			connect-button  = <&gpio1 5 0>;
+		};
+
+		simulated-buttons {
+			/* event-sources are offsets from EVTSOURCE_BUTTON_PLAYPAUSE, some generate an event for more than one source */
+			join {
+				event-sources = <3>;
+			};
+		};
+
+		thermal-mgmt {
+			AMP {
+				compatible = "seiko,s5851";
+				fault-temperature = <95>;
+				warn-temperature = <91>;
+			};
+			CPU {
+				compatible = "seiko,s5851";
+				fault-temperature = <95>;
+				warn-temperature = <91>;
+			};
+		};
+	};
+
+	psmon {
+		compatible = "sonos,psmon";
+		psmon-gpio = <&gpio1 12 0>;
+		trigger-edge = <IRQ_TYPE_EDGE_FALLING>;
+	};
+
+	memory {
+		device_type = "memory";
+		/* 1GB DDR at 256MB offset*/
+		reg = <0x10000000 0x40000000>;
+	};
+
+	clocks {
+		ckih1 {
+			compatible = "fsl,imx-ckih1", "fixed-clock";
+			clock-frequency = <66000000>;
+		};
+	};
+
+	soc {
+		busfreq {
+			/* See imx6q.dtsi */
+			compatible = "fsl,imx6_busfreq";
+		};
+
+		aips-bus@02000000 { /* AIPS1 */
+			spba-bus@02000000 {
+				esai: esai@02024000 {
+					compatible = "fsl,imx6q-esai";
+					dmas = <&sdma 24 21 0>, <&sdma 23 21 0>;
+					dma-names = "tx", "rx";
+					status = "okay";
+					lla-mics {
+						lla-type = <1>;
+						frames-per-second = <44100>;
+						channel-len = <4>;
+						channel-mask = <0xf3>;
+						channels-per-frame = <8>;
+						frames-per-buffer = <128>;
+						buffer-cnt = <64>;
+						dividers = <0 0 1>;
+						watermark-frames = <8>;
+						tdm-master;
+						status = "okay";
+					};
+					lla-dac {
+						lla-type = <0>;
+						frames-per-second = <44100>;
+						channel-len = <4>;
+						channel-mask = <0x3>;
+						channels-per-frame = <2>;
+						frames-per-buffer = <128>;
+						buffer-cnt = <64>;
+						dividers = <0 1 0>;
+						watermark-frames = <8>;
+						tdm-master;
+						invert-fs;
+						i2s-mode;
+						nonzero-silence;
+						status = "okay";
+					};
+				};
+
+				ssi1: ssi@02028000 {
+					dev-id = <0>;
+					status = "okay";
+					lla-line-in { /* Used on Diags builds only */
+						lla-type = <4>;
+						diags-only;
+						frames-per-second = <44100>;
+						channel-len = <4>;
+						channel-mask = <0x3>;
+						channels-per-frame = <2>;
+						frames-per-buffer = <128>;
+						buffer-cnt = <64>;
+						watermark-words = <8>;
+						dividers = <1 1 0>;
+						i2s-mode;
+						tdm-master;
+						status = "okay";
+					};
+				};
+
+				uart1: serial@02020000 {
+					status = "okay";
+				};
+			};
+
+			epit1: epit@020d0000 {
+				compatible = "fsl,imx6q-epit";
+				clocks = <&clks 216>, <&clks 0>, <&clks 63>, <&clks 2>, <&clks 1>;
+				clock-names = "epit", "off", "per", "high", "low";
+				dev-id = <0>;
+				// This EPIT device serves as the LLA audio clock
+				lla-clock;
+				status = "okay";
+			};
+
+			src@020d8000 {
+				compatible = "fsl,imx6q-src", "fsl,imx51-src", "syscon";
+				status = "okay";
+			};
+
+			iomuxc: iomuxc@020e0000 {
+				status = "disabled";
+			};
+
+			sdma: sdma@020ec000 {
+				compatible = "fsl,imx6q-sdma";
+				// FIXME: Encore DTB has the below line (enabled), not sure what it's for
+				//~ gpr = <&gpr>;
+			};
+
+		};
+
+		aips-bus@02100000 { /* AIPS2 */
+			audmux: audmux@021d8000 {  /* Diags-only loopback test */
+				status = "okay";
+				lla-audmux1 {
+					port-id = <1>;
+					data-port = <3>;
+					sync-tx-rx;
+					status = "okay";
+				};
+				lla-audmux3 {
+					port-id = <3>;
+					data-port = <3>;
+					clock-tx;
+					clock-port = <1>;
+					sync-tx-rx;
+					status = "okay";
+				};
+			};
+
+			crypto: caam@2100000 {
+				status = "okay";
+			};
+
+			fec1: ethernet@02188000 {
+				status = "okay";
+				phy-mode = "rmii";
+				fsl,num_tx_queues = <0x3>;
+				fsl,num_rx_queues = <0x3>;
+
+				phy0 {
+					compatible = "Sonos,ti83822_phy";
+					interrupts = <&gpio7 13 1>;
+				};
+			};
+
+			i2c1: i2c@021a0000 {
+				status = "okay";
+
+				apple_auth@0 {
+					compatible = "Sonos,apple_auth";
+					reg = <0x11>;
+					reset-gpio = <&gpio1 18 1>;
+				};
+
+			};
+
+			i2c3: i2c@021a8000 {
+				status = "okay";
+
+				lp5562@0 {	// LED controller
+					compatible = "ti,lp5562";
+					reg = <0x30>;
+				};
+				s5851@0 {	// CPU thermal sensor - bottom of the board
+					compatible = "seiko,s5851";
+					reg = <0x4e>;
+					device_type = "CPU";
+				};
+				s5851@1 {	// AMP thermal sensor - top of the board
+					compatible = "seiko,s5851";
+					reg = <0x4f>;
+					device_type = "AMP";
+				};
+				sge@0 {  // Sigdetail Gesture Engine
+					compatible = "Sonos,sge-psoc4";
+					reg = <0x40>;
+					xres-gpio = <&gpio1 11 1>;
+					io-gpio   = <&gpio1 17 1>;
+					scl-gpio  = <&gpio1 16 1>;
+					irq-gpio  = <&gpio4 13 1>;
+					zonea = "vol1";
+					zoneb = "pp";
+					zonec = "vol2";
+					zonem = "mic";
+					finger-threshold = <80>;
+					noise-threshold = <40>;
+					hysteresis = <5>;
+					share-swd-uart = <0>;
+
+					psoc-images {
+						image@0 {
+							model-num = <4146>;
+							ident = <0xb1>;
+							flash-rows = <512>;
+							flash-row-size = <128>;
+							flash-protection-size = <64>;
+						};
+						image@1 {
+							model-num = <4245>;
+							ident = <0xb2>;
+							flash-rows = <256>;
+							flash-row-size = <128>;
+							flash-protection-size = <32>;
+						};
+					};
+				};
+			};
+		};
+
+                caam_secvio {
+                        status = "disabled";
+                };
+
+                gpmi: gpmi-nand@00112000{
+                        status = "okay";
+                };
+
+                pcie: pcie@0x01000000 {
+                        compatible = "fsl,imx6q-pcie", "snps,dw-pcie";
+			reset-gpio = <&gpio4 15 1>;
+			status = "okay";
+                };
+
+		i2c-bb@0 {
+			/* The Mic aggregator chips are accessed via bit-banged i2c */
+			compatible = "i2c-gpio";
+			gpios = <&gpio5 27 0 /* sda */
+				 &gpio5 26 0 /* scl */
+				>;
+			/*i2c-gpio,sda-open-drain;*/
+			/*i2c-gpio,scl-open-drain;*/
+			i2c-gpio,delay-us = <2>;        /* ~100 kHz */
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+		micctl_pcm1864_0:pcm0@0 {	// Texas Instruments PCM1864
+				compatible = "ti,pcm1864";
+				dev-id = <0>;
+				reg = <0x4a>;
+			};
+
+		micctl_pcm1864_1:pcm1@1 {	// Texas Instruments PCM1864
+				compatible = "ti,pcm1864";
+				dev-id = <1>;
+				reg = <0x4b>;
+			};
+		};
+
+	};
+
+	micctl@1 {
+		compatible = "sonos,micctl";
+
+		micctl-device = <&micctl_pcm1864_0 &micctl_pcm1864_1>;
+	};
+};
