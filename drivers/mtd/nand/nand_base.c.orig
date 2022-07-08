@@ -48,11 +48,6 @@
 #include <linux/mtd/partitions.h>
 #include <linux/of_mtd.h>
 
-#if defined(CONFIG_SONOS)
-static int ShutdownNandAccess = 0;
-static struct nand_chip *chip_for_shutdown;
-#endif
-
 static int nand_get_device(struct mtd_info *mtd, int new_state);
 
 static int nand_do_write_oob(struct mtd_info *mtd, loff_t to,
@@ -892,45 +887,6 @@ retry:
 	remove_wait_queue(wq, &wait);
 	goto retry;
 }
-
-#if defined(CONFIG_SONOS)
-/**
- * Provide a mechanism to allow the kernel to prevent any write or erase
- * accesses to the flash in the case of the power rail going down.  We
- * want to avoid power-cuts with the device open for either write or
- * erase, which can cause problems.
- */
-
-int nand_shutdown_access(int shutdown)
-{
-	struct nand_chip *chip = (struct nand_chip*)chip_for_shutdown;
-
-	if (chip == NULL) {
-		printk(KERN_ERR "no chip structure...\n");
-		return 0;
-	}
-
-	if (shutdown) {
-		ShutdownNandAccess = 1;
-		if (chip->state == FL_READY || chip->state == FL_PM_SUSPENDED) {
-			chip->state = FL_PM_SUSPENDED;
-			printk(KERN_NOTICE "NAND disabled...\n");
-			return 1;
-		} else {
-			return 0;
-		}
-	} else {
-		ShutdownNandAccess = 0;
-		if (chip->state == FL_PM_SUSPENDED) {
-			chip->state = FL_READY;
-			wake_up(&chip->controller->wq);
-		}
-		printk(KERN_NOTICE "NAND enabled...\n");
-		return 0;
-	}
-}
-EXPORT_SYMBOL(nand_shutdown_access);
-#endif
 
 /**
  * panic_nand_wait - [GENERIC] wait until the command is done
@@ -4470,17 +4426,6 @@ int nand_scan_tail(struct mtd_info *mtd)
 	 */
 	if (!mtd->bitflip_threshold)
 		mtd->bitflip_threshold = DIV_ROUND_UP(mtd->ecc_strength * 3, 4);
-
-#if defined(CONFIG_SONOS)
-	/* This is a bit of a hack, but it should work, because we only have
-	 * one flash chip on the sonos device.  We may need/want to shut
-	 * down access to that chip from the kernel without going through
-	 * a file open operation.  So, since there's only one, we should be
-	 * able to save the chip pointer here at init time, and use it when
-	 * necessary.
-	 */
-	chip_for_shutdown = (struct nand_chip*)chip;
-#endif
 
 	/* Check, if we should skip the bad block table scan */
 	if (chip->options & NAND_SKIP_BBTSCAN)
