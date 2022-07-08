@@ -1721,5 +1721,13 @@ config RTC_DRV_HID_SENSOR_TIME
 	  If this driver is compiled as a module, it will be named
 	  rtc-hid-sensor-time.
 
+if SONOS
+
+config SONOS_RTC
+	bool "SONOS RTC Driver"
+	default y
+	help
+	  If you say yes here, it will enable RTC driver.
+endif #SONOS
 
 endif # RTC_CLASS
