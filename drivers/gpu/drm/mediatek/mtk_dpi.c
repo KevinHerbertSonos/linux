@@ -12,8 +12,9 @@
  * GNU General Public License for more details.
  */
 #include <drm/drmP.h>
-#include <drm/drm_crtc.h>
+#include <drm/drm_atomic_helper.h>
 #include <drm/drm_crtc_helper.h>
+#include <drm/drm_panel.h>
 #include <linux/kernel.h>
 #include <linux/component.h>
 #include <linux/platform_device.h>
@@ -22,9 +23,12 @@
 #include <linux/interrupt.h>
 #include <linux/types.h>
 #include <linux/clk.h>
+#include <linux/pm_runtime.h>
 
 #include "mtk_dpi_regs.h"
 #include "mtk_drm_ddp_comp.h"
+#include "mtk_drm_crtc.h"
+#include "mtk_drm_debugfs.h"
 
 enum mtk_dpi_out_bit_num {
 	MTK_DPI_OUT_BIT_NUM_8BITS,
@@ -63,13 +67,18 @@ enum mtk_dpi_out_color_format {
 struct mtk_dpi {
 	struct mtk_ddp_comp ddp_comp;
 	struct drm_encoder encoder;
+	struct drm_connector connector;
+	struct drm_panel *panel;
 	void __iomem *regs;
 	struct device *dev;
 	struct clk *engine_clk;
 	struct clk *pixel_clk;
 	struct clk *tvd_clk;
+	struct clk *mm_dpi;
+	struct clk *mm_disp_dpi;
 	int irq;
 	struct drm_display_mode mode;
+	const struct mtk_dpi_conf *conf;
 	enum mtk_dpi_out_color_format color_format;
 	enum mtk_dpi_out_yc_map yc_map;
 	enum mtk_dpi_out_bit_num bit_num;
@@ -81,6 +90,11 @@ struct mtk_dpi {
 static inline struct mtk_dpi *mtk_dpi_from_encoder(struct drm_encoder *e)
 {
 	return container_of(e, struct mtk_dpi, encoder);
+}
+
+static inline struct mtk_dpi *mtk_dpi_from_connector(struct drm_connector *c)
+{
+	return container_of(c, struct mtk_dpi, connector);
 }
 
 enum mtk_dpi_polarity {
@@ -112,6 +126,12 @@ struct mtk_dpi_yc_limit {
 	u16 y_bottom;
 	u16 c_top;
 	u16 c_bottom;
+};
+
+struct mtk_dpi_conf {
+	unsigned int (*cal_factor)(int clock);
+	const u32 reg_h_fre_con;
+	bool dual_edge;
 };
 
 static void mtk_dpi_mask(struct mtk_dpi *dpi, u32 offset, u32 val, u32 mask)
@@ -339,7 +359,16 @@ static void mtk_dpi_config_swap_input(struct mtk_dpi *dpi, bool enable)
 
 static void mtk_dpi_config_2n_h_fre(struct mtk_dpi *dpi)
 {
-	mtk_dpi_mask(dpi, DPI_H_FRE_CON, H_FRE_2N, H_FRE_2N);
+	mtk_dpi_mask(dpi, dpi->conf->reg_h_fre_con, H_FRE_2N, H_FRE_2N);
+}
+
+static void mtk_dpi_config_dual_edge(struct mtk_dpi *dpi)
+{
+	if (dpi->conf->dual_edge) {
+		mtk_dpi_mask(dpi, DPI_DDR_SETTING, DDR_EN | DDR_4PHASE,
+			DDR_EN | DDR_4PHASE);
+		mtk_dpi_mask(dpi, DPI_OUTPUT_SETTING, EDGE_SEL, EDGE_SEL);
+	}
 }
 
 static void mtk_dpi_config_color_format(struct mtk_dpi *dpi,
@@ -379,6 +408,8 @@ static void mtk_dpi_power_off(struct mtk_dpi *dpi, enum mtk_dpi_power_ctl pctl)
 	mtk_dpi_disable(dpi);
 	clk_disable_unprepare(dpi->pixel_clk);
 	clk_disable_unprepare(dpi->engine_clk);
+	clk_disable_unprepare(dpi->mm_disp_dpi);
+	clk_disable_unprepare(dpi->mm_dpi);
 	dpi->power_sta = false;
 }
 
@@ -394,6 +425,22 @@ static int mtk_dpi_power_on(struct mtk_dpi *dpi, enum mtk_dpi_power_ctl pctl)
 
 	if (dpi->power_sta)
 		return 0;
+
+	if (dpi->mm_dpi) {
+		ret = clk_prepare_enable(dpi->mm_dpi);
+		if (ret) {
+			DRM_ERROR("Failed to enable mm_dpi clock: %d\n",
+				ret);
+		}
+	}
+
+	if (dpi->mm_disp_dpi) {
+		ret = clk_prepare_enable(dpi->mm_disp_dpi);
+		if (ret) {
+			DRM_ERROR("Failed to enable mm_disp_dpi clock: %d\n",
+				ret);
+		}
+	}
 
 	ret = clk_prepare_enable(dpi->engine_clk);
 	if (ret) {
@@ -432,16 +479,13 @@ static int mtk_dpi_set_display_mode(struct mtk_dpi *dpi,
 	unsigned long pll_rate;
 	unsigned int factor;
 
-	/* let pll_rate can fix the valid range of tvdpll (1G~2GHz) */
+	if (!dpi) {
+		dev_err(dpi->dev, "invalid argument\n");
+		return -EINVAL;
+	}
+
 	pix_rate = 1000UL * mode->clock;
-	if (mode->clock <= 27000)
-		factor = 16 * 3;
-	else if (mode->clock <= 84000)
-		factor = 8 * 3;
-	else if (mode->clock <= 167000)
-		factor = 4 * 3;
-	else
-		factor = 2 * 3;
+	factor = dpi->conf->cal_factor(mode->clock);
 	pll_rate = pix_rate * factor;
 
 	dev_dbg(dpi->dev, "Want PLL %lu Hz, pixel clock %lu Hz\n",
@@ -450,7 +494,10 @@ static int mtk_dpi_set_display_mode(struct mtk_dpi *dpi,
 	clk_set_rate(dpi->tvd_clk, pll_rate);
 	pll_rate = clk_get_rate(dpi->tvd_clk);
 
-	pix_rate = pll_rate / factor;
+	if (dpi->conf->dual_edge)
+		pix_rate = pll_rate / factor * 2;
+	else
+		pix_rate = pll_rate / factor;
 	clk_set_rate(dpi->pixel_clk, pix_rate);
 	pix_rate = clk_get_rate(dpi->pixel_clk);
 
@@ -517,6 +564,7 @@ static int mtk_dpi_set_display_mode(struct mtk_dpi *dpi,
 	mtk_dpi_config_yc_map(dpi, dpi->yc_map);
 	mtk_dpi_config_color_format(dpi, dpi->color_format);
 	mtk_dpi_config_2n_h_fre(dpi);
+	mtk_dpi_config_dual_edge(dpi);
 	mtk_dpi_sw_reset(dpi, false);
 
 	return 0;
@@ -550,6 +598,19 @@ static void mtk_dpi_encoder_mode_set(struct drm_encoder *encoder,
 static void mtk_dpi_encoder_disable(struct drm_encoder *encoder)
 {
 	struct mtk_dpi *dpi = mtk_dpi_from_encoder(encoder);
+	int ret;
+
+	ret = pm_runtime_put_sync(dpi->dev);
+	if (ret < 0)
+		DRM_ERROR("Failed to disable power domain: %d %s\n", ret,
+		dev_name(dpi->dev));
+
+	if (dpi->panel) {
+		if (drm_panel_disable(dpi->panel) < 0) {
+			DRM_ERROR("failed to disable the panel\n");
+			return;
+		}
+	}
 
 	mtk_dpi_power_off(dpi, DPI_POWER_ENABLE);
 }
@@ -557,9 +618,22 @@ static void mtk_dpi_encoder_disable(struct drm_encoder *encoder)
 static void mtk_dpi_encoder_enable(struct drm_encoder *encoder)
 {
 	struct mtk_dpi *dpi = mtk_dpi_from_encoder(encoder);
+	int ret;
+
+	ret = pm_runtime_get_sync(dpi->dev);
+	if (ret < 0)
+		DRM_ERROR("Failed to enable power domain: %d %s\n", ret,
+		dev_name(dpi->dev));
 
 	mtk_dpi_power_on(dpi, DPI_POWER_ENABLE);
 	mtk_dpi_set_display_mode(dpi, &dpi->mode);
+
+	if (dpi->panel) {
+		if (drm_panel_enable(dpi->panel) < 0) {
+			mtk_dpi_power_off(dpi, DPI_POWER_ENABLE);
+			DRM_ERROR("failed to enable the panel\n");
+		}
+	}
 }
 
 static int mtk_dpi_atomic_check(struct drm_encoder *encoder,
@@ -567,6 +641,32 @@ static int mtk_dpi_atomic_check(struct drm_encoder *encoder,
 				struct drm_connector_state *conn_state)
 {
 	return 0;
+}
+
+static enum drm_connector_status mtk_dpi_connector_detect(
+	struct drm_connector *connector, bool force)
+{
+	struct mtk_dpi *dpi = mtk_dpi_from_connector(connector);
+
+	if (dpi->panel)
+		return connector_status_connected;
+
+	return connector_status_disconnected;
+}
+
+static int mtk_dpi_connector_get_modes(struct drm_connector *connector)
+{
+	struct mtk_dpi *dpi = mtk_dpi_from_connector(connector);
+
+	return drm_panel_get_modes(dpi->panel);
+}
+
+static struct drm_encoder *mtk_dpi_connector_best_encoder(
+		struct drm_connector *connector)
+{
+	struct mtk_dpi *dpi = mtk_dpi_from_connector(connector);
+
+	return &dpi->encoder;
 }
 
 static const struct drm_encoder_helper_funcs mtk_dpi_encoder_helper_funcs = {
@@ -577,14 +677,64 @@ static const struct drm_encoder_helper_funcs mtk_dpi_encoder_helper_funcs = {
 	.atomic_check = mtk_dpi_atomic_check,
 };
 
-static void mtk_dpi_start(struct mtk_ddp_comp *comp)
+static const struct drm_connector_funcs mtk_dpi_connector_funcs = {
+	.dpms = drm_atomic_helper_connector_dpms,
+	.detect = mtk_dpi_connector_detect,
+	.fill_modes = drm_helper_probe_single_connector_modes,
+	.destroy = drm_connector_cleanup,
+	.reset = drm_atomic_helper_connector_reset,
+	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
+	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
+};
+
+static const struct drm_connector_helper_funcs
+	mtk_dpi_connector_helper_funcs = {
+	.get_modes = mtk_dpi_connector_get_modes,
+	.best_encoder = mtk_dpi_connector_best_encoder,
+};
+
+static int mtk_dpi_create_connector(struct drm_device *drm, struct mtk_dpi *dpi)
+{
+	int ret;
+
+	DRM_ERROR("%s\n", __func__);
+
+	ret = drm_connector_init(drm, &dpi->connector, &mtk_dpi_connector_funcs,
+				 DRM_MODE_CONNECTOR_DPI);
+	if (ret) {
+		DRM_ERROR("Failed to connector init to drm\n");
+		return ret;
+	}
+
+	drm_connector_helper_add(&dpi->connector,
+				 &mtk_dpi_connector_helper_funcs);
+
+	dpi->connector.dpms = DRM_MODE_DPMS_OFF;
+	drm_mode_connector_attach_encoder(&dpi->connector, &dpi->encoder);
+
+	if (dpi->panel) {
+		ret = drm_panel_attach(dpi->panel, &dpi->connector);
+		if (ret) {
+			DRM_ERROR("Failed to attach panel to drm\n");
+			goto err_connector_cleanup;
+		}
+	}
+
+	return 0;
+
+err_connector_cleanup:
+	drm_connector_cleanup(&dpi->connector);
+	return ret;
+}
+
+static void mtk_dpi_prepare(struct mtk_ddp_comp *comp)
 {
 	struct mtk_dpi *dpi = container_of(comp, struct mtk_dpi, ddp_comp);
 
 	mtk_dpi_power_on(dpi, DPI_POWER_START);
 }
 
-static void mtk_dpi_stop(struct mtk_ddp_comp *comp)
+static void mtk_dpi_unprepare(struct mtk_ddp_comp *comp)
 {
 	struct mtk_dpi *dpi = container_of(comp, struct mtk_dpi, ddp_comp);
 
@@ -592,8 +742,8 @@ static void mtk_dpi_stop(struct mtk_ddp_comp *comp)
 }
 
 static const struct mtk_ddp_comp_funcs mtk_dpi_funcs = {
-	.start = mtk_dpi_start,
-	.stop = mtk_dpi_stop,
+	.prepare = mtk_dpi_prepare,
+	.unprepare = mtk_dpi_unprepare,
 };
 
 static int mtk_dpi_bind(struct device *dev, struct device *master, void *data)
@@ -601,6 +751,8 @@ static int mtk_dpi_bind(struct device *dev, struct device *master, void *data)
 	struct mtk_dpi *dpi = dev_get_drvdata(dev);
 	struct drm_device *drm_dev = data;
 	int ret;
+
+	MTK_DRM_DEBUG(dev, "\n");
 
 	ret = mtk_ddp_comp_register(drm_dev, &dpi->ddp_comp);
 	if (ret < 0) {
@@ -617,13 +769,14 @@ static int mtk_dpi_bind(struct device *dev, struct device *master, void *data)
 	}
 	drm_encoder_helper_add(&dpi->encoder, &mtk_dpi_encoder_helper_funcs);
 
-	/* Currently DPI0 is fixed to be driven by OVL1 */
-	dpi->encoder.possible_crtcs = BIT(1);
+	dpi->encoder.possible_crtcs = BIT(0) | BIT(1);
 
 	dpi->encoder.bridge->encoder = &dpi->encoder;
 	ret = drm_bridge_attach(dpi->encoder.dev, dpi->encoder.bridge);
-	if (ret) {
-		dev_err(dev, "Failed to attach bridge: %d\n", ret);
+	if (ret < 0) {
+		/* Otherwise create our own connector and attach to a panel */
+		ret = mtk_dpi_create_connector(drm_dev, dpi);
+		if (ret < 0)
 		goto err_cleanup;
 	}
 
@@ -632,6 +785,7 @@ static int mtk_dpi_bind(struct device *dev, struct device *master, void *data)
 	dpi->yc_map = MTK_DPI_OUT_YC_MAP_RGB;
 	dpi->color_format = MTK_DPI_COLOR_FORMAT_RGB;
 
+	MTK_DRM_DEBUG(dev, " end\n");
 	return 0;
 
 err_cleanup:
@@ -656,93 +810,209 @@ static const struct component_ops mtk_dpi_component_ops = {
 	.unbind = mtk_dpi_unbind,
 };
 
+static unsigned int mt8518_calculate_factor(int clock)
+{
+	if (clock <= 64000)
+		return 16;
+	else if (clock <= 74250)
+		return 8;
+	else if (clock <= 150000)
+		return 4;
+	else
+		return 2;
+}
+
+static unsigned int mt8173_calculate_factor(int clock)
+{
+	if (clock <= 27000)
+		return 16 * 3;
+	else if (clock <= 74250)
+		return 8 * 3;
+	else if (clock <= 167000)
+		return 4 * 3;
+	else
+		return 2 * 3;
+}
+
+static unsigned int mt8173_lvdsdpi_factor(int clock)
+{
+	return 1;
+}
+
+static unsigned int mt2701_calculate_factor(int clock)
+{
+	if (clock <= 64000)
+		return 16;
+	else if (clock <= 128000)
+		return 8;
+	else if (clock <= 256000)
+		return 4;
+	else
+		return 2;
+}
+
+static unsigned int mt2712_calculate_factor(int clock)
+{
+	return 1;
+}
+
+static const struct mtk_dpi_conf mt8518_conf = {
+	.cal_factor = mt8518_calculate_factor,
+	.dual_edge = true,
+};
+
+static const struct mtk_dpi_conf mt8173_conf = {
+	.cal_factor = mt8173_calculate_factor,
+	.reg_h_fre_con = 0xe0,
+};
+
+static const struct mtk_dpi_conf mt8173_lvdsdpi_conf = {
+	.cal_factor = mt8173_lvdsdpi_factor,
+	.reg_h_fre_con = 0xe0,
+};
+
+static const struct mtk_dpi_conf mt2701_conf = {
+	.cal_factor = mt2701_calculate_factor,
+	.reg_h_fre_con = 0xb0,
+};
+
+static const struct mtk_dpi_conf mt2712_conf = {
+	.cal_factor = mt2712_calculate_factor,
+	.reg_h_fre_con = 0xe0,
+};
+
+static const struct of_device_id mtk_dpi_of_ids[] = {
+	{ .compatible = "mediatek,mt8173-dpi",
+	  .data = &mt8173_conf,
+	},
+	{ .compatible = "mediatek,mt8173-lvdsdpi",
+	  .data = &mt8173_lvdsdpi_conf,
+	},
+	{ .compatible = "mediatek,mt2701-dpi",
+	  .data = &mt2701_conf,
+	},
+	{ .compatible = "mediatek,mt2712-dpi",
+	  .data = &mt2712_conf,
+	},
+	{ .compatible = "mediatek,mt8518-dpi",
+	  .data = &mt8518_conf,
+	},
+};
+MODULE_DEVICE_TABLE(of, mtk_dpi_of_ids);
+
 static int mtk_dpi_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct mtk_dpi *dpi;
 	struct resource *mem;
-	struct device_node *ep, *bridge_node = NULL;
+	struct device_node *remote_node, *endpoint;
 	int comp_id;
+	const struct of_device_id *match;
 	int ret;
+
+	MTK_DRM_DEBUG(dev, "\n");
+
+	match = of_match_node(mtk_dpi_of_ids, dev->of_node);
+	if (!match)
+		return -ENODEV;
 
 	dpi = devm_kzalloc(dev, sizeof(*dpi), GFP_KERNEL);
 	if (!dpi)
 		return -ENOMEM;
 
 	dpi->dev = dev;
+	dpi->conf = (struct mtk_dpi_conf *)match->data;
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	dpi->regs = devm_ioremap_resource(dev, mem);
 	if (IS_ERR(dpi->regs)) {
 		ret = PTR_ERR(dpi->regs);
-		dev_err(dev, "Failed to ioremap mem resource: %d\n", ret);
+		DRM_ERROR("Failed to ioremap mem resource: %d\n", ret);
 		return ret;
 	}
 
 	dpi->engine_clk = devm_clk_get(dev, "engine");
 	if (IS_ERR(dpi->engine_clk)) {
 		ret = PTR_ERR(dpi->engine_clk);
-		dev_err(dev, "Failed to get engine clock: %d\n", ret);
+		DRM_ERROR("Failed to get engine clock: %d\n", ret);
 		return ret;
 	}
 
 	dpi->pixel_clk = devm_clk_get(dev, "pixel");
 	if (IS_ERR(dpi->pixel_clk)) {
 		ret = PTR_ERR(dpi->pixel_clk);
-		dev_err(dev, "Failed to get pixel clock: %d\n", ret);
+		DRM_ERROR("Failed to get pixel clock: %d\n", ret);
 		return ret;
 	}
 
 	dpi->tvd_clk = devm_clk_get(dev, "pll");
 	if (IS_ERR(dpi->tvd_clk)) {
 		ret = PTR_ERR(dpi->tvd_clk);
-		dev_err(dev, "Failed to get tvdpll clock: %d\n", ret);
+		DRM_ERROR("Failed to get tvdpll clock: %d\n", ret);
 		return ret;
+	}
+
+	dpi->mm_dpi = devm_clk_get(dev, "mm_dpi");
+	if (IS_ERR(dpi->mm_dpi)) {
+		ret = PTR_ERR(dpi->mm_dpi);
+		DRM_ERROR("Failed to get mm_dpi clock: %d\n", ret);
+	}
+
+	dpi->mm_disp_dpi = devm_clk_get(dev, "mm_disp_dpi");
+	if (IS_ERR(dpi->mm_disp_dpi)) {
+		ret = PTR_ERR(dpi->mm_disp_dpi);
+		DRM_ERROR("Failed to get mm_disp_dpi clock: %d\n", ret);
 	}
 
 	dpi->irq = platform_get_irq(pdev, 0);
 	if (dpi->irq <= 0) {
-		dev_err(dev, "Failed to get irq: %d\n", dpi->irq);
+		DRM_ERROR("Failed to get irq: %d\n", dpi->irq);
 		return -EINVAL;
 	}
 
-	ep = of_graph_get_next_endpoint(dev->of_node, NULL);
-	if (ep) {
-		bridge_node = of_graph_get_remote_port_parent(ep);
-		of_node_put(ep);
-	}
-	if (!bridge_node) {
-		dev_err(dev, "Failed to find bridge node\n");
-		return -ENODEV;
-	}
+	endpoint = of_graph_get_next_endpoint(dev->of_node, NULL);
+	if (endpoint) {
+		remote_node = of_graph_get_remote_port_parent(endpoint);
+		if (!remote_node) {
+			DRM_ERROR("No bridge or panel connected\n");
+			return -ENODEV;
+		}
 
-	dev_info(dev, "Found bridge node: %s\n", bridge_node->full_name);
-
-	dpi->encoder.bridge = of_drm_find_bridge(bridge_node);
-	of_node_put(bridge_node);
-	if (!dpi->encoder.bridge)
+		dpi->encoder.bridge = of_drm_find_bridge(remote_node);
+		dpi->panel = of_drm_find_panel(remote_node);
+		of_node_put(remote_node);
+		if (!dpi->encoder.bridge && !dpi->panel) {
+			DRM_ERROR("Waiting for bridge or panel driver\n");
 		return -EPROBE_DEFER;
+		}
+	}
 
 	comp_id = mtk_ddp_comp_get_id(dev->of_node, MTK_DPI);
 	if (comp_id < 0) {
-		dev_err(dev, "Failed to identify by alias: %d\n", comp_id);
+		DRM_ERROR("Failed to identify by alias: %d\n", comp_id);
 		return comp_id;
 	}
 
 	ret = mtk_ddp_comp_init(dev, dev->of_node, &dpi->ddp_comp, comp_id,
 				&mtk_dpi_funcs);
 	if (ret) {
-		dev_err(dev, "Failed to initialize component: %d\n", ret);
+		DRM_ERROR("Failed to initialize component: %d\n", ret);
 		return ret;
 	}
+
+	dpi->ddp_comp.regs = dpi->regs;
 
 	platform_set_drvdata(pdev, dpi);
 
 	ret = component_add(dev, &mtk_dpi_component_ops);
 	if (ret) {
-		dev_err(dev, "Failed to add component: %d\n", ret);
+		DRM_ERROR("Failed to add component: %d\n", ret);
 		return ret;
 	}
+
+	pm_runtime_enable(dev);
+
+	MTK_DRM_DEBUG(dev, " end\n");
 
 	return 0;
 }
@@ -750,14 +1020,10 @@ static int mtk_dpi_probe(struct platform_device *pdev)
 static int mtk_dpi_remove(struct platform_device *pdev)
 {
 	component_del(&pdev->dev, &mtk_dpi_component_ops);
+	pm_runtime_disable(&pdev->dev);
 
 	return 0;
 }
-
-static const struct of_device_id mtk_dpi_of_ids[] = {
-	{ .compatible = "mediatek,mt8173-dpi", },
-	{}
-};
 
 struct platform_driver mtk_dpi_driver = {
 	.probe = mtk_dpi_probe,
