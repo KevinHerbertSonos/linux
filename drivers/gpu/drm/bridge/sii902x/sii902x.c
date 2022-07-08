@@ -1122,6 +1122,7 @@ static int sii902x_probe(struct i2c_client *client,
 		return i2c_mux_add_adapter(sii902x->i2cmux, 0, 0, 0);
 
 	} else if (strcmp(client->name, "sii9022-cec") == 0) {
+		int offset;
 
 		cec = devm_kzalloc(dev, sizeof(*cec), GFP_KERNEL);
 		if (!cec)
@@ -1152,7 +1153,15 @@ static int sii902x_probe(struct i2c_client *client,
 		}
 		SiIRegioWrite(REG_CEC_INT_ENABLE_0, 0x27);
 		SiIRegioWrite(REG_CEC_INT_ENABLE_1, 0x0F);
-		SiIRegioWrite(CEC_OP_ABORT_31, CLEAR_BITS);
+
+		/* Disable HW transmit retries; Linux handles this */
+		SiIRegioWrite(REG_CEC_TRANSMIT_RETRY, CLEAR_BITS);
+
+		/* Zero out all auto-abort registers; application will handle this */
+		for (offset = 0; offset <= (CEC_OP_ABORT_31 - CEC_OP_ABORT_0); offset++) {
+			SiIRegioWrite(CEC_OP_ABORT_0 + offset, CLEAR_BITS);
+		}
+
 		//~ if (!SI_CpiSetLogicalAddr(0x50))
 			//~ DEBUG_PRINT(MSG_ALWAYS, ("\n Cannot init CPI/CEC"));
 #endif
