@@ -1021,6 +1021,7 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 	pr_info("%s\n", __func__);
 
 	p_spdif = (struct aml_spdif *)dev_get_drvdata(dev);
+	runtime->private_data = p_spdif;
 
 	snd_soc_set_runtime_hwparams(substream, &aml_spdif_hardware);
 
@@ -1030,6 +1031,7 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 			p_spdif->actrl,
 			aml_spdif_ddr_isr, substream, false);
 		if (p_spdif->fddr == NULL) {
+			runtime->private_data = NULL; /* Clear private data if registration fails. */
 			dev_err(dev, "failed to claim from ddr\n");
 			return -ENXIO;
 		}
@@ -1038,6 +1040,7 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 			p_spdif->actrl,
 			aml_spdif_ddr_isr, substream);
 		if (p_spdif->tddr == NULL) {
+			runtime->private_data = NULL; /* Clear private data if registration fails. */
 			dev_err(dev, "failed to claim to ddr\n");
 			return -ENXIO;
 		}
@@ -1046,6 +1049,7 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 				aml_spdifin_status_isr, 0, "irq_spdifin",
 				p_spdif);
 		if (ret) {
+			runtime->private_data = NULL; /* Clear private data if registration fails. */
 			dev_err(p_spdif->dev, "failed to claim irq_spdifin %u\n",
 						p_spdif->irq_spdifin);
 			return ret;
@@ -1053,8 +1057,6 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 		if (spdifin_check_audiotype_by_sw(p_spdif))
 			spdifin_audio_type_detect_init(p_spdif);
 	}
-
-	runtime->private_data = p_spdif;
 
 	return 0;
 }
