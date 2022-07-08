@@ -571,6 +571,11 @@ static int mt8518_afe_disable_spdif_in(struct mtk_base_afe *afe)
 	spin_lock_irqsave(&afe_priv->spdifin_ctrl_lock, flags);
 
 	regmap_update_bits(afe->regmap,
+			   AFE_SPDIFIN_INT_EXT2,
+			   AFE_SPDIFIN_INT_EXT2_LRCK_CHANGE_EN_MASK,
+			   0x0);
+
+	regmap_update_bits(afe->regmap,
 			   AFE_SPDIFIN_CFG0,
 			   AFE_SPDIFIN_CFG0_EN,
 			   0x0);
