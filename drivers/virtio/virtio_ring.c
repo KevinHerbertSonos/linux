@@ -715,6 +715,148 @@ void *virtqueue_get_buf(struct virtqueue *_vq, unsigned int *len)
 }
 EXPORT_SYMBOL_GPL(virtqueue_get_buf);
 
+#ifdef CONFIG_SONOS_RPMSG_SPI
+static uint16_t tx_vq_available_idx = 0;
+
+bool spi_rx_virtqueue_kick(struct virtqueue *_vq)
+{
+	struct vring_virtqueue *vq = to_vvq(_vq);
+
+	vq->num_added = 0;
+	return true;
+}
+
+void adjust_last_used_idx(struct virtqueue *_vq)
+{
+        struct vring_virtqueue *vq = to_vvq(_vq);
+	START_USE(vq);
+	vq->last_used_idx-- ;
+	END_USE(vq);
+}
+
+void update_last_used_idx(struct virtqueue *_vq)
+{
+        struct vring_virtqueue *vq = to_vvq(_vq);
+	START_USE(vq);
+	vq->last_used_idx++ ;
+	END_USE(vq);
+}
+
+static void *virtqueue_get_available_buffer(struct vring_virtqueue *vq,
+		uint16_t *avail_idx, uint32_t *len)
+{
+	uint16_t head_idx = 0;
+	void *buffer;
+
+	if (tx_vq_available_idx == vq->vring.avail->idx) {
+		return NULL;
+	}
+
+	head_idx = (uint16_t)(tx_vq_available_idx++ & (vq->vring.num - 1));
+	*avail_idx = vq->vring.avail->ring[head_idx];
+
+	buffer = vq->desc_state[*avail_idx].data;
+	*len = vq->vring.desc[*avail_idx].len;
+	return buffer;
+}
+
+void virtqueue_add_consumed_tx_buffer(struct virtqueue *_vq,
+		uint16_t head_idx, uint32_t len)
+{
+	struct vring_virtqueue *vq = to_vvq(_vq);
+	uint16_t used_idx;
+	struct vring_used_elem *used_desc;
+
+	used_idx = vq->vring.used->idx & (vq->vring.num - 1);
+	used_desc = &(vq->vring.used->ring[used_idx]);
+	used_desc->id  = head_idx;
+	used_desc->len = len;
+
+	vq->vring.used->idx++;
+}
+
+void *virtqueue_get_tx_buf_spi(struct virtqueue *_vq, uint16_t *avail_idx,
+		unsigned int *len)
+{
+	struct vring_virtqueue *vq = to_vvq(_vq);
+	void *ret;
+
+	START_USE(vq);
+
+	if (unlikely(vq->broken)) {
+		END_USE(vq);
+		return NULL;
+	}
+
+	ret = virtqueue_get_available_buffer(vq, avail_idx, len);
+
+	/* Only get used array entries after they have been exposed by host. */
+	virtio_rmb(vq->weak_barriers);
+
+	END_USE(vq);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(virtqueue_get_tx_buf_spi);
+
+static uint16_t rx_vq_available_idx = 0;
+
+void *virtqueue_get_rx_available_buffer(struct vring_virtqueue *vq,
+		uint16_t *avail_idx, uint32_t *len)
+{
+	uint16_t head_idx = 0;
+	void *buffer;
+
+	if (rx_vq_available_idx == vq->vring.avail->idx) {
+		return NULL;
+	}
+
+	head_idx = (uint16_t)(rx_vq_available_idx++ & (vq->vring.num - 1));
+	*avail_idx = vq->vring.avail->ring[head_idx];
+
+	buffer = vq->desc_state[*avail_idx].data;
+	*len = vq->vring.desc[*avail_idx].len;
+	return buffer;
+}
+
+void virtqueue_add_consumed_rx_buffer(struct virtqueue *_vq,
+		uint16_t head_idx, uint32_t len)
+{
+	struct vring_virtqueue *vq = to_vvq(_vq);
+	uint16_t used_idx;
+	struct vring_used_elem *used_desc;
+
+	used_idx = vq->vring.used->idx & (vq->vring.num - 1);
+	used_desc = &(vq->vring.used->ring[used_idx]);
+	used_desc->id  = head_idx;
+	used_desc->len = len;
+
+	vq->vring.used->idx++;
+}
+
+void *virtqueue_get_rx_buf_spi(struct virtqueue *_vq, uint16_t *avail_idx, unsigned int *len)
+{
+	struct vring_virtqueue *vq = to_vvq(_vq);
+	void *ret;
+
+	START_USE(vq);
+
+	if (unlikely(vq->broken)) {
+		END_USE(vq);
+		return NULL;
+	}
+
+	ret = virtqueue_get_rx_available_buffer(vq, avail_idx, len);
+
+	/* Only get used array entries after they have been exposed by host. */
+	virtio_rmb(vq->weak_barriers);
+
+	END_USE(vq);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(virtqueue_get_rx_buf_spi);
+
+#endif
+
 /**
  * virtqueue_disable_cb - disable callbacks
  * @vq: the struct virtqueue we're talking about.
