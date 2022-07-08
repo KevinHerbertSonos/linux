@@ -9676,12 +9676,20 @@ static void set_spdif_in_sample_rate_change_tolerance
 			   AFE_SPDIFIN_INT_EXT2_LRCK_CHANGE_EN_MASK,
 			   AFE_SPDIFIN_INT_EXT2_LRCK_CHANGE_EN);
 
+	regmap_update_bits(afe->regmap, AFE_MPHONE_MULTI_CON0,
+			   AFE_MPHONE_MULTI_CON0_EN,
+			   AFE_MPHONE_MULTI_CON0_EN);
+
 	return;
 
 INVALID_RATE:
 	regmap_update_bits(afe->regmap,
 			   AFE_SPDIFIN_INT_EXT2,
 			   AFE_SPDIFIN_INT_EXT2_LRCK_CHANGE_EN_MASK,
+			   0x0);
+
+	regmap_update_bits(afe->regmap, AFE_MPHONE_MULTI_CON0,
+			   AFE_MPHONE_MULTI_CON0_EN,
 			   0x0);
 }
 
