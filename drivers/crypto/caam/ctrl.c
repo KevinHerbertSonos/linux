@@ -21,6 +21,9 @@
 bool caam_little_end;
 EXPORT_SYMBOL(caam_little_end);
 
+uint32_t caam_moo;
+EXPORT_SYMBOL(caam_moo);
+
 /*
  * i.MX targets tend to have clock control subsystems that can
  * enable/disable clocking to our device.
@@ -624,6 +627,9 @@ static int caam_probe(struct platform_device *pdev)
 
 	caam_little_end = !(bool)(rd_reg32(&ctrl->perfmon.status) &
 				  (CSTA_PLEND | CSTA_ALT_PLEND));
+
+	caam_moo = rd_reg32(&ctrl->perfmon.status) & (CSTA_MOO_0 | CSTA_MOO_1);
+	caam_moo = caam_moo >> CSTA_MOO_SHIFT;
 
 	/* Finding the page size for using the CTPR_MS register */
 	comp_params = rd_reg32(&ctrl->perfmon.comp_parms_ms);
