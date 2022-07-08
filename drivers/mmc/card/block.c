@@ -3056,8 +3056,10 @@ static int mmc_blk_probe(struct mmc_card *card)
 		goto out;
 
 #ifdef CONFIG_AMLOGIC_MMC
+#ifndef CONFIG_SONOS /* FIXME: Temp Hack to boot Optimo. Will deal with later */
 	/* amlogic add emmc partitions ops */
 	aml_emmc_partition_ops(card, md->disk);
+#endif
 #endif
 
 	list_for_each_entry(part_md, &md->part, part) {
