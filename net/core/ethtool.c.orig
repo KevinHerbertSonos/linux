@@ -26,10 +26,6 @@
 #include <linux/rtnetlink.h>
 #include <linux/sched.h>
 #include <linux/net.h>
-#ifdef CONFIG_SONOS
-#include "mdp.h"
-extern struct manufacturing_data_page sys_mdp;
-#endif
 
 /*
  * Some useful ethtool_ops methods that're device independent.
@@ -1763,39 +1759,6 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	u32 ethcmd;
 	int rc;
 	netdev_features_t old_features;
-
-#ifdef CONFIG_SONOS
-    /* FIXME_HIDEOUT - Replace MDP model check with DTB check (SWPBL-88058) */
-	if (sys_mdp.mdp_model == MDP_MODEL_HIDEOUT) {
-		/* Hideout has 2 external Ethernet ports, but they are connected
-		   to an Ethernet switch chip instead of a PHY. A third internal
-		   Ethernet port connects the switch chip to a single FEC on the
-		   MT8521p. Thus Linux only sees one Ethernet port. This hack
-		   intercepts the ETHTOOL_GSET ioctl and gets the external
-		   port status from the MV88E6020 switch driver directly. */
-		extern void mv88e6020_sonos_get_port_status(unsigned int port, struct ethtool_cmd *cmd);
-		struct ethtool_cmd cmd = { .cmd = ETHTOOL_GSET };
-		int port;
-
-		if (copy_from_user(&ethcmd, useraddr, sizeof(ethcmd))) {
-			return -EFAULT;
-		}
-		if (ethcmd == ETHTOOL_GSET) {
-			if (strcmp("eth0", ifr->ifr_name) == 0)
-				port = 0;
-			else if (strcmp("eth1", ifr->ifr_name) == 0)
-				port = 1;
-			else
-				return -ENODEV;
-
-			mv88e6020_sonos_get_port_status(port, &cmd);
-
-			if (copy_to_user(useraddr, &cmd, sizeof(cmd)))
-				return -EFAULT;
-			return 0;
-		}
-	}
-#endif
 
 	if (!dev || !netif_device_present(dev))
 		return -ENODEV;
