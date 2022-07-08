@@ -190,10 +190,13 @@ static int dw_pcie_wr_own_conf(struct pcie_port *pp, int where, int size,
 	return dw_pcie_cfg_write(pp->dbi_base + where, size, val);
 }
 
-static void dw_pcie_prog_outbound_atu(struct pcie_port *pp, int index,
+void dw_pcie_prog_outbound_atu(struct pcie_port *pp, int index,
 		int type, u64 cpu_addr, u64 pci_addr, u32 size)
 {
 	u32 retries, val;
+
+	if (cpu_addr >= pp->mem_base)
+		cpu_addr = cpu_addr + pp->cpu_addr_offset;
 
 	if (pp->iatu_unroll_enabled) {
 		dw_pcie_writel_unroll(pp, index, PCIE_ATU_UNR_LOWER_BASE,
@@ -241,7 +244,7 @@ static void dw_pcie_prog_outbound_atu(struct pcie_port *pp, int index,
 		if (val == PCIE_ATU_ENABLE)
 			return;
 
-		usleep_range(LINK_WAIT_IATU_MIN, LINK_WAIT_IATU_MAX);
+		mdelay(LINK_WAIT_IATU_MAX/1000);
 	}
 	dev_err(pp->dev, "iATU is not being enabled\n");
 }
@@ -303,16 +306,36 @@ irqreturn_t dw_handle_msi_irq(struct pcie_port *pp)
 
 void dw_pcie_msi_init(struct pcie_port *pp)
 {
-	u64 msi_target;
+	dma_addr_t msi_addr;
 
-	pp->msi_data = __get_free_pages(GFP_KERNEL, 0);
-	msi_target = virt_to_phys((void *)pp->msi_data);
-
+	dma_alloc_coherent(pp->dev, 64, &msi_addr, GFP_KERNEL);
+	pp->msi_target = (u64)msi_addr;
 	/* program the msi_data */
 	dw_pcie_wr_own_conf(pp, PCIE_MSI_ADDR_LO, 4,
-			    (u32)(msi_target & 0xffffffff));
+			    (u32)(pp->msi_target & 0xffffffff));
 	dw_pcie_wr_own_conf(pp, PCIE_MSI_ADDR_HI, 4,
-			    (u32)(msi_target >> 32 & 0xffffffff));
+			    (u32)(pp->msi_target >> 32 & 0xffffffff));
+}
+
+void dw_pcie_msi_cfg_store(struct pcie_port *pp)
+{
+	int i;
+
+	for (i = 0; i < MAX_MSI_CTRLS; i++)
+		dw_pcie_rd_own_conf(pp, PCIE_MSI_INTR0_ENABLE + i * 12, 4,
+				&pp->msi_enable[i]);
+}
+
+void dw_pcie_msi_cfg_restore(struct pcie_port *pp)
+{
+	int i;
+
+	for (i = 0; i < MAX_MSI_CTRLS; i++) {
+		dw_pcie_wr_own_conf(pp, PCIE_MSI_ADDR_LO, 4, pp->msi_target);
+		dw_pcie_wr_own_conf(pp, PCIE_MSI_ADDR_HI, 4, 0);
+		dw_pcie_wr_own_conf(pp, PCIE_MSI_INTR0_ENABLE + i * 12, 4,
+				pp->msi_enable[i]);
+	}
 }
 
 static void dw_pcie_msi_clear_irq(struct pcie_port *pp, int irq)
@@ -401,15 +424,12 @@ no_valid_irq:
 static void dw_msi_setup_msg(struct pcie_port *pp, unsigned int irq, u32 pos)
 {
 	struct msi_msg msg;
-	u64 msi_target;
 
 	if (pp->ops->get_msi_addr)
-		msi_target = pp->ops->get_msi_addr(pp);
-	else
-		msi_target = virt_to_phys((void *)pp->msi_data);
+		pp->msi_target = pp->ops->get_msi_addr(pp);
 
-	msg.address_lo = (u32)(msi_target & 0xffffffff);
-	msg.address_hi = (u32)(msi_target >> 32 & 0xffffffff);
+	msg.address_lo = (u32)(pp->msi_target & 0xffffffff);
+	msg.address_hi = (u32)(pp->msi_target >> 32 & 0xffffffff);
 
 	if (pp->ops->get_msi_data)
 		msg.data = pp->ops->get_msi_data(pp, pos);
@@ -424,9 +444,6 @@ static int dw_msi_setup_irq(struct msi_controller *chip, struct pci_dev *pdev,
 {
 	int irq, pos;
 	struct pcie_port *pp = pdev->bus->sysdata;
-
-	if (desc->msi_attrib.is_msix)
-		return -EINVAL;
 
 	irq = assign_irq(1, desc, &pos);
 	if (irq < 0)
@@ -445,9 +462,20 @@ static int dw_msi_setup_irqs(struct msi_controller *chip, struct pci_dev *pdev,
 	struct msi_desc *desc;
 	struct pcie_port *pp = pdev->bus->sysdata;
 
-	/* MSI-X interrupts are not supported */
-	if (type == PCI_CAP_ID_MSIX)
-		return -EINVAL;
+	if (type == PCI_CAP_ID_MSIX) {
+		if ((MAX_MSI_IRQS - bitmap_weight(pp->msi_irq_in_use,
+						  MAX_MSI_IRQS)) < nvec)
+			return -ENOSPC;
+
+		for_each_pci_msi_entry(desc, pdev) {
+			int ret = dw_msi_setup_irq(chip, pdev, desc);
+
+			if (ret)
+				return ret;
+		}
+
+		return 0;
+	}
 
 	WARN_ON(!list_is_singular(&pdev->dev.msi_list));
 	desc = list_entry(pdev->dev.msi_list.next, struct msi_desc, list);
@@ -657,7 +685,15 @@ int dw_pcie_host_init(struct pcie_port *pp)
 	}
 
 	if (pp->ops->host_init)
+#ifdef CONFIG_PCI_IMX6
+	{
+		ret = pp->ops->host_init(pp);
+		if (ret < 0)
+			return ret;
+	}
+#else
 		pp->ops->host_init(pp);
+#endif
 
 	pp->root_bus_nr = pp->busn->start;
 	if (IS_ENABLED(CONFIG_PCI_MSI)) {
@@ -901,9 +937,11 @@ void dw_pcie_setup_rc(struct pcie_port *pp)
 		dev_dbg(pp->dev, "iATU unroll: %s\n",
 			pp->iatu_unroll_enabled ? "enabled" : "disabled");
 
-		dw_pcie_prog_outbound_atu(pp, PCIE_ATU_REGION_INDEX0,
-					  PCIE_ATU_TYPE_MEM, pp->mem_base,
-					  pp->mem_bus_addr, pp->mem_size);
+		if (!IS_ENABLED(CONFIG_EP_MODE_IN_EP_RC_SYS)
+			&& !IS_ENABLED(CONFIG_RC_MODE_IN_EP_RC_SYS))
+			dw_pcie_prog_outbound_atu(pp, PCIE_ATU_REGION_INDEX0,
+						  PCIE_ATU_TYPE_MEM, pp->mem_base,
+						  pp->mem_bus_addr, pp->mem_size);
 		if (pp->num_viewport > 2)
 			dw_pcie_prog_outbound_atu(pp, PCIE_ATU_REGION_INDEX2,
 						  PCIE_ATU_TYPE_IO, pp->io_base,

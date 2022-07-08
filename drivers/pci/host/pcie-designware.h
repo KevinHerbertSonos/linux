@@ -38,6 +38,7 @@ struct pcie_port {
 	u64			mem_base;
 	phys_addr_t		mem_bus_addr;
 	u32			mem_size;
+	int			cpu_addr_offset;
 	struct resource		*cfg;
 	struct resource		*io;
 	struct resource		*mem;
@@ -48,8 +49,9 @@ struct pcie_port {
 	struct pcie_host_ops	*ops;
 	int			msi_irq;
 	struct irq_domain	*irq_domain;
-	unsigned long		msi_data;
+	u64			msi_target;
 	u8			iatu_unroll_enabled;
+	unsigned int		msi_enable[MAX_MSI_CTRLS];
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
 };
 
@@ -63,7 +65,11 @@ struct pcie_host_ops {
 	int (*wr_other_conf)(struct pcie_port *pp, struct pci_bus *bus,
 			unsigned int devfn, int where, int size, u32 val);
 	int (*link_up)(struct pcie_port *pp);
+#ifdef CONFIG_PCI_IMX6
+	int (*host_init)(struct pcie_port *pp);
+#else
 	void (*host_init)(struct pcie_port *pp);
+#endif
 	void (*msi_set_irq)(struct pcie_port *pp, int irq);
 	void (*msi_clear_irq)(struct pcie_port *pp, int irq);
 	phys_addr_t (*get_msi_addr)(struct pcie_port *pp);
@@ -79,9 +85,13 @@ int dw_pcie_cfg_write(void __iomem *addr, int size, u32 val);
 irqreturn_t dw_handle_msi_irq(struct pcie_port *pp);
 void dw_pcie_msi_init(struct pcie_port *pp);
 int dw_pcie_wait_for_link(struct pcie_port *pp);
+void dw_pcie_msi_cfg_store(struct pcie_port *pp);
+void dw_pcie_msi_cfg_restore(struct pcie_port *pp);
 int dw_pcie_link_up(struct pcie_port *pp);
 void dw_pcie_setup_rc(struct pcie_port *pp);
 int dw_pcie_host_init(struct pcie_port *pp);
+void dw_pcie_prog_outbound_atu(struct pcie_port *pp, int index,
+		int type, u64 cpu_addr, u64 pci_addr, u32 size);
 
 #ifdef CONFIG_AMLOGIC_PCIE
 extern void mask_pcie_irq(void);
