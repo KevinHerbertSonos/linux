@@ -16,6 +16,9 @@
 #include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
+#include <linux/of_gpio.h>
+#include <linux/of_address.h>
+#include <linux/workqueue.h>
 
 #include "mtk_cec.h"
 
@@ -197,6 +200,7 @@ enum cec_tx_status {
 	CEC_TX_REMAIN_DATA,
 	CEC_TX_DONE,
 	CEC_TX_FAIL,
+	CEC_TX_ARBITRATION,
 };
 
 enum cec_rx_status {
@@ -212,6 +216,8 @@ struct cec_frame {
 	struct cec_msg *msg;
 	unsigned char offset;
 	unsigned char retry_count;
+	unsigned int arb_count;
+	bool arb_detect_enable;
 	union {
 		enum cec_tx_status tx_status;
 		enum cec_rx_status rx_status;
@@ -220,13 +226,17 @@ struct cec_frame {
 
 struct mtk_cec {
 	void __iomem *regs;
+	void __iomem *gpio_base;
 	struct clk *clk;
 	int irq;
 	bool hpd;
 	void (*hpd_event)(bool hpd, struct device *dev);
+	bool arb_fix;
 	bool hpd_event_handled;
 	struct device *hdmi_dev;
 	spinlock_t lock;
+	struct hrtimer htimer;
+	struct work_struct arb_lost_work;
 	struct cec_adapter *adap;
 	struct cec_frame transmitting;
 	struct cec_frame received;
@@ -574,6 +584,108 @@ static void mtk_cec_trigger_tx_hw(struct mtk_cec *cec)
 	mtk_cec_set_bits(cec, TX_EVENT, RB_RDY);
 }
 
+static char mtk_cec_line_level(struct mtk_cec *cec)
+{
+	return (readl(cec->gpio_base + 0x6a0) & (1 << 10)) ? 1 : 0;
+}
+
+static void mtk_cec_tx_arbitration_reinit(struct mtk_cec *cec)
+{
+	enum hrtimer_restart (*fn)(struct hrtimer *);
+
+	fn = cec->htimer.function;
+	hrtimer_cancel(&cec->htimer);
+	hrtimer_init(&cec->htimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	cec->htimer.function = fn;
+}
+
+static void mtk_cec_tx_arbitration_start(struct mtk_cec *cec)
+{
+	if (!cec->arb_fix)
+		return;
+
+	if (hrtimer_active(&cec->htimer))
+		mtk_cec_tx_arbitration_reinit(cec);
+
+	cec->transmitting.arb_count = 0;
+	cec->transmitting.arb_detect_enable = true;
+	hrtimer_start(&cec->htimer, ktime_set(0, 1000000), HRTIMER_MODE_REL);
+}
+
+static enum hrtimer_restart mtk_cec_tx_arbitration_detect(struct hrtimer *timer)
+{
+	unsigned int tx_fsm;
+	unsigned char cec_line;
+	struct mtk_cec *cec;
+	struct cec_frame *frame;
+
+	cec = (struct mtk_cec *)container_of(timer, struct mtk_cec, htimer);
+	if (!cec->arb_fix)
+		return HRTIMER_NORESTART;
+
+	frame = &cec->transmitting;
+	if (frame->status.tx_status == CEC_TX_ARBITRATION) {
+		/* Defer failure to workqueue (cec_transmit_done cannot be called from soft/hard int) */
+		dev_dbg(cec->hdmi_dev, "cec tx arb lost schedule (seq=%d)\n", frame->msg->sequence);
+		schedule_work(&cec->arb_lost_work);
+		return HRTIMER_NORESTART;
+	}
+
+	/* Timer was still pending when message cleared transmit */
+	if ((frame->arb_detect_enable == false) || (frame->msg == NULL)) {
+		return HRTIMER_NORESTART;
+	}
+
+	tx_fsm = mtk_cec_tx_hw_status(cec) & TX_FSM;
+	cec_line = mtk_cec_line_level(cec);
+
+	/* Message has not transmitted and the CEC line is low */
+	if ((tx_fsm == CEC_FSM_INIT) && (cec_line == 0)) {
+		mtk_cec_hw_reset(cec);
+		mtk_cec_clear_bits(cec, TX_EVENT, UN | LOWB | FAIL | RB_RDY);
+		frame->status.tx_status = CEC_TX_ARBITRATION;
+		frame->arb_detect_enable = false;
+		dev_dbg(cec->hdmi_dev, "cec tx arb detect (seq=%d count=%d)\n",
+			frame->msg->sequence, frame->arb_count);
+		/* delay to report to linux stack for retrying too quickly*/
+		hrtimer_forward_now(&cec->htimer, ktime_set(0, 15*1000000));
+		return HRTIMER_RESTART;
+	}
+
+	/* Still waiting to transmit */
+	if (((tx_fsm == CEC_FSM_IDLE) || (tx_fsm == CEC_FSM_INIT))
+		&& frame->arb_detect_enable && (frame->arb_count < 1500)) {
+		frame->arb_count++;
+		hrtimer_forward_now(&cec->htimer, ktime_set(0, 1000000));
+		return HRTIMER_RESTART;
+	}
+
+	/* Message is transmitting */
+	frame->arb_detect_enable = false;
+	if (frame->arb_count >= 1500) {
+		dev_dbg(cec->hdmi_dev, "cec tx arb timeout (seq=%d count=%d fsm=0x%08x io=%d)\n",
+			frame->msg->sequence, frame->arb_count, tx_fsm, cec_line);
+	}
+	else {
+		dev_dbg(cec->hdmi_dev, "cec tx arb success (seq=%d count=%d)\n",
+			frame->msg->sequence, frame->arb_count);
+	}
+	return HRTIMER_NORESTART;
+}
+
+static void mtk_cec_report_arb_lost_wq(struct work_struct *work)
+{
+	struct mtk_cec *cec;
+	struct cec_frame *frame;
+
+	cec = container_of(work, struct mtk_cec, arb_lost_work);
+	frame = &cec->transmitting;
+
+	dev_dbg(cec->hdmi_dev, "cec tx arb lost done (seq=%d)\n", frame->msg->sequence);
+	cec_transmit_done(cec->adap, CEC_TX_STATUS_ARB_LOST, 1, 0, 0, 0);
+	return;
+}
+
 /* Unused Function. The calls to this function are all commented out in this file.
  * Let's compile out the definition as well. */
 #if 0
@@ -676,6 +788,8 @@ static int mtk_cec_send_msg(struct mtk_cec *cec)
 
 		/* fill header */
 		mtk_cec_set_msg_header(cec, frame->msg);
+		dev_dbg(cec->hdmi_dev, "cec tx (seq=%d) %*phC\n",
+			frame->msg->sequence, frame->msg->len, frame->msg->msg);
 	}
 
 	/*Mark header/data eom according to the msg data size */
@@ -684,6 +798,9 @@ static int mtk_cec_send_msg(struct mtk_cec *cec)
 	mtk_cec_set_msg_data(cec, cec_data);
 
 	mtk_cec_trigger_tx_hw(cec);
+
+	if (cec->arb_fix && frame->status.tx_status == CEC_TX_START)
+		mtk_cec_tx_arbitration_start(cec);
 
 	return 0;
 }
@@ -826,6 +943,7 @@ static void mtk_cec_receive_msg(struct mtk_cec *cec)
 	if (rx_msg->status.rx_status == CEC_RX_COMPLETE_NEW_FRAME) {
 		cec_received_msg(cec->adap, rx_msg->msg);
 		mtk_cec_set_rx_status(rx_msg, CEC_RX_IDLE);
+		dev_dbg(cec->hdmi_dev, "cec rx %*phC\n", rx_msg->msg->len, rx_msg->msg->msg);
 	}
 }
 
@@ -862,10 +980,10 @@ static void mtk_cec_tx_event_handler(struct mtk_cec *cec, unsigned int tx_event)
 	if (tx_event & (FAIL | UN | LOWB)) {
 		// FAIL status means NACK or collision.  Only report if debugging.
 		if (tx_event & (LOWB | UN)) {
-			dev_err(cec->hdmi_dev, "cec transmit msg fail (%s)\n",
-				(tx_event & LOWB) ? "LOWB" : "UN");
+			dev_err(cec->hdmi_dev, "cec tx fail (%s seq=%d)\n",
+				(tx_event & LOWB) ? "LOWB" : "UN", cec->transmitting.msg->sequence);
 		} else {
-			dev_dbg(cec->hdmi_dev, "cec transmit msg fail (FAIL)\n");
+			dev_dbg(cec->hdmi_dev, "cec tx fail (FAIL seq=%d)\n", cec->transmitting.msg->sequence);
 		}
 		cec->transmitting.status.tx_status = CEC_TX_FAIL;
 		mtk_cec_hw_reset(cec);
@@ -881,7 +999,10 @@ static void mtk_cec_tx_event_handler(struct mtk_cec *cec, unsigned int tx_event)
 			mtk_cec_clear_bits(cec, TX_EVENT, I_EN_FAIL | I_EN_RB | I_EN_LOW | I_EN_UN | I_EN_BS);
 			mtk_cec_clear_bits(cec, TX_EVENT, UN | LOWB | FAIL | LOWB | BS | RB_RDY);
 			cec_transmit_done(cec->adap, CEC_TX_STATUS_OK, 0, 0, 0, 0);
-		}
+			dev_dbg(cec->hdmi_dev, "cec tx done (seq=%d)\n", cec->transmitting.msg->sequence);
+		} else
+			dev_dbg(cec->hdmi_dev, "cec tx BS (seq=%d off=%d len=%d)\n",
+				cec->transmitting.msg->sequence, cec->transmitting.offset, cec->transmitting.msg->len);
 		mtk_cec_clear_bits(cec, TX_EVENT, BS);
 	}
 
@@ -936,6 +1057,7 @@ static int mtk_cec_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct mtk_cec *cec;
 	struct resource *res;
+	struct device_node *gpio_np;
 	int ret;
 
 	cec = devm_kzalloc(dev, sizeof(*cec), GFP_KERNEL);
@@ -958,6 +1080,22 @@ static int mtk_cec_probe(struct platform_device *pdev)
 		ret = PTR_ERR(cec->clk);
 		dev_err(dev, "Failed to get cec clock: %d\n", ret);
 		return ret;
+	}
+
+	gpio_np = of_parse_phandle(dev->of_node, "gpio-base", 0);
+	if (!gpio_np) {
+		cec->arb_fix = false;
+		dev_info(dev, "gpio arbitration disabled\n");
+	} else {
+		cec->arb_fix = true;
+		cec->gpio_base = of_iomap(gpio_np, 0);
+		if (IS_ERR(cec->gpio_base))
+			return PTR_ERR(cec->gpio_base);
+
+		hrtimer_init(&cec->htimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+		cec->htimer.function = mtk_cec_tx_arbitration_detect;
+
+		INIT_WORK(&cec->arb_lost_work, mtk_cec_report_arb_lost_wq);
 	}
 
 	cec->irq = platform_get_irq(pdev, 0);
