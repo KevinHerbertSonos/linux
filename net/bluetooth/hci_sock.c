@@ -27,6 +27,7 @@
 #include <linux/export.h>
 #include <linux/utsname.h>
 #include <linux/sched.h>
+#include <linux/reboot.h>
 #include <asm/unaligned.h>
 
 #include <net/bluetooth/bluetooth.h>
@@ -42,6 +43,8 @@ static DEFINE_MUTEX(mgmt_chan_list_lock);
 static DEFINE_IDA(sock_cookie_ida);
 
 static atomic_t monitor_promisc = ATOMIC_INIT(0);
+
+static int hci_system_rebooting = 0;
 
 /* ----- HCI socket interface ----- */
 
@@ -1696,6 +1699,10 @@ static int hci_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 
 	BT_DBG("sock %p sk %p", sock, sk);
 
+	if (hci_system_rebooting) {
+		hci_sock_clear_flag(sk, HCI_UP);
+	}
+
 	if (msg->msg_flags & MSG_OOB)
 		return -EOPNOTSUPP;
 
@@ -2041,6 +2048,18 @@ static const struct net_proto_family hci_sock_family_ops = {
 	.create	= hci_sock_create,
 };
 
+static int hci_sock_reboot_event(struct notifier_block *this,
+				unsigned long event, void *ptr)
+{
+	hci_system_rebooting = 1;
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block hci_sock_reboot_notifier = {
+	.notifier_call = hci_sock_reboot_event,
+};
+
 int __init hci_sock_init(void)
 {
 	int err;
@@ -2063,6 +2082,8 @@ int __init hci_sock_init(void)
 		bt_sock_unregister(BTPROTO_HCI);
 		goto error;
 	}
+
+	err = register_reboot_notifier(&hci_sock_reboot_notifier);
 
 	BT_INFO("HCI socket layer initialized");
 
