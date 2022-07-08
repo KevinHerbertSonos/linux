@@ -439,6 +439,10 @@ static void mtk_nfc_disable_clk(struct mtk_nfc_clk *clk)
 
 static void mtk_nfc_clk_cpuidle(struct mtk_nfc *nfc, int gate)
 {
+#ifndef CONFIG_SONOS
+	/* nand clk on demand featuer is not synced with suspend/resume
+	 * FIXME later
+	 */
 	int ret;
 	struct clk *ecc_clk;
 	struct device *dev = nfc->dev;
@@ -462,6 +466,7 @@ static void mtk_nfc_clk_cpuidle(struct mtk_nfc *nfc, int gate)
 			mtk_nfc_disable_clk(&nfc->clk);
 		}
 	}
+#endif
 }
 
 static int mtk_nfc_send_command(struct mtk_nfc *nfc, u8 command)
