@@ -22,6 +22,7 @@
 
 #include "core.h"
 #include "bus.h"
+#include "quirks.h"
 #include "host.h"
 #include "sd.h"
 #include "sdio_bus.h"
@@ -29,10 +30,6 @@
 #include "sd_ops.h"
 #include "sdio_ops.h"
 #include "sdio_cis.h"
-
-#ifdef CONFIG_MMC_EMBEDDED_SDIO
-#include <linux/mmc/sdio_ids.h>
-#endif
 
 static int sdio_read_fbr(struct sdio_func *func)
 {
@@ -546,6 +543,15 @@ out:
 	return err;
 }
 
+static void mmc_sdio_resend_if_cond(struct mmc_host *host,
+				    struct mmc_card *card)
+{
+	sdio_reset(host);
+	mmc_go_idle(host);
+	mmc_send_if_cond(host, host->ocr_avail);
+	mmc_remove_card(card);
+}
+
 /*
  * Handle the detection and initialisation of a card.
  *
@@ -630,16 +636,17 @@ try_again:
 	 * to switch to 1.8V signaling level.  No 1.8v signalling if
 	 * UHS mode is not enabled to maintain compatibility and some
 	 * systems that claim 1.8v signalling in fact do not support
-	 * it.
+	 * it. Per SDIO spec v3, section 3.1.2, if the voltage is already
+	 * 1.8v, the card sets S18A to 0 in the R4 response. So it will
+	 * fails to check rocr & R4_18V_PRESENT,  but we still need to
+	 * try to init uhs card. sdio_read_cccr will take over this task
+	 * to make sure which speed mode should work.
 	 */
 	if (!powered_resume && (rocr & ocr & R4_18V_PRESENT)) {
 		err = mmc_set_signal_voltage(host, MMC_SIGNAL_VOLTAGE_180,
 					ocr_card);
 		if (err == -EAGAIN) {
-			sdio_reset(host);
-			mmc_go_idle(host);
-			mmc_send_if_cond(host, host->ocr_avail);
-			mmc_remove_card(card);
+			mmc_sdio_resend_if_cond(host, card);
 			retries--;
 			goto try_again;
 		} else if (err) {
@@ -709,11 +716,20 @@ try_again:
 	else {
 #endif
 		/*
-		 * Read the common registers.
+		 * Read the common registers. Note that we should try to
+		 * validate whether UHS would work or not.
 		 */
-		err = sdio_read_cccr(card,  ocr);
-		if (err)
-			goto remove;
+		err = sdio_read_cccr(card, ocr);
+		if (err) {
+			mmc_sdio_resend_if_cond(host, card);
+			if (ocr & R4_18V_PRESENT) {
+				/* Retry init sequence, but without R4_18V_PRESENT. */
+				retries = 0;
+				goto try_again;
+			} else {
+				goto remove;
+			}
+		}
 #ifdef CONFIG_MMC_EMBEDDED_SDIO
 	}
 #endif
@@ -743,7 +759,7 @@ try_again:
 		card = oldcard;
 	}
 	card->ocr = ocr_card;
-	mmc_fixup_device(card, NULL);
+	mmc_fixup_device(card, sdio_fixup_methods);
 
 	if (card->type == MMC_TYPE_SD_COMBO) {
 		err = mmc_sd_setup_card(host, card, oldcard != NULL);
@@ -824,8 +840,23 @@ static void mmc_sdio_remove(struct mmc_host *host)
 	}
 
 	mmc_remove_card(host->card);
+	/* clear rescan_entered in case force remove */
+	host->rescan_entered = 0;
 	host->card = NULL;
 }
+
+#ifdef CONFIG_MMC_SDHCI_ESDHC_IMX
+void mmc_sdio_force_remove(struct mmc_host *host)
+{
+	mmc_sdio_remove(host);
+
+	mmc_claim_host(host);
+	mmc_detach_bus(host);
+	mmc_power_off(host);
+	mmc_release_host(host);
+}
+EXPORT_SYMBOL_GPL(mmc_sdio_force_remove);
+#endif
 
 /*
  * Card detection - card is alive.
@@ -1257,7 +1288,7 @@ int sdio_reset_comm(struct mmc_card *card)
 	return 0;
 err:
 	printk("%s: Error resetting SDIO communications (%d)\n",
-	       mmc_hostname(host), err);
+		mmc_hostname(host), err);
 	mmc_release_host(host);
 	return err;
 }
