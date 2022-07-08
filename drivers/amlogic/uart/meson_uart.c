@@ -357,6 +357,11 @@ static void meson_uart_start_tx(struct uart_port *port)
 	unsigned int ch;
 	struct meson_uart_port *mup = to_meson_port(port);
 	unsigned long flags;
+	u32 val = readl(port->membase + AML_UART_CONTROL);
+
+	if ((val & AML_UART_TX_EN) == 0) {
+		return;
+	}
 
 	spin_lock_irqsave(&mup->wr_lock, flags);
 	while (!uart_circ_empty(xmit)) {
