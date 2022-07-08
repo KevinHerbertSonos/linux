@@ -24,6 +24,7 @@
 #include <linux/vmalloc.h>
 #include "ion.h"
 #include "ion_priv.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_CODEC_MM
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 
 struct ion_codec_mm_heap {
@@ -167,3 +168,4 @@ void ion_codec_mm_heap_destroy(struct ion_heap *heap)
 	kfree(codec_heap);
 	codec_heap = NULL;
 }
+#endif

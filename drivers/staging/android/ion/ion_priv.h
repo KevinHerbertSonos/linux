@@ -2,6 +2,7 @@
  * drivers/staging/android/ion/ion_priv.h
  *
  * Copyright (C) 2011 Google, Inc.
+ * Copyright (C) 2016 Freescale Semiconductor, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -387,6 +388,11 @@ void ion_chunk_heap_destroy(struct ion_heap *);
 struct ion_heap *ion_cma_heap_create(struct ion_platform_heap *);
 void ion_cma_heap_destroy(struct ion_heap *);
 
+#ifdef CONFIG_ION_UNMAPPED_HEAP
+struct ion_heap *ion_unmapped_heap_create(struct ion_platform_heap *pheap);
+void ion_unmapped_heap_destroy(struct ion_heap *heap);
+#endif
+
 /**
  * The codec_mm heap returns physical addresses, since 0 may be a valid
  * physical address, this is used to indicate allocation failed
@@ -481,6 +487,12 @@ struct ion_handle *ion_handle_get_by_id_nolock(struct ion_client *client,
 						int id);
 
 void ion_free_nolock(struct ion_client *client, struct ion_handle *handle);
+
+int ion_handle_put_wrap(struct ion_handle *handle);
+struct ion_handle *ion_handle_get_by_id_wrap(struct ion_client *client,
+                                              int id);
+struct device *ion_device_get_by_client(struct ion_client *client);
+
 
 int ion_handle_put_nolock(struct ion_handle *handle);
 
