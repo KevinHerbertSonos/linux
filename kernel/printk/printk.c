@@ -1200,6 +1200,8 @@ static size_t print_time(u64 ts, char *buf)
 	if (!buf)
 #ifdef CONFIG_AMLOGIC_MODIFY
 		return snprintf(NULL, 0, "[%5lu.000000@0] ", (unsigned long)ts);
+#elif defined(CONFIG_SMP) && defined(CONFIG_AMLOGIC_DRIVER)
+		return snprintf(NULL, 0, "[%5lu.000000@%d] ", (unsigned long)ts, current_cpu);
 #else
 		return snprintf(NULL, 0, "[%5lu.000000] ", (unsigned long)ts);
 #endif
