@@ -10179,6 +10179,15 @@ static int mt8518_afe_init_registers(struct mtk_base_afe *afe)
 		{MT8518_AFE_MEMIF_DL6, AFE_DL6_CON0},
 		{MT8518_AFE_MEMIF_DL7, AFE_DL7_CON0},
 		{MT8518_AFE_MEMIF_DL8, AFE_DL8_CON0},
+	}, ul_memif_regs[] = {
+		{MT8518_AFE_MEMIF_UL1, AFE_UL1_CON0},
+		{MT8518_AFE_MEMIF_UL2, AFE_UL2_CON0},
+		{MT8518_AFE_MEMIF_UL3, AFE_UL3_CON0},
+		{MT8518_AFE_MEMIF_UL4, AFE_UL4_CON0},
+		{MT8518_AFE_MEMIF_UL5, AFE_UL5_CON0},
+		{MT8518_AFE_MEMIF_UL8, AFE_UL8_CON0},
+		{MT8518_AFE_MEMIF_UL9, AFE_UL9_CON0},
+		{MT8518_AFE_MEMIF_UL10, AFE_UL10_CON0},
 	};
 
 	mt8518_afe_enable_main_clk(afe);
@@ -10194,6 +10203,20 @@ static int mt8518_afe_init_registers(struct mtk_base_afe *afe)
 			dl_memif_regs[i].pbuf_reg,
 			GENMASK(17, 16),
 			(0x3 - fe_data->pbuf_size_conf) << 16);
+	}
+
+	regmap_update_bits(afe->regmap,
+		AFE_MEMIF_BURST_CFG,
+		BIT(3),
+		(!afe_priv->ul_agent_burst_config_disable) << 3);
+
+	for (i = 0; i < ARRAY_SIZE(ul_memif_regs); i++) {
+		fe_data = &afe_priv->fe_data[ul_memif_regs[i].id];
+
+		regmap_update_bits(afe->regmap,
+			ul_memif_regs[i].pbuf_reg,
+			GENMASK(11, 8),
+			fe_data->pbuf_req_min_len << 8);
 	}
 
 	regmap_update_bits(afe->regmap, AFE_TDMOUT_CONN0, GENMASK(31, 0),
@@ -10871,6 +10894,9 @@ static int mt8518_afe_parse_of(struct mtk_base_afe *afe,
 		"mediatek,dmic-setup-time-us",
 		&priv->dmic_data.setup_time_us);
 
+	priv->ul_agent_burst_config_disable = of_property_read_bool(np,
+		"mediatek,ul-agent-burst-conf-disable");
+
 	for (i = 0; i < ARRAY_SIZE(of_fe_table); i++) {
 		bool valid_sram;
 		struct mt8518_fe_dai_data *fe_data;
@@ -10910,6 +10936,14 @@ static int mt8518_afe_parse_of(struct mtk_base_afe *afe,
 		ret = of_property_read_u32(np, prop, &temps[0]);
 		if ((ret == 0) && (temps[0] < PBUF_SIZE_CONF_NUM))
 			fe_data->pbuf_size_conf = temps[0];
+
+		snprintf(prop, sizeof(prop), "mediatek,%s-pbuf-req-min-len",
+			 of_fe_table[i].name);
+		ret = of_property_read_u32(np, prop, &temps[0]);
+		if ((ret == 0) && (temps[0] <= PBUF_AXI_REQ_MINLEN_MAX_NUM))
+			fe_data->pbuf_req_min_len = temps[0];
+		else
+			fe_data->pbuf_req_min_len = PBUF_AXI_REQ_MINLEN_DEFAULT;
 
 		snprintf(prop, sizeof(prop),
 			 "mediatek,%s-min-hw-irq-period-us",
