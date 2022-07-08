@@ -361,8 +361,8 @@ static struct snd_pcm_ops aml_tdm_ops = {
 	.mmap = aml_tdm_mmap,
 };
 
-#define PREALLOC_BUFFER		(32 * 1024)
-#define PREALLOC_BUFFER_MAX	(256 * 1024)
+#define PREALLOC_BUFFER		(512 * 1024)
+#define PREALLOC_BUFFER_MAX	(1024 * 1024)
 static int aml_tdm_new(struct snd_soc_pcm_runtime *rtd)
 {
 	return snd_pcm_lib_preallocate_pages_for_all(
@@ -1032,7 +1032,7 @@ static struct snd_soc_dai_driver aml_tdm_dai[] = {
 	.remove = aml_dai_tdm_remove,
 	.playback = {
 	      .channels_min = 1,
-	      .channels_max = 8,
+	      .channels_max = 32,
 	      .rates = AML_DAI_TDM_RATES,
 	      .formats = AML_DAI_TDM_FORMATS,
 	},
