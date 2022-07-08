@@ -27,6 +27,29 @@ struct addr_range {
 
 #undef DEBUG
 
+#ifdef DEBUG
+static void hexdump_debug(const char *what, void *addr, unsigned long len) {
+	unsigned long off;
+	unsigned long byte;
+	
+	printf("Hexdump of %s @ 0x%p len 0x%lx\n\r", what, addr, len);
+	
+	for (off = 0; off < len; off += 16) {
+		printf("%08lx:", off);
+		for (byte = 0; (byte < 16) && (off + byte < len); byte++) {
+			if ((byte & 1) == 0) {
+				printf(" ");
+			}
+			printf("%02x", ((unsigned char *)addr)[(off + byte)]);
+		}
+		printf("\n\r");
+	}
+}
+#else
+static void hexdump_debug(const char *what, void *addr, unsigned long len) {
+}
+#endif
+
 static struct addr_range prep_kernel(void)
 {
 	char elfheader[256];
@@ -144,6 +167,7 @@ static char cmdline[COMMAND_LINE_SIZE]
 
 static void prep_cmdline(void *chosen)
 {
+	hexdump_debug("Kernel command line", cmdline, COMMAND_LINE_SIZE);
 	if (cmdline[0] == '\0')
 		getprop(chosen, "bootargs", cmdline, COMMAND_LINE_SIZE-1);
 
@@ -184,6 +208,8 @@ void start(void)
 	printf("\n\rzImage starting: loaded at 0x%p (sp: 0x%p)\n\r",
 	       _start, get_sp());
 
+	hexdump_debug("Built in DTB", _dtb_start, _dtb_end - _dtb_start);
+	
 	/* Ensure that the device tree has a /chosen node */
 	chosen = finddevice("/chosen");
 	if (!chosen)
@@ -202,6 +228,9 @@ void start(void)
 	else
 		printf(" using OF tree (promptr=%p)\n\r", loader_info.promptr);
 
+	hexdump_debug("Decompressed kernel", vmlinux.addr, vmlinux.size);
+	hexdump_debug("Final DTB", ft_addr, 0x2000);
+	
 	if (console_ops.close)
 		console_ops.close();
 
