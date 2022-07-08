@@ -674,7 +674,7 @@ static unsigned int mt2701_calculate_factor(int clock)
 {
 	if (clock <= 64000)
 		return 16;
-	else if (clock <= 128000)
+	else if (clock <= 167000)
 		return 8;
 	else if (clock <= 256000)
 		return 4;
