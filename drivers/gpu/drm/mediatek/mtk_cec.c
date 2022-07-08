@@ -667,13 +667,15 @@ static int mtk_cec_send_msg(struct mtk_cec *cec)
 
 	/* mtk_cec_print_cec_frame(frame); */
 
-	if (!(mtk_cec_tx_hw_status(cec) & CEC_FSM_IDLE)
-	    || mtk_cec_tx_retry_max(cec))
-		mtk_cec_hw_reset(cec);
+	if (frame->status.tx_status == CEC_TX_START) {
+		/* reset if not idle or failed */
+		if (!(mtk_cec_tx_hw_status(cec) & CEC_FSM_IDLE)
+		    || mtk_cec_tx_retry_max(cec))
+			mtk_cec_hw_reset(cec);
 
-	/* fill header */
-	if (frame->status.tx_status == CEC_TX_START)
+		/* fill header */
 		mtk_cec_set_msg_header(cec, frame->msg);
+	}
 
 	/*Mark header/data eom according to the msg data size */
 	mtk_cec_mark_header_data_eom(cec, msg_data_size);

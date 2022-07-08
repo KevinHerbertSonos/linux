@@ -866,7 +866,13 @@ static void mtk_cec_tx_event_handler(struct mtk_cec *cec, unsigned int tx_event)
 	case LOWB:
 	case FAIL:
 	case UN:
-		dev_err(cec->hdmi_dev, "cec transmit msg fail\n");
+		// FAIL status means NACK or collision.  Only report if debugging.
+		if (tx_event & (LOWB | UN)) {
+			dev_err(cec->hdmi_dev, "cec transmit msg fail (%s)\n",
+				(tx_event & LOWB) ? "LOWB" : "UN");
+		} else {
+			dev_dbg(cec->hdmi_dev, "cec transmit msg fail (FAIL)\n");
+		}
 		cec->transmitting.status.tx_status = CEC_TX_FAIL;
 		mtk_cec_clear_bits(cec, TX_EVENT, UN | LOWB | FAIL | I_EN_FAIL | I_EN_BS);
 		mtk_cec_hw_reset(cec);
