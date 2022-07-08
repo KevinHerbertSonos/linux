@@ -200,6 +200,7 @@ int adv7533_parse_dt(struct device_node *np, struct adv7511 *adv)
 {
 	u32 num_lanes;
 	struct device_node *endpoint;
+	u32 sync_pol;
 
 	of_property_read_u32(np, "adi,dsi-lanes", &num_lanes);
 
@@ -227,6 +228,18 @@ int adv7533_parse_dt(struct device_node *np, struct adv7511 *adv)
 	/* TODO: Check if these need to be parsed by DT or not */
 	adv->rgb = true;
 	adv->embedded_sync = false;
+
+	if (of_property_read_u32(np, "adi,hsync-pol", &sync_pol)) {
+		adv->hsync_polarity = ADV7511_SYNC_POLARITY_PASSTHROUGH;
+	} else {
+		adv->hsync_polarity = sync_pol ? ADV7511_SYNC_POLARITY_HIGH : ADV7511_SYNC_POLARITY_LOW;
+	}
+
+	if (of_property_read_u32(np, "adi,vsync-pol", &sync_pol)) {
+		adv->vsync_polarity = ADV7511_SYNC_POLARITY_PASSTHROUGH;
+	} else {
+		adv->vsync_polarity = sync_pol ? ADV7511_SYNC_POLARITY_HIGH : ADV7511_SYNC_POLARITY_LOW;
+	}
 
 	return 0;
 }
