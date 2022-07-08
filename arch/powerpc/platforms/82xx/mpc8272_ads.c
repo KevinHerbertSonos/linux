@@ -133,14 +133,17 @@ static void __init init_ioports(void)
 
 static void __init mpc8272_ads_setup_arch(void)
 {
+#ifndef CONFIG_SONOS
 	struct device_node *np;
 	__be32 __iomem *bcsr;
+#endif
 
 	if (ppc_md.progress)
 		ppc_md.progress("mpc8272_ads_setup_arch()", 0);
 
 	cpm2_reset();
 
+#ifndef CONFIG_SONOS
 	np = of_find_compatible_node(NULL, NULL, "fsl,mpc8272ads-bcsr");
 	if (!np) {
 		printk(KERN_ERR "No bcsr in device tree\n");
@@ -171,6 +174,7 @@ static void __init mpc8272_ads_setup_arch(void)
 	clrbits32(&bcsr[3], BCSR3_USB_nEN);
 
 	iounmap(bcsr);
+#endif
 
 	init_ioports();
 	pq2_init_pci();

@@ -141,6 +141,16 @@ config PPC
 	select GENERIC_IRQ_SHOW
 	select GENERIC_IRQ_SHOW_LEVEL
 
+config SONOS
+	bool "Sonos features added"
+	default n
+	help
+	  This enables support for the Sonos features in the kernel.
+
+if SONOS
+source "arch/powerpc/Kconfig.sonos"
+endif
+
 config EARLY_PRINTK
 	bool
 	default y

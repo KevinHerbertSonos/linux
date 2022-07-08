@@ -615,6 +615,7 @@ void irq_set_default_host(struct irq_host *host)
 
 	irq_default_host = host;
 }
+EXPORT_SYMBOL_GPL(irq_set_default_host);
 
 void irq_set_virq_count(unsigned int count)
 {

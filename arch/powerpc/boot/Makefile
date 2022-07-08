@@ -33,6 +33,10 @@ ifeq ($(call cc-option-yn, -fstack-protector),y)
 BOOTCFLAGS	+= -fno-stack-protector
 endif
 
+ifdef CONFIG_SONOS
+BOOTCFLAGS	+= -DCONFIG_SONOS
+endif
+
 BOOTCFLAGS	+= -I$(obj) -I$(srctree)/$(obj)
 
 DTC_FLAGS	?= -p 1024
