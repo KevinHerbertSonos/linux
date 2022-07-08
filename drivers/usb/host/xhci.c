@@ -182,7 +182,7 @@ int xhci_reset(struct xhci_hcd *xhci)
 	 * Without this delay, the subsequent HC register access,
 	 * may result in a system hang very rarely.
 	 */
-	if (xhci->quirks & XHCI_INTEL_HOST)
+	if (xhci->quirks & (XHCI_INTEL_HOST | XHCI_CDNS_HOST))
 		udelay(1000);
 
 	ret = xhci_handshake(&xhci->op_regs->command,
@@ -232,6 +232,9 @@ static int xhci_free_msi(struct xhci_hcd *xhci)
 static int xhci_setup_msi(struct xhci_hcd *xhci)
 {
 	int ret;
+	/*
+	 * TODO:Check with MSI Soc for sysdev
+	 */
 	struct pci_dev  *pdev = to_pci_dev(xhci_to_hcd(xhci)->self.controller);
 
 	ret = pci_enable_msi(pdev);
@@ -258,7 +261,7 @@ static int xhci_setup_msi(struct xhci_hcd *xhci)
  */
 static void xhci_free_irq(struct xhci_hcd *xhci)
 {
-	struct pci_dev *pdev = to_pci_dev(xhci_to_hcd(xhci)->self.controller);
+	struct pci_dev *pdev = to_pci_dev(xhci_to_hcd(xhci)->self.sysdev);
 	int ret;
 
 	/* return if using legacy interrupt */
@@ -393,9 +396,10 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 		/* fall back to msi*/
 		ret = xhci_setup_msi(xhci);
 
-	if (!ret)
-		/* hcd->irq is 0, we have MSI */
+	if (!ret) {
+		hcd->msi_enabled = 1;
 		return 0;
+	}
 
 	if (!pdev->irq) {
 		xhci_err(xhci, "No msi-x/msi found and no IRQ in BIOS\n");
@@ -744,7 +748,7 @@ void xhci_shutdown(struct usb_hcd *hcd)
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 
 	if (xhci->quirks & XHCI_SPURIOUS_REBOOT)
-		usb_disable_xhci_ports(to_pci_dev(hcd->self.controller));
+		usb_disable_xhci_ports(to_pci_dev(hcd->self.sysdev));
 
 	spin_lock_irq(&xhci->lock);
 	xhci_halt(xhci);
@@ -1396,9 +1400,7 @@ int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flags)
 	unsigned int slot_id, ep_index;
 	struct urb_priv	*urb_priv;
 	int size, i;
-#ifdef CONFIG_AMLOGIC_USB
-	struct usb_ctrlrequest *setup;
-#endif
+
 	if (!urb || xhci_check_args(hcd, urb->dev, urb->ep,
 					true, true, __func__) <= 0)
 		return -EINVAL;
@@ -1464,28 +1466,6 @@ int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flags)
 		if (xhci->xhc_state & XHCI_STATE_DYING)
 			goto dying;
 
-#ifdef CONFIG_AMLOGIC_USB
-		setup = (struct usb_ctrlrequest *) urb->setup_packet;
-		if ((setup->bRequestType == 0x80) && (setup->bRequest == 0x06)
-			&& (setup->wValue == 0x0100)
-			&& (setup->wIndex != 0x0)) {
-			if ((((setup->wIndex)>>8) & 0xff) == 7) {
-				setup->wIndex = 0;
-				spin_unlock_irqrestore(&xhci->lock, flags);
-				ret = xhci_test_single_step(xhci,
-					GFP_ATOMIC, urb,
-					slot_id, ep_index, 1);
-				spin_lock_irqsave(&xhci->lock, flags);
-			} else if ((((setup->wIndex)>>8)&0xff) == 8) {
-				setup->wIndex = 0;
-				spin_unlock_irqrestore(&xhci->lock, flags);
-				ret = xhci_test_single_step(xhci,
-					GFP_ATOMIC, urb,
-					slot_id, ep_index, 2);
-				spin_lock_irqsave(&xhci->lock, flags);
-			}
-		} else
-#endif
 		ret = xhci_queue_ctrl_tx(xhci, GFP_ATOMIC, urb,
 				slot_id, ep_index);
 		if (ret)
@@ -3675,8 +3655,6 @@ void xhci_free_dev(struct usb_hcd *hcd, struct usb_device *udev)
 {
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 	struct xhci_virt_device *virt_dev;
-	unsigned long flags;
-	u32 state;
 	int i, ret;
 	struct xhci_command *command;
 
@@ -3715,33 +3693,55 @@ void xhci_free_dev(struct usb_hcd *hcd, struct usb_device *udev)
 		del_timer_sync(&virt_dev->eps[i].stop_cmd_timer);
 	}
 
-	spin_lock_irqsave(&xhci->lock, flags);
 
 	virt_dev->udev = NULL;
 
-	/* Don't disable the slot if the host controller is dead. */
-	state = readl(&xhci->op_regs->status);
-	if (state == 0xffffffff || (xhci->xhc_state & XHCI_STATE_DYING) ||
-			(xhci->xhc_state & XHCI_STATE_HALTED)) {
-		xhci_free_virt_device(xhci, udev->slot_id);
-		spin_unlock_irqrestore(&xhci->lock, flags);
-		kfree(command);
-		return;
-	}
-
-	if (xhci_queue_slot_control(xhci, command, TRB_DISABLE_SLOT,
-				    udev->slot_id)) {
-		spin_unlock_irqrestore(&xhci->lock, flags);
-		xhci_dbg(xhci, "FIXME: allocate a command ring segment\n");
-		return;
-	}
-	xhci_ring_cmd_db(xhci);
-	spin_unlock_irqrestore(&xhci->lock, flags);
+	xhci_disable_slot(xhci, command, udev->slot_id);
 
 	/*
 	 * Event command completion handler will free any data structures
 	 * associated with the slot.  XXX Can free sleep?
 	 */
+}
+
+int xhci_disable_slot(struct xhci_hcd *xhci, struct xhci_command *command,
+		      u32 slot_id)
+{
+	unsigned long flags;
+	u32 state;
+	int ret = 0;
+	struct xhci_virt_device *virt_dev;
+
+	virt_dev = xhci->devs[slot_id];
+	if (!virt_dev)
+		return -EINVAL;
+	if (!command)
+		command = xhci_alloc_command(xhci, false, false, GFP_KERNEL);
+	if (!command)
+		return -ENOMEM;
+
+	spin_lock_irqsave(&xhci->lock, flags);
+	/* Don't disable the slot if the host controller is dead. */
+	state = readl(&xhci->op_regs->status);
+	if (state == 0xffffffff || (xhci->xhc_state & XHCI_STATE_DYING) ||
+			(xhci->xhc_state & XHCI_STATE_HALTED)) {
+		xhci_free_virt_device(xhci, slot_id);
+		spin_unlock_irqrestore(&xhci->lock, flags);
+		kfree(command);
+		return ret;
+	}
+
+	ret =  xhci_queue_slot_control(xhci, command, TRB_DISABLE_SLOT,
+				       slot_id);
+	if (ret) {
+		spin_unlock_irqrestore(&xhci->lock, flags);
+		xhci_dbg(xhci, "FIXME: allocate a command ring segment\n");
+		return ret;
+	}
+	xhci_ring_cmd_db(xhci);
+	spin_unlock_irqrestore(&xhci->lock, flags);
+
+	return ret;
 }
 
 /*
@@ -3849,14 +3849,10 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 
 disable_slot:
 	/* Disable slot, if we can do it without mem alloc */
-	spin_lock_irqsave(&xhci->lock, flags);
+	kfree(command->completion);
 	command->completion = NULL;
 	command->status = 0;
-	if (!xhci_queue_slot_control(xhci, command, TRB_DISABLE_SLOT,
-				     udev->slot_id))
-		xhci_ring_cmd_db(xhci);
-	spin_unlock_irqrestore(&xhci->lock, flags);
-	return 0;
+	return xhci_disable_slot(xhci, command, udev->slot_id);
 }
 
 /*
@@ -4950,7 +4946,11 @@ int xhci_get_frame(struct usb_hcd *hcd)
 int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 {
 	struct xhci_hcd		*xhci;
-	struct device		*dev = hcd->self.controller;
+	/*
+	 * TODO: Check with DWC3 clients for sysdev according to
+	 * quirks
+	 */
+	struct device		*dev = hcd->self.sysdev;
 	int			retval;
 
 	/* Accept arbitrarily long scatter-gather lists */
@@ -5131,6 +5131,7 @@ static const struct hc_driver xhci_hc_driver = {
 	.enable_usb3_lpm_timeout =	xhci_enable_usb3_lpm_timeout,
 	.disable_usb3_lpm_timeout =	xhci_disable_usb3_lpm_timeout,
 	.find_raw_port_number =	xhci_find_raw_port_number,
+	.submit_single_step_set_feature	= xhci_submit_single_step_set_feature,
 };
 
 void xhci_init_driver(struct hc_driver *drv,
