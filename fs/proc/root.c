@@ -144,6 +144,12 @@ void __init proc_root_init(void)
 #endif
 	proc_tty_init();
 	proc_mkdir("bus", NULL);
+#ifdef CONFIG_SONOS
+	proc_mkdir("sonos-lock", NULL);
+#endif
+#ifdef CONFIG_SONOS_USES_DM_VERITY
+	proc_mkdir("sonos-dmverity", NULL);
+#endif
 	proc_sys_init();
 }
 
