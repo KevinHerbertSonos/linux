@@ -287,8 +287,8 @@ int cec_register_adapter(struct cec_adapter *adap,
 	adap->devnode.dev.parent = parent;
 
 #if IS_REACHABLE(CONFIG_RC_CORE)
-	adap->rc->dev.parent = parent;
 	if (adap->capabilities & CEC_CAP_RC) {
+		adap->rc->dev.parent = parent;
 		res = rc_register_device(adap->rc);
 
 		if (res) {
@@ -339,9 +339,11 @@ void cec_unregister_adapter(struct cec_adapter *adap)
 		return;
 
 #if IS_REACHABLE(CONFIG_RC_CORE)
-	/* Note: rc_unregister also calls rc_free */
-	rc_unregister_device(adap->rc);
-	adap->rc = NULL;
+	if (adap->capabilities & CEC_CAP_RC) {
+		/* Note: rc_unregister also calls rc_free */
+		rc_unregister_device(adap->rc);
+		adap->rc = NULL;
+	}
 #endif
 	debugfs_remove_recursive(adap->cec_dir);
 	cec_devnode_unregister(&adap->devnode);
