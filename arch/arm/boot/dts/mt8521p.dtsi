@@ -786,7 +786,7 @@
 			      "clk_univpll";
 	};
 
-	mediatek,dummy_codec {
+	mediatek,dummy_codec: mtk_dummy_codec {
 		compatible = "mediatek,dummy-codec";
 	};
 	mediatek,mt8521p_audio {

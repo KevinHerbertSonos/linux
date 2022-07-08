@@ -129,24 +129,6 @@ static struct snd_soc_dai_link demo_dai_links[] = {
 		.codec_name = "dummy-codec",
 	},
 	{
-		.name = "demo-lowpower-audio1",
-		.stream_name = "lowpower-audio1",
-		.platform_name = "mt8590-lp-audio",
-		.cpu_dai_name = "mt8590-i2s1",
-		.codec_dai_name = "dummy-codec-i2s",
-		.codec_name = "dummy-codec",
-		.ops = &stream_pcm_master_data_rate_ops
-	},
-	{
-		.name = "demo-lowpower-audio2",
-		.stream_name = "lowpower-audio2",
-		.platform_name = "mt8590-lp-audio",
-		.cpu_dai_name = "mt8590-i2s2",
-		.codec_dai_name = "dummy-codec-i2s",
-		.codec_name = "dummy-codec",
-		.ops = &stream_pcm_master_data_rate_ops
-	},
-	{
 		.name = "demo-pcm-out-multich",
 		.stream_name = "pcm-out-multich",
 		.platform_name = "mt8521p-audio",

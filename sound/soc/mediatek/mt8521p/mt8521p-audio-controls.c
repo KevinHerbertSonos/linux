@@ -126,7 +126,7 @@ static int spdif_rx_put(struct snd_kcontrol *kcontrol,
 	if (port == SPDIFRX_PORT_NONE)
 		afe_spdifrx_stop();
 	else
-		afe_spdifrx_start(port, spdif_rx_ctl_notify);
+		afe_spdifrx_start(port, (afe_spdifrx_callback)spdif_rx_ctl_notify);
 	return 0;
 }
 

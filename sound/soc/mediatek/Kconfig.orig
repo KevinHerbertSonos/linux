@@ -87,7 +87,6 @@ config SND_SOC_MT8173_RT5650_RT5676
 
 config MT_SND_SOC_8521P
 	tristate "ASoc support for MT8521P"
-	select SND_SOC_MEDIATEK
 	help
 	  This adds ASoC platform driver support for MT8521P chip
           that can be used with other codecs.

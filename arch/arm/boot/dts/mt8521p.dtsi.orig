@@ -730,7 +730,10 @@
 			 <&topckgen CLK_TOP_UNIVPLL2_D2>,
 			 <&topckgen CLK_TOP_SYSPLL_D5>,
 			 <&topckgen CLK_TOP_UNIVPLL_D2>,
-			 <&topckgen CLK_TOP_INTDIR_SEL>;
+			 <&topckgen CLK_TOP_INTDIR_SEL>,
+			 <&topckgen CLK_TOP_CMSYS_SEL>,
+			 <&pericfg  CLK_PERI_AP_DMA>,
+			 <&apmixedsys CLK_APMIXED_UNIVPLL>;
 
 		clock-names = "infra_sys_audio_clk",
 			      "top_audio_mux1_sel",
@@ -777,17 +780,21 @@
 			      "top_univpll2_d2",
 			      "top_syspll_d5",
 			      "top_univpll_d2",
-			      "top_intdir_sel";
+			      "top_intdir_sel",
+			      "top_cmsys_sel",
+			      "clk_apdma",
+			      "clk_univpll";
 	};
 
 	mediatek,dummy_codec {
 		compatible = "mediatek,dummy-codec";
 	};
-
 	mediatek,mt8521p_audio {
 		compatible = "mediatek,mt8521p-audio";
 	};
-
+	mediatek,mt8521p_lp_audio {
+		compatible = "mediatek,mt8521p-lp-audio";
+	};
 	mediatek,mt8521p_dai {
 		compatible = "mediatek,mt8521p-dai";
 	};
@@ -891,6 +898,7 @@
 		compatible = "mediatek,mt2701-hifsys", "syscon";
 		reg = <0 0x1a000000 0 0x1000>;
 		#clock-cells = <1>;
+		#reset-cells = <1>;
 	};
 
 	larb1: larb@16010000 {
@@ -904,43 +912,104 @@
 		power-domains = <&scpsys MT2701_POWER_DOMAIN_VDEC>;
 	};
 
-	pcie: pcie@1a140000 {
-		compatible = "mediatek,mt2701-pcie";
-		reg = <0 0x1a000000 0 0x1000>,  /* HIF SYSCTL registers */
-		      <0 0x1a140000 0 0x10000>, /* PCI-Express registers */
-		      <0 0x1a240000 0 0x10000>; /* USB registers  */
-		interrupts = <GIC_SPI 193 IRQ_TYPE_LEVEL_LOW>,
-			     <GIC_SPI 194 IRQ_TYPE_LEVEL_LOW>,
-			     <GIC_SPI 195 IRQ_TYPE_LEVEL_LOW>;
-		clocks = <&topckgen CLK_TOP_ETHIF_SEL>;
-		clock-names = "pcie";
-		power-domains = <&scpsys MT2701_POWER_DOMAIN_HIF>;
-		status = "disabled";
-
-		bus-range = <0x00 0xff>;
+	pcie: pcie-controller@1a140000 {
+		compatible = "mediatek,mt8521p-pcie";
+		device_type = "pci";
+		reg = <0 0x1a140000 0 0x1000>, /* PCIe shared registers */
+		      <0 0x1a142000 0 0x1000>, /* Port0 registers */
+		      <0 0x1a143000 0 0x1000>, /* Port1 registers */
+		      <0 0x1a144000 0 0x1000>; /* Port2 registers */
 		#address-cells = <3>;
 		#size-cells = <2>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0xf800 0 0 0>;
+		interrupt-map = <0x0000 0 0 0 &sysirq GIC_SPI 193 IRQ_TYPE_LEVEL_LOW>,
+				<0x0800 0 0 0 &sysirq GIC_SPI 194 IRQ_TYPE_LEVEL_LOW>,
+				<0x1000 0 0 0 &sysirq GIC_SPI 195 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&topckgen CLK_TOP_ETHIF_SEL>,
+			 <&hifsys CLK_HIFSYS_PCIE0>,
+			 <&hifsys CLK_HIFSYS_PCIE1>,
+			 <&hifsys CLK_HIFSYS_PCIE2>;
+		clock-names = "free_ck", "sys_ck0", "sys_ck1", "sys_ck2";
+		resets = <&hifsys MT2701_HIFSYS_PCIE0_RST>,
+			 <&hifsys MT2701_HIFSYS_PCIE1_RST>,
+			 <&hifsys MT2701_HIFSYS_PCIE2_RST>;
+		reset-names = "pcie-rst0", "pcie-rst1", "pcie-rst2";
+		phys = <&pcie0_phy>, <&pcie1_phy>, <&pcie2_phy>;
+		phy-names = "pcie-phy0", "pcie-phy1", "pcie-phy2";
+		power-domains = <&scpsys MT2701_POWER_DOMAIN_HIF>;
+		bus-range = <0x00 0xff>;
+		status = "disabled";
+		ranges = <0x81000000 0 0x1a160000 0 0x1a160000 0 0x00010000	/* I/O space */
+			  0x83000000 0 0x60000000 0 0x60000000 0 0x10000000>;	/* memory space */
 
-		ranges = <0x81000000 0 0x1a160000 0 0x1a160000 0 0x00010000 /* io space */
-			  0x83000000 0 0x60000000 0 0x60000000 0 0x10000000>; /* pci memory */
+		pcie@0,0 {
+			device_type = "pci";
+			reg = <0x0000 0 0 0 0>;
+			#address-cells = <3>;
+			#size-cells = <2>;
+			#interrupt-cells = <1>;
+			interrupt-map-mask = <0 0 0 0>;
+			interrupt-map = <0 0 0 0 &sysirq GIC_SPI 193 IRQ_TYPE_LEVEL_LOW>;
+			ranges;
+			num-lanes = <1>;
+			status = "disabled";
+		};
 
 		pcie@1,0 {
 			device_type = "pci";
 			reg = <0x0800 0 0 0 0>;
-
 			#address-cells = <3>;
 			#size-cells = <2>;
+			#interrupt-cells = <1>;
+			interrupt-map-mask = <0 0 0 0>;
+			interrupt-map = <0 0 0 0 &sysirq GIC_SPI 194 IRQ_TYPE_LEVEL_LOW>;
 			ranges;
+			num-lanes = <1>;
+			status = "disabled";
 		};
 
-		pcie@2,0{
+		pcie@2,0 {
 			device_type = "pci";
 			reg = <0x1000 0 0 0 0>;
-
 			#address-cells = <3>;
 			#size-cells = <2>;
+			#interrupt-cells = <1>;
+			interrupt-map-mask = <0 0 0 0>;
+			interrupt-map = <0 0 0 0 &sysirq GIC_SPI 195 IRQ_TYPE_LEVEL_LOW>;
 			ranges;
+			num-lanes = <1>;
+			status = "disabled";
 		};
+	};
+
+	pcie0_phy: pcie-phy@1a149000 {
+		compatible = "mediatek,mt7623-pcie-phy";
+		reg = <0 0x1a149000 0 0x1000>;
+		clocks = <&clk26m>;
+		clock-names = "pciephya_ref";
+		#phy-cells = <0>;
+		status = "disabled";
+	};
+
+	pcie1_phy: pcie-phy@1a14a000 {
+		compatible = "mediatek,mt7623-pcie-phy";
+		reg = <0 0x1a14a000 0 0x1000>;
+		clocks = <&clk26m>;
+		clock-names = "pciephya_ref";
+		#phy-cells = <0>;
+		status = "disabled";
+	};
+
+	pcie2_phy: pcie-phy@1a244000 {
+		compatible = "mediatek,mt7623-pcie-phy";
+		reg = <0 0x1a244000 0 0x1000>;
+		clocks = <&clk26m>;
+		clock-names = "pciephya_ref";
+		#phy-cells = <0>;
+
+		mediatek,phy-switch = <&hifsys>;
+		status = "disabled";
 	};
 
 	usb1: usb@1a1c0000 {
