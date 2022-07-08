@@ -396,8 +396,15 @@ struct bufdesc_ex {
 #define FEC_ITR_EN		(0x1 << 31)
 #define FEC_ITR_ICFT(X)		(((X) & 0xff) << 20)
 #define FEC_ITR_ICTT(X)		((X) & 0xffff)
+#ifdef CONFIG_SONOS
+#define FEC_ITR_ICFT_TX_DEFAULT	200  /* Set 200 frame count threshold */
+#define FEC_ITR_ICTT_TX_DEFAULT	1000 /* Set 1000us timer threshold */
+#define FEC_ITR_ICFT_RX_DEFAULT	0    /* SONOS - disable by default */
+#define FEC_ITR_ICTT_RX_DEFAULT	0    /* SONOS - disable by default */
+#else
 #define FEC_ITR_ICFT_DEFAULT	200  /* Set 200 frame count threshold */
 #define FEC_ITR_ICTT_DEFAULT	1000 /* Set 1000us timer threshold */
+#endif
 
 #define FEC_VLAN_TAG_LEN	0x04
 #define FEC_ETHTYPE_LEN		0x02
