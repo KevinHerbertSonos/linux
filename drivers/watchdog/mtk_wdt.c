@@ -205,6 +205,11 @@ static int mtk_reset_handler(struct notifier_block *this, unsigned long mode,
 	reg |= WDT_MODE_KEY;
 	iowrite32(reg, wdt_base + WDT_MODE);
 
+#ifdef CONFIG_SONOS
+	/* FIXME MTK recommends to add delay here to debug the reboot issue */
+	udelay(100);
+#endif
+
 	if (cmd && !strcmp(cmd, "rpmbpk")) {
 		iowrite32(ioread32(wdt_base + WDT_NONRST_REG2) | (1 << 0), wdt_base + WDT_NONRST_REG2);
 	} else if (cmd && !strcmp(cmd, "recovery")) {
@@ -221,6 +226,13 @@ static int mtk_reset_handler(struct notifier_block *this, unsigned long mode,
 
 	if (!arm_pm_restart) {
 		while (1) {
+#ifdef CONFIG_SONOS
+			/* FIXME MTK suspect that when the counter of watchdog
+			 * is zero and watchdog is disabled, the sw reset
+			 * will fail. force to reload the counter
+			 */
+			iowrite32(WDT_RST_RELOAD, wdt_base + WDT_RST);
+#endif
 			writel(WDT_SWRST_KEY, wdt_base + WDT_SWRST);
 			mdelay(5);
 		}
