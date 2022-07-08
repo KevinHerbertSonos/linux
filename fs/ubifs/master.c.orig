@@ -314,24 +314,12 @@ int ubifs_read_master(struct ubifs_info *c)
 		/* The file system has been resized */
 		int growth = c->leb_cnt - old_leb_cnt;
 
-#if defined(CONFIG_SONOS)
-		if (((c->leb_cnt < old_leb_cnt) && !sonos_force_downsize) ||
-		    (c->leb_cnt != resize_blocks) ||
-		    c->leb_cnt < UBIFS_MIN_LEB_CNT) {
-#else
 		if (c->leb_cnt < old_leb_cnt ||
 		    c->leb_cnt < UBIFS_MIN_LEB_CNT) {
-#endif
 			ubifs_err(c, "bad leb_cnt on master node");
 			ubifs_dump_node(c, c->mst_node);
 			return -EINVAL;
-#if defined(CONFIG_SONOS)
-		} else {
-			ubifs_msg(c, "resizing leb_cnt on master node from %d to %d", old_leb_cnt, c->leb_cnt);
 		}
-#else
-		}
-#endif
 
 		dbg_mnt("Auto resizing (master) from %d LEBs to %d LEBs",
 			old_leb_cnt, c->leb_cnt);

@@ -1819,4 +1819,19 @@ int ubifs_decompress(const struct ubifs_info *c, const void *buf, int len,
 #include "misc.h"
 #include "key.h"
 
+#if defined(CONFIG_SONOS)
+/**
+ * We may need to resize the ubifs file system for jffs if the underlying
+ * ubi volume has changed in size.  If that happens, the mount command
+ * will be invoked with a -o sonos_resize=xxx, where xxx is a decimal
+ * number of blocks to expand the filesystem to.  The sonos_force_downsize
+ * flag overrides the implied downsize prevention, as that's a risky operation.
+ * We will NEVER downsize in the field, but for testing purposes, we need
+ * to be able to go up AND down on test units.
+ */
+extern int resize_blocks;
+extern bool sonos_force_downsize;
+#endif
+
+
 #endif /* !__UBIFS_H__ */
