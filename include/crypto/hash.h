@@ -872,4 +872,10 @@ int crypto_shash_final(struct shash_desc *desc, u8 *out);
 int crypto_shash_finup(struct shash_desc *desc, const u8 *data,
 		       unsigned int len, u8 *out);
 
+static inline void shash_desc_zero(struct shash_desc *desc)
+{
+	memzero_explicit(desc,
+			 sizeof(*desc) + crypto_shash_descsize(desc->tfm));
+}
+
 #endif	/* _CRYPTO_HASH_H */
