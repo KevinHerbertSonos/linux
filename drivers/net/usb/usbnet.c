@@ -46,6 +46,10 @@
 #include <linux/kernel.h>
 #include <linux/pm_runtime.h>
 
+#ifdef CONFIG_SONOS
+#include "mdp.h"
+#endif
+
 #define DRIVER_VERSION		"22-Aug-2005"
 
 
@@ -1707,6 +1711,13 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 		status = info->bind (dev, udev);
 		if (status < 0)
 			goto out1;
+
+#ifdef CONFIG_SONOS
+		/* Whatever USB dongle attached used its own MAC as the HWaddr,
+		 * but we need the mdp serial number.  Fix it here...
+		 */
+		memcpy(dev->net->dev_addr, sys_mdp.mdp_serial, ETH_ALEN);
+#endif
 
 		// heuristic:  "usb%d" for links we know are two-host,
 		// else "eth%d" when there's reasonable doubt.  userspace
