@@ -405,6 +405,8 @@ static void mtk_dpi_power_off(struct mtk_dpi *dpi, enum mtk_dpi_power_ctl pctl)
 	if (!dpi->power_sta)
 		return;
 
+	DRM_DEBUG_DRIVER("pctl %d\n", pctl);
+
 	mtk_dpi_disable(dpi);
 	clk_disable_unprepare(dpi->pixel_clk);
 	clk_disable_unprepare(dpi->engine_clk);
@@ -426,6 +428,7 @@ static int mtk_dpi_power_on(struct mtk_dpi *dpi, enum mtk_dpi_power_ctl pctl)
 	if (dpi->power_sta)
 		return 0;
 
+	DRM_DEBUG_DRIVER("pctl %d\n", pctl);
 	if (dpi->mm_dpi) {
 		ret = clk_prepare_enable(dpi->mm_dpi);
 		if (ret) {

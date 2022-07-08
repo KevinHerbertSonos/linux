@@ -109,6 +109,18 @@ static inline void mtk_ddp_comp_config(struct mtk_ddp_comp *comp,
 		comp->funcs->config(comp, w, h, vrefresh, bpc);
 }
 
+static inline void mtk_ddp_comp_prepare(struct mtk_ddp_comp *comp)
+{
+	if (comp->funcs && comp->funcs->prepare)
+		comp->funcs->prepare(comp);
+}
+
+static inline void mtk_ddp_comp_unprepare(struct mtk_ddp_comp *comp)
+{
+	if (comp->funcs && comp->funcs->unprepare)
+		comp->funcs->unprepare(comp);
+}
+
 static inline void mtk_ddp_comp_start(struct mtk_ddp_comp *comp)
 {
 	if (comp->funcs && comp->funcs->start)
