@@ -1944,6 +1944,17 @@ static void mtk_get_ethtool_stats(struct net_device *dev,
 	} while (u64_stats_fetch_retry_irq(&hwstats->syncp, start));
 }
 
+#ifdef CONFIG_SONOS
+/* Disable GRO so that packets won't be merged by the kernel before
+ * they are handed to the bridge.
+ */
+static netdev_features_t mtk_fix_features(struct net_device *netdev,
+					  netdev_features_t features)
+{
+	return (features & ~NETIF_F_GRO);
+}
+#endif
+
 static struct ethtool_ops mtk_ethtool_ops = {
 	.get_settings		= mtk_get_settings,
 	.set_settings		= mtk_set_settings,
@@ -1971,6 +1982,9 @@ static const struct net_device_ops mtk_netdev_ops = {
 	.ndo_get_stats64        = mtk_get_stats64,
 #ifdef CONFIG_NET_POLL_CONTROLLER
 	.ndo_poll_controller	= mtk_poll_controller,
+#endif
+#ifdef CONFIG_SONOS
+	.ndo_fix_features	= mtk_fix_features,
 #endif
 };
 

@@ -24,6 +24,10 @@
 #include <linux/reset.h>
 #include <linux/tcp.h>
 #include <linux/mutex.h>
+#ifdef CONFIG_SONOS
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#endif
 #include "gsw_mt7620.h"
 #include "mtk_eth_soc.h"
 #include "mtk_ioctl.h"
@@ -314,6 +318,12 @@ static int mtk_phy_connect(struct mtk_mac *mac)
 		if (!mac->id)
 			goto err;
 		mac->ge_mode = 3;
+#ifdef CONFIG_SONOS
+		/* set MAC to RMII slave mode */
+		val = mtk_r32(eth, 0x10008);
+		val |= 0x00c00000;
+		mtk_w32(eth, val, 0x10008);
+#endif
 		break;
 	default:
 		goto err;
@@ -1478,8 +1488,13 @@ static int mtk_hw_init(struct mtk_eth *eth)
 	/* GE1, Force 1000M/FD, FC ON */
 	mtk_w32(eth, MAC_MCR_FIXED_LINK, MTK_MAC_MCR(0));
 
+#ifdef CONFIG_SONOS
+	/* GE2, Force 100M/FD, FC ON */
+	mtk_w32(eth, MAC_MCR_FIXED_LINK100, MTK_MAC_MCR(1));
+#else
 	/* GE2, Force 1000M/FD, FC ON */
 	mtk_w32(eth, MAC_MCR_FIXED_LINK, MTK_MAC_MCR(1));
+#endif
 
 	/* Enable RX VLan Offloading */
 	mtk_w32(eth, 1, MTK_CDMP_EG_CTRL);
@@ -2089,6 +2104,9 @@ static int mtk_probe(struct platform_device *pdev)
 	struct mtk_eth *eth;
 	int err;
 	int i;
+#ifdef CONFIG_SONOS
+	int phy_reset_gpio = -1;
+#endif
 
 	match = of_match_device(of_mtk_match, &pdev->dev);
 	soc = (struct mtk_soc_data *)match->data;
@@ -2144,6 +2162,24 @@ static int mtk_probe(struct platform_device *pdev)
 
 		if (!of_device_is_available(mac_np))
 			continue;
+
+#ifdef CONFIG_SONOS
+		phy_reset_gpio = of_get_named_gpio(mac_np, "phy-reset-gpio", 0);
+		if (gpio_is_valid(phy_reset_gpio)) {
+			err = devm_gpio_request_one(eth->dev, phy_reset_gpio,
+				GPIOF_OUT_INIT_LOW, "Phy reset");
+			if (err) {
+				dev_err(eth->dev, "unable to get phy reset gpio\n");
+				return -EPROBE_DEFER;
+			}
+			gpio_set_value_cansleep(phy_reset_gpio, 0);
+			mdelay(20);
+			gpio_set_value_cansleep(phy_reset_gpio, 1);
+			devm_gpio_free(eth->dev, phy_reset_gpio);
+			/* meet phy requirement */
+			mdelay(200);
+		}
+#endif
 
 		err = mtk_add_mac(eth, mac_np);
 		if (err) {
