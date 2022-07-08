@@ -549,6 +549,7 @@ struct mt8518_afe_private {
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs_dentry[MT8518_AFE_DEBUGFS_NUM];
 #endif
+	void *procfs; /* see mt8518-afe-procfs.c */
 };
 
 bool mt8518_afe_rate_supported(unsigned int rate, unsigned int id);
