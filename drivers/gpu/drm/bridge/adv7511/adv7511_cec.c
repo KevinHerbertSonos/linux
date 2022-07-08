@@ -252,15 +252,17 @@ static int adv7511_cec_adap_transmit(struct cec_adapter *adap, u8 attempts,
 					ADV7533_REG_CEC_OFFSET : 0;
 	u8 len = msg->len;
 	unsigned int i;
+	unsigned int retries;
 
 	/*
 	 * The number of retries is the number of attempts - 1, but retry
 	 * at least once. It's not clear if a value of 0 is allowed, so
 	 * let's do at least one retry.
 	 */
+	retries = max(1, attempts - 1);
 	regmap_update_bits(adv7511->regmap_cec,
 			   ADV7511_REG_CEC_TX_RETRY + offset,
-			   0x70, max(1, attempts - 1) << 4);
+			   0x70, retries << 4);
 
 	/* blocking, clear cec tx irq status */
 	regmap_update_bits(adv7511->regmap, ADV7511_REG_INT(1), 0x38, 0x38);
@@ -275,8 +277,25 @@ static int adv7511_cec_adap_transmit(struct cec_adapter *adap, u8 attempts,
 	regmap_write(adv7511->regmap_cec,
 		     ADV7511_REG_CEC_TX_FRAME_LEN + offset, len);
 	/* start transmit, enable tx */
-	regmap_write(adv7511->regmap_cec,
-		     ADV7511_REG_CEC_TX_ENABLE + offset, 0x01);
+	if (adv7511->type == ADV7511) {
+		regmap_write(adv7511->regmap_cec,
+			     ADV7511_REG_CEC_TX_ENABLE + offset, 0x01);
+	}
+	else {
+		/*
+		 * The adv7533/35 seperates the CEC Tx Retry field into two
+		 * register fields. ADV7511_REG_CEC_TX_RETRY[7:4] (see above)
+		 * only covers Low Error retries, whereas NACK retries are
+		 * located at ADV7511_REG_CEC_TX_ENABLE[3:1].
+		 *
+		 * Also for some reason if I perform the retry update and
+		 * the tx enable in seperate writes the transmitter never
+		 * enables so I will do them all at once.
+		 */
+		regmap_write(adv7511->regmap_cec,
+			     ADV7511_REG_CEC_TX_ENABLE + offset,
+			     (retries << 1) | 0x01);
+	}
 	return 0;
 }
 
