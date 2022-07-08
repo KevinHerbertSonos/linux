@@ -21,6 +21,7 @@
 #include "mtk_drm_drv.h"
 #include "mtk_drm_fb.h"
 #include "mtk_drm_gem.h"
+#include "mtk_drm_debugfs.h"
 
 /*
  * mtk specific framebuffer structure.
@@ -94,6 +95,23 @@ static struct mtk_drm_fb *mtk_drm_framebuffer_init(struct drm_device *dev,
 	}
 
 	return mtk_fb;
+}
+
+struct drm_framebuffer *mtk_drm_framebuffer_create(struct drm_device *dev,
+		const struct drm_mode_fb_cmd2 *mode,
+		struct drm_gem_object *obj)
+{
+	struct mtk_drm_fb *mtk_fb;
+
+	MTK_DRM_DEBUG_DRIVER("\n");
+
+	mtk_fb = mtk_drm_framebuffer_init(dev, mode, obj);
+	if (IS_ERR(mtk_fb)) {
+		MTK_DRM_ERROR(dev->dev, "failed to framebuffer init\n");
+		return ERR_CAST(mtk_fb);
+	}
+
+	return &mtk_fb->base;
 }
 
 /*
