@@ -465,6 +465,10 @@ char *am_meson_crtc_get_voutmode(struct drm_display_mode *mode)
 {
 	int i;
 
+#ifdef CONFIG_DRM_MIPI_DSI
+	return "panel";
+#endif
+
 	if (!strcmp(mode->name, "panel") || !strcmp(mode->name, "1920x1080")
 			|| !strcmp(mode->name, "1280x720") || !strcmp(mode->name, "640x480"))
 		return "panel";

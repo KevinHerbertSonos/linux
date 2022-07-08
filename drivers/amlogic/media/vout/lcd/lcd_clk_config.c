@@ -30,6 +30,7 @@
 #ifdef CONFIG_AMLOGIC_VPU
 #include <linux/amlogic/media/vpu/vpu.h>
 #endif
+#include "./lcd_common.h"
 
 
 static struct clk * clk12_enable_gate;
@@ -89,7 +90,8 @@ static char *lcd_pll_ss_table_txlx[] = {
 	"5, +/-3.0%",
 };
 
-static struct lcd_clk_config_s clk_conf = { /* unit: kHz */
+static struct lcd_clk_config_s clk_conf = {
+	/* unit: kHz */
 	/* IN-OUT parameters */
 	.fin = FIN_FREQ,
 	.fout = 0,
@@ -136,6 +138,7 @@ struct lcd_clk_config_s *get_lcd_clk_config(void)
 static void lcd_clk_config_init_print(void)
 {
 	struct aml_lcd_drv_s *lcd_drv = aml_lcd_get_driver();
+	struct lcd_clk_config_s *cconf = get_lcd_clk_config();
 
 	switch (lcd_drv->data->chip_type) {
 	case LCD_CHIP_AXG:
@@ -155,14 +158,14 @@ static void lcd_clk_config_init_print(void)
 			"pll_out_fmax:      %d\n"
 			"pll_out_fmin:      %d\n"
 			"xd_out_fmax:       %d\n\n",
-			clk_conf.pll_m_max, clk_conf.pll_m_min,
-			clk_conf.pll_n_max, clk_conf.pll_n_min,
-			clk_conf.pll_frac_range,
-			clk_conf.pll_od_sel_max, clk_conf.ss_level_max,
-			clk_conf.pll_ref_fmax, clk_conf.pll_ref_fmin,
-			clk_conf.pll_vco_fmax, clk_conf.pll_vco_fmin,
-			clk_conf.pll_out_fmax, clk_conf.pll_out_fmin,
-			 clk_conf.xd_out_fmax);
+			cconf->pll_m_max, cconf->pll_m_min,
+			cconf->pll_n_max, cconf->pll_n_min,
+			cconf->pll_frac_range,
+			cconf->pll_od_sel_max, cconf->ss_level_max,
+			cconf->pll_ref_fmax, cconf->pll_ref_fmin,
+			cconf->pll_vco_fmax, cconf->pll_vco_fmin,
+			cconf->pll_out_fmax, cconf->pll_out_fmin,
+			 cconf->xd_out_fmax);
 		break;
 	default:
 		LCDPR("lcd clk config:\n"
@@ -182,15 +185,15 @@ static void lcd_clk_config_init_print(void)
 			"div_in_fmax:       %d\n"
 			"div_out_fmax:      %d\n"
 			"xd_out_fmax:       %d\n\n",
-			clk_conf.pll_m_max, clk_conf.pll_m_min,
-			clk_conf.pll_n_max, clk_conf.pll_n_min,
-			clk_conf.pll_frac_range,
-			clk_conf.pll_od_sel_max, clk_conf.ss_level_max,
-			clk_conf.pll_ref_fmax, clk_conf.pll_ref_fmin,
-			clk_conf.pll_vco_fmax, clk_conf.pll_vco_fmin,
-			clk_conf.pll_out_fmax, clk_conf.pll_out_fmin,
-			clk_conf.div_in_fmax, clk_conf.div_out_fmax,
-			clk_conf.xd_out_fmax);
+			cconf->pll_m_max, cconf->pll_m_min,
+			cconf->pll_n_max, cconf->pll_n_min,
+			cconf->pll_frac_range,
+			cconf->pll_od_sel_max, cconf->ss_level_max,
+			cconf->pll_ref_fmax, cconf->pll_ref_fmin,
+			cconf->pll_vco_fmax, cconf->pll_vco_fmin,
+			cconf->pll_out_fmax, cconf->pll_out_fmin,
+			cconf->div_in_fmax, cconf->div_out_fmax,
+			cconf->xd_out_fmax);
 		break;
 	}
 }
@@ -298,6 +301,7 @@ static void lcd_clk_config_chip_init(void)
 	struct lcd_clk_config_s *cConf;
 	struct aml_lcd_drv_s *lcd_drv = aml_lcd_get_driver();
 
+	pr_info("%s ...\n", __func__);
 	cConf = get_lcd_clk_config();
 	switch (lcd_drv->data->chip_type) {
 	case LCD_CHIP_GXTVBB:
@@ -432,8 +436,8 @@ static void lcd_clk_config_chip_init(void)
 
 int lcd_clk_path_change(int sel)
 {
-	struct lcd_clk_config_s *cConf = get_lcd_clk_config();
 	struct aml_lcd_drv_s *lcd_drv = aml_lcd_get_driver();
+	struct lcd_clk_config_s *cConf = get_lcd_clk_config();
 	int ret = 0;
 
 	switch (lcd_drv->data->chip_type) {
@@ -891,11 +895,7 @@ static void lcd_set_pll_axg(struct lcd_clk_config_s *cConf)
 	lcd_hiu_write(HHI_GP0_PLL_CNTL2_AXG, pll_ctrl2);
 	lcd_hiu_write(HHI_GP0_PLL_CNTL3_AXG, 0x0a59a288);
 	lcd_hiu_write(HHI_GP0_PLL_CNTL4_AXG, 0xc000004d);
-	if (cConf->pll_fvco >= 1632000)
-		lcd_hiu_write(HHI_GP0_PLL_CNTL5_AXG, 0x00058000);
-	else
-		lcd_hiu_write(HHI_GP0_PLL_CNTL5_AXG, 0x00078000);
-
+	lcd_hiu_write(HHI_GP0_PLL_CNTL5_AXG, 0x00078000);
 	lcd_hiu_setb(HHI_GP0_PLL_CNTL_AXG, 1, LCD_PLL_RST_AXG, 1);
 	lcd_hiu_setb(HHI_GP0_PLL_CNTL_AXG, 0, LCD_PLL_RST_AXG, 1);
 
@@ -1907,6 +1907,7 @@ static void lcd_clk_generate_axg(struct lcd_config_s *pconf)
 		goto generate_clk_done_axg;
 	}
 
+	pr_info("%s lcd_clk:%d ...\n", __func__, pconf->lcd_timing.lcd_clk);
 	switch (pconf->lcd_basic.lcd_type) {
 	case LCD_MIPI:
 		cConf->xd_max = CRT_VID_DIV_MAX;
@@ -1930,6 +1931,7 @@ static void lcd_clk_generate_axg(struct lcd_config_s *pconf)
 			if (done)
 				goto generate_clk_done_axg;
 		}
+		pr_info("%s pll_fout:%d\n", __func__, pll_fout);
 		break;
 	default:
 		break;
@@ -2265,6 +2267,7 @@ void lcd_clk_set(struct lcd_config_s *pconf)
 	unsigned long flags = 0;
 	struct aml_lcd_drv_s *lcd_drv = aml_lcd_get_driver();
 
+	pr_info("%s ...\n", __func__);
 	spin_lock_irqsave(&lcd_clk_lock, flags);
 
 	if (lcd_debug_print_flag)

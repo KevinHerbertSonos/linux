@@ -28,6 +28,8 @@
 /* 20180226: g12a support */
 /* 20180425: tvconfig suuport */
 #define LCD_DRV_VERSION    "20180425"
+#define LCD_NAME_BUF_LEN 20
+#define LCD_CONFIGS_MAX 4
 
 #define VPP_OUT_SATURATE            (1 << 0)
 

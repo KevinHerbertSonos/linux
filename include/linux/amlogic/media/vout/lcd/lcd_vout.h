@@ -24,7 +24,6 @@
 #include <linux/amlogic/media/vout/vout_notify.h>
 #include <linux/amlogic/iomap.h>
 
-
 /* **********************************
  * debug print define
  * **********************************
@@ -365,6 +364,7 @@ struct lcd_clk_gate_ctrl_s {
 #define LCD_ENABLE_RETRY_MAX    3
 struct lcd_config_s {
 	char *lcd_propname;
+	int id;
 	unsigned int backlight_index;
 	struct lcd_basic_s lcd_basic;
 	struct lcd_timing_s lcd_timing;
@@ -412,7 +412,10 @@ struct aml_lcd_drv_s {
 	struct clk *mipi_bandgap_gate;
 
 	struct device *dev;
+	/* current mipi setting  */
 	struct lcd_config_s *lcd_config;
+	/*store all available mipi setting*/
+	struct lcd_config_s *lcd_conf_multi;
 	struct vinfo_s *lcd_info;
 	struct class *lcd_debug_class;
 

@@ -826,6 +826,7 @@ void lcd_tablet_clk_config_change(struct lcd_config_s *pconf)
 	request_vpu_clk_vmod(pconf->lcd_timing.lcd_clk, VPU_VENCL);
 #endif
 
+	pr_info("%s ...\n", __func__);
 	switch (pconf->lcd_basic.lcd_type) {
 	case LCD_VBYONE:
 		lcd_vbyone_config_set(pconf);
@@ -854,6 +855,7 @@ void lcd_tablet_config_update(struct lcd_config_s *pconf)
 	struct aml_lcd_drv_s *lcd_drv = aml_lcd_get_driver();
 	struct vinfo_s *info;
 
+	pr_info("%s pclk:%d ...\n", __func__, pconf->lcd_timing.lcd_clk);
 	/* update lcd config sync_duration */
 	info = lcd_drv->lcd_info;
 	pconf->lcd_timing.sync_duration_num = info->sync_duration_num;
@@ -879,6 +881,7 @@ void lcd_tablet_config_update(struct lcd_config_s *pconf)
 
 void lcd_tablet_config_post_update(struct lcd_config_s *pconf)
 {
+	pr_info("%s ...\n", __func__);
 	/* update interface timing */
 	switch (pconf->lcd_basic.lcd_type) {
 	case LCD_MIPI:
@@ -902,6 +905,7 @@ void lcd_tablet_driver_init_pre(void)
 	if (ret)
 		return;
 
+	lcd_tablet_clk_update(pconf);
 	lcd_tablet_config_update(pconf);
 	lcd_tablet_config_post_update(pconf);
 #ifdef CONFIG_AMLOGIC_VPU

@@ -28,6 +28,7 @@
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/slab.h>
 #include <linux/notifier.h>
 #include <linux/reboot.h>
 #include <linux/clk.h>
@@ -59,7 +60,8 @@ struct mutex lcd_vout_mutex;
 int lcd_vout_serve_bypass;
 static struct pinctrl *clk12_pinctl;
 
-static char lcd_propname[20] = "lcd_0";
+static char lcd_type_str[LCD_CONFIGS_MAX*LCD_NAME_BUF_LEN+8];
+static char lcd_propname[LCD_CONFIGS_MAX][LCD_NAME_BUF_LEN] = {"1080p", "720p", "480p", "null"};;
 
 struct lcd_cdev_s {
 	dev_t           devno;
@@ -160,7 +162,7 @@ static struct lcd_power_ctrl_s lcd_power_config = {
 };
 
 static struct lcd_config_s lcd_config_dft = {
-	.lcd_propname = lcd_propname,
+	.lcd_propname = lcd_propname[0],
 	.lcd_basic = {
 		.lcd_type = LCD_TYPE_MAX,
 	},
@@ -255,12 +257,6 @@ static void lcd_power_ctrl(int status)
 			break;
 #ifdef CONFIG_AMLOGIC_LCD_EXTERN
 		case LCD_POWER_TYPE_EXTERN:
-#ifdef CONFIG_AMLOGIC_BL_EXTERN_I2C_AD7535
-			{
-				int i2c_ad7535_probe(void);
-				i2c_ad7535_probe();
-			}
-#endif
 			index = power_step->index;
 			ext_drv = aml_lcd_extern_get_driver(index);
 			if (ext_drv) {
@@ -1158,10 +1154,22 @@ module_exit(lcd_exit);
 
 static int __init lcd_panel_type_para_setup(char *str)
 {
-	if (str != NULL)
-		sprintf(lcd_propname, "%s", str);
+	char *c = ",";
+	int i = 0;
+	char *p;
+	char *dup = lcd_type_str;
+	printk("%s str:%s, len:%d\n", __func__, str, (int)strlen(str));
 
-	LCDPR("panel_type: %s\n", lcd_propname);
+	return 0;
+	strncpy(dup, str, strlen(str));
+	p = strsep(&dup, c);
+	if (p == NULL)
+		sprintf(lcd_propname[0], "%s", str);
+	else {
+		for (i=0; p != NULL && i < LCD_CONFIGS_MAX; p = strsep(&dup, c))
+			sprintf(lcd_propname[i++], "%s", p);
+	}
+	LCDPR("panel_type: %s,  %s\n", lcd_propname[0], lcd_propname[1]);
 	return 0;
 }
 __setup("panel_type=", lcd_panel_type_para_setup);

@@ -1519,6 +1519,8 @@ static void mipi_dsi_phy_config(struct dsi_phy_s *dphy, unsigned int dsi_ui)
 {
 	unsigned int temp, t_ui, t_req_min, t_req_max, t_req, n;
 
+	pr_info("%s dsi_ui:%d ...\n", __func__, dsi_ui);
+
 	t_ui = (1000000 * 100) / (dsi_ui / 1000); /* 0.01ns*100 */
 	temp = t_ui * 8; /* lane_byte cycle time */
 
@@ -1710,11 +1712,10 @@ static void mipi_dsi_video_config(struct lcd_config_s *pconf)
 static void mipi_dsi_non_burst_packet_config(struct lcd_config_s *pconf)
 {
 	struct dsi_config_s *dconf = pconf->lcd_control.mipi_config;
-	unsigned int lane_num, clk_factor, hactive, multi_pkt_en;
-	unsigned int bit_rate_required;
-	unsigned int pixel_per_chunk = 0, vid_num_chunks = 0;
-	unsigned int byte_per_chunk = 0, vid_pkt_byte_per_chunk = 0;
-	unsigned int total_bytes_per_chunk = 0, chunk_overhead = 0, vid_null_size = 0;
+	int lane_num, clk_factor, hactive, multi_pkt_en, bit_rate_required;
+	int pixel_per_chunk = 0, vid_num_chunks = 0;
+	int byte_per_chunk = 0, vid_pkt_byte_per_chunk = 0;
+	int total_bytes_per_chunk = 0, chunk_overhead = 0, vid_null_size = 0;
 	int i = 1, done = 0;
 
 	lane_num = (int)(dconf->lane_num);
@@ -1727,7 +1728,7 @@ static void mipi_dsi_non_burst_packet_config(struct lcd_config_s *pconf)
 	else
 		multi_pkt_en = 0;
 	if (lcd_debug_print_flag) {
-		LCDPR("non-burst: bit_rate_required=%u, bit_rate=%u\n",
+		LCDPR("non-burst: bit_rate_required=%d, bit_rate=%d\n",
 			bit_rate_required, dconf->bit_rate);
 	}
 
@@ -1955,6 +1956,7 @@ void lcd_mipi_dsi_config_set(struct lcd_config_s *pconf)
 	/* unit in kHz for calculation */
 	pll_out_fmin = cConf->pll_out_fmin;
 	pclk = pconf->lcd_timing.lcd_clk / 1000;
+	pr_info("%s pconf addr:%p pclk:%u ...\n", __func__, pconf, pclk);
 
 	/* data format */
 	if (pconf->lcd_basic.lcd_bits == 6) {
@@ -2040,6 +2042,8 @@ void lcd_mipi_dsi_config_post(struct lcd_config_s *pconf)
 
 	pclk = pconf->lcd_timing.lcd_clk / 1000;
 
+	pr_info("%s, pconf addr:%p\n", __func__, pconf);
+	
 	/* pclk lanebyteclk factor */
 	if (dconf->factor_numerator == 0) {
 		lanebyteclk = dconf->bit_rate / 8 / 1000;

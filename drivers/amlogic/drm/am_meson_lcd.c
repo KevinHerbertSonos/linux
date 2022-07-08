@@ -26,6 +26,7 @@
 #include <linux/of_graph.h>
 #include <linux/delay.h>
 #include <linux/amlogic/media/vout/lcd/lcd_vout.h>
+#include "../media/vout/lcd/lcd_common.h"
 #include <linux/amlogic/media/vout/lcd/lcd_notify.h>
 
 #include "am_meson_lcd.h"
@@ -249,11 +250,32 @@ static const struct drm_connector_funcs am_lcd_connector_funcs = {
 
 static void am_lcd_encoder_mode_set(struct drm_encoder *encoder,
 				   struct drm_display_mode *mode,
-				   struct drm_display_mode *adjusted_mode)
+				   struct drm_display_mode *adj_mode)
 {
-	pr_info("am_drm_lcd: %s %d\n", __func__, __LINE__);
-	pr_info("am_drm_lcd: adjusted_mode, h:%d w:%d\n", adjusted_mode->hdisplay, adjusted_mode->vdisplay);
-	drm_mode_copy(am_drm_lcd->mode, adjusted_mode);
+	struct am_drm_lcd_s *lcd = encoder_to_lcd(encoder);
+	struct lcd_config_s *cur_conf = lcd->lcd_drv->lcd_config;
+	struct lcd_config_s *all_conf = lcd->lcd_drv->lcd_conf_multi;
+	int i = 0;
+
+	pr_info("am_drm_lcd: %s %d, cur conf:%p, all:%p\n", __func__, __LINE__, cur_conf, all_conf);
+	pr_info("am_drm_lcd: adj_mode, h:%d w:%d\n", adj_mode->hdisplay, adj_mode->vdisplay);
+	drm_mode_copy(lcd->mode, adj_mode);
+	if (adj_mode->hdisplay == cur_conf->lcd_basic.h_active &&
+			adj_mode->vdisplay == cur_conf->lcd_basic.v_active)
+		return;
+	
+	/* find proper mipi setting */
+	for (i=0; i < LCD_CONFIGS_MAX; i++) {
+		pr_info("%s conf[%d] name:%s \n", __func__, i, all_conf[i].lcd_propname?all_conf[i].lcd_propname:"null");
+		if (all_conf[i].lcd_propname == NULL) 
+			break;
+		if (all_conf[i].lcd_basic.h_active == adj_mode->hdisplay && 
+				all_conf[i].lcd_basic.v_active == adj_mode->vdisplay) {
+			am_drm_lcd->lcd_drv->lcd_config = all_conf + i;
+			pr_info("%s find proper setting addr:%p\n", __func__, all_conf+i);
+			break;
+		}
+	}
 }
 
 static void am_lcd_encoder_enable(struct drm_encoder *encoder)
@@ -288,6 +310,7 @@ static void am_lcd_encoder_enable(struct drm_encoder *encoder)
 		msleep(1000);
 		aml_lcd_notifier_call_chain(LCD_EVENT_IF_POWER_ON, NULL);
 	}
+
 	lcd->lcd_drv->lcd_config->retry_enable_cnt = 0;
 
 	mutex_unlock(&lcd->lcd_drv->power_mutex);
@@ -346,8 +369,6 @@ static int am_lcd_disable(struct drm_panel *panel)
 	if (!lcd->lcd_drv)
 		return -ENODEV;
 
-	pr_info("am_drm_lcd: %s %d\n", __func__, __LINE__);
-
 	mutex_lock(&lcd->lcd_drv->power_mutex);
 	aml_lcd_notifier_call_chain(LCD_EVENT_DISABLE, NULL);
 	mutex_unlock(&lcd->lcd_drv->power_mutex);
@@ -386,8 +407,6 @@ static int am_lcd_prepare(struct drm_panel *panel)
 	if (!lcd->lcd_drv)
 		return -ENODEV;
 
-	pr_info("am_drm_lcd: %s %d\n", __func__, __LINE__);
-
 	mutex_lock(&lcd->lcd_drv->power_mutex);
 	aml_lcd_notifier_call_chain(LCD_EVENT_PREPARE, NULL);
 	mutex_unlock(&lcd->lcd_drv->power_mutex);
@@ -405,8 +424,6 @@ static int am_lcd_enable(struct drm_panel *panel)
 		return -ENODEV;
 	if (!lcd->lcd_drv)
 		return -ENODEV;
-
-	pr_info("am_drm_lcd: %s %d\n", __func__, __LINE__);
 
 	mutex_lock(&lcd->lcd_drv->power_mutex);
 	aml_lcd_notifier_call_chain(LCD_EVENT_ENABLE, NULL);
@@ -776,10 +793,16 @@ static int am_meson_lcd_remove(struct platform_device *pdev)
 static struct platform_driver am_meson_lcd_pltfm_driver = {
 	.probe  = am_meson_lcd_probe,
 	.remove = am_meson_lcd_remove,
+	.shutdown = NULL,
+	.suspend = NULL,
+	.resume = NULL,
 	.driver = {
 		.name = "meson-lcd",
 		.of_match_table = am_meson_lcd_dt_ids,
 	},
+	.id_table = NULL,
+	.prevent_deferred_probe = NULL,
+
 };
 
 module_platform_driver(am_meson_lcd_pltfm_driver);

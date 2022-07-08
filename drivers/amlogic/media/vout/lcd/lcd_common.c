@@ -740,7 +740,10 @@ void lcd_timing_init_config(struct lcd_config_s *pconf)
 	pconf->lcd_timing.vs_vs_addr = vstart;
 	pconf->lcd_timing.vs_ve_addr = vend;
 
-	if (lcd_debug_print_flag) {
+	//if (lcd_debug_print_flag)
+	{
+		pr_info("%s pconf:%p lcd clk:%d, num:%d, den:%d\n", __func__, pconf, pconf->lcd_timing.lcd_clk, 
+				pconf->lcd_timing.sync_duration_num, pconf->lcd_timing.sync_duration_den);
 		LCDPR("hs_hs_addr=%d, hs_he_addr=%d\n"
 		"hs_vs_addr=%d, hs_ve_addr=%d\n"
 		"vs_hs_addr=%d, vs_he_addr=%d\n"
@@ -826,6 +829,7 @@ int lcd_vmode_change(struct lcd_config_s *pconf)
 	char str[100];
 	int len = 0;
 
+	pr_info("%s type:%d, clk:%d,h:%d, v:%d,min:%d, den:%d\n", __func__, type, pclk, h_period, v_period, duration_num, duration_den);
 	pconf->lcd_timing.clk_change = 0; /* clear clk flag */
 	switch (type) {
 	case 0: /* pixel clk adjust */
@@ -956,6 +960,7 @@ int lcd_vmode_change(struct lcd_config_s *pconf)
 		pconf->lcd_basic.h_period = h_period;
 	}
 	if (pconf->lcd_timing.lcd_clk != pclk) {
+		pr_info("%s change lcd_clk: %d\n", __func__, pclk);
 		if (len > 0)
 			len += sprintf(str+len, ", ");
 		len += sprintf(str+len, "pclk %u.%03uMHz->%u.%03uMHz",
