@@ -358,4 +358,122 @@ source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
 source "drivers/misc/iwmc3200top/Kconfig"
 
+config FSL_PME
+	tristate "Freescale hardware pattern-matcher"
+	depends on (PPC_85xx && !PHYS_64BIT)
+	default y
+	help
+	  If the underlying powerpc platform supports pattern-matching
+	  hardware (currently the 8572 SoC, or an 85xx CDS with the
+	  appropriate FPGA-over-PCI), then this driver will configure the
+	  PME hardware and provide kernel and user (device) interfaces to
+	  it.
+
+config FSL_PME_FREELIST0
+	int "Default buffer size (2^n) for freelist 0"
+	range 7 16
+	depends on FSL_PME
+	default 12
+	help
+	  The default buffer size will be 2^n for this n, ranging from
+	  7 (->128 bytes) to 16 (->64 Kbytes).
+
+config FSL_PME_FREELIST1
+	int "Default buffer size (2^n) for freelist 1"
+	range 7 16
+	depends on FSL_PME
+	default 12
+	help
+	  The default buffer size will be 2^n for this n, ranging from
+	  7 (->128 bytes) to 16 (->64 Kbytes).
+
+config FSL_PME_FREELIST2
+	int "Default buffer size (2^n) for freelist 2"
+	range 7 16
+	depends on FSL_PME
+	default 12
+	help
+	  The default buffer size will be 2^n for this n, ranging from
+	  7 (->128 bytes) to 16 (->64 Kbytes).
+
+config FSL_PME_FREELIST3
+	int "Default buffer size (2^n) for freelist 3"
+	range 7 16
+	depends on FSL_PME
+	default 12
+	help
+	  The default buffer size will be 2^n for this n, ranging from
+	  7 (->128 bytes) to 16 (->64 Kbytes).
+
+config FSL_PME_FREELIST4
+	int "Default buffer size (2^n) for freelist 4"
+	range 7 16
+	depends on FSL_PME
+	default 8
+	help
+	  The default buffer size will be 2^n for this n, ranging from
+	  7 (->128 bytes) to 16 (->64 Kbytes).
+
+config FSL_PME_FREELIST5
+	int "Default buffer size (2^n) for freelist 5"
+	range 7 16
+	depends on FSL_PME
+	default 8
+	help
+	  The default buffer size will be 2^n for this n, ranging from
+	  7 (->128 bytes) to 16 (->64 Kbytes).
+
+config FSL_PME_FREELIST6
+	int "Default buffer size (2^n) for freelist 6"
+	range 7 16
+	depends on FSL_PME
+	default 8
+	help
+	  The default buffer size will be 2^n for this n, ranging from
+	  7 (->128 bytes) to 16 (->64 Kbytes).
+
+config FSL_PME_FREELIST7
+	int "Default buffer size (2^n) for freelist 7"
+	range 7 16
+	depends on FSL_PME
+	default 8
+	help
+	  The default buffer size will be 2^n for this n, ranging from
+	  7 (->128 bytes) to 16 (->64 Kbytes).
+
+config FSL_PME_FREELISTA
+	hex "Mapping of each channel's virtual freelist A"
+	depends on FSL_PME
+	default 0x0000c1c0
+	help
+	  Each byte represents the mapping of a channel's "A" virtual
+	  freelist to a physical freelist (from 0 to 7), the L-S byte
+	  being channel 0 and M-S byte being channel 3. 0x00 indicates
+	  no mapping, 0x80-0x87 indicates an enabled mapping to freelist
+	  0 through 7, and 0xc0-0xc7 indicates an enabled *master*
+	  mapping to freelist 0 through 7. Here "master" indicates that
+	  the channel virtual freelist should seed the freelist.
+
+config FSL_PME_FREELISTB
+	hex "Mapping of each channel's virtual freelist B"
+	depends on FSL_PME
+	default 0x0000c3c2
+	help
+	  Each byte represents the mapping of a channel's "B" virtual
+	  freelist to a physical freelist (from 0 to 7), the L-S byte
+	  being channel 0 and M-S byte being channel 3. 0x00 indicates
+	  no mapping, 0x80-0x87 indicates an enabled mapping to freelist
+	  0 through 7, and 0xc0-0xc7 indicates an enabled *master*
+	  mapping to freelist 0 through 7. Here "master" indicates that
+	  the channel virtual freelist should seed the freelist.
+config FSL_TLU
+	tristate "Freescale table lookup unit"
+	depends on MPC85xx_DS || MPC85xx_MDS
+	default m
+	help
+	  If the underlying powerpc platform supports table lookup units
+	  (currently the 8572 or 8568 SoC), then this driver will configure
+	  the TLU hardware and provide kernel driver.
+
+
 endif # MISC_DEVICES

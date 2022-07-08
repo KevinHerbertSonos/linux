@@ -224,6 +224,7 @@ struct mtd_info {
 	/* Bad block management functions */
 	int (*block_isbad) (struct mtd_info *mtd, loff_t ofs);
 	int (*block_markbad) (struct mtd_info *mtd, loff_t ofs);
+	int (*read_special) (struct mtd_info *mtd, struct mtd_special_info *rsi, void *buff);
 
 	struct notifier_block reboot_notifier;  /* default mode before reboot */
 
@@ -237,6 +238,7 @@ struct mtd_info {
 	struct module *owner;
 	struct device dev;
 	int usecount;
+	int devid;
 
 	/* If the driver is something smart, like UBI, it may need to maintain
 	 * its own reference counting. The below functions are only for driver.
@@ -244,6 +246,12 @@ struct mtd_info {
 	 * supposed to be called by MTD users */
 	int (*get_device) (struct mtd_info *mtd);
 	void (*put_device) (struct mtd_info *mtd);
+
+#ifdef CONFIG_MTD_NAND_SONOS_VNB_MAPPING
+	/* link the virtual NAND MTD to the Physical for nand scanning */
+	void *pVirtualNand;
+	int (*set_last_block)(struct mtd_info *mtd, loff_t ofs);
+#endif
 };
 
 static inline struct mtd_info *dev_to_mtd(struct device *dev)

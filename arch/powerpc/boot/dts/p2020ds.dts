@@ -1,7 +1,7 @@
 /*
  * P2020 DS Device Tree Source
  *
- * Copyright 2009 Freescale Semiconductor Inc.
+ * Copyright 2009-2010 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -72,37 +72,44 @@
 			bank-width = <2>;
 			device-width = <1>;
 
-			ramdisk@0 {
+			partition@0 {
 				reg = <0x0 0x03000000>;
+				label = "ramdisk-nor";
 				read-only;
 			};
 
-			diagnostic@3000000 {
+			partition@3000000 {
 				reg = <0x03000000 0x00e00000>;
+				label = "diagnostic-nor";
 				read-only;
 			};
 
-			dink@3e00000 {
+			partition@3e00000 {
 				reg = <0x03e00000 0x00200000>;
+				label = "dink-nor";
 				read-only;
 			};
 
-			kernel@4000000 {
+			partition@4000000 {
 				reg = <0x04000000 0x00400000>;
+				label = "kernel-nor";
 				read-only;
 			};
 
-			jffs2@4400000 {
+			partition@4400000 {
 				reg = <0x04400000 0x03b00000>;
+				label = "jffs2-nor";
 			};
 
-			dtb@7f00000 {
+			partition@7f00000 {
 				reg = <0x07f00000 0x00080000>;
+				label = "dtb-nor";
 				read-only;
 			};
 
-			u-boot@7f80000 {
+			partition@7f80000 {
 				reg = <0x07f80000 0x00080000>;
+				label = "u-boot-nor";
 				read-only;
 			};
 		};
@@ -113,31 +120,37 @@
 			compatible = "fsl,elbc-fcm-nand";
 			reg = <0x2 0x0 0x40000>;
 
-			u-boot@0 {
+			partition@0 {
 				reg = <0x0 0x02000000>;
+				label = "u-boot-nand";
 				read-only;
 			};
 
-			jffs2@2000000 {
+			partition@2000000 {
 				reg = <0x02000000 0x10000000>;
+				label = "jffs2-nand";
 			};
 
-			ramdisk@12000000 {
+			partition@12000000 {
 				reg = <0x12000000 0x08000000>;
+				label = "ramdisk-nand";
 				read-only;
 			};
 
-			kernel@1a000000 {
+			partition@1a000000 {
 				reg = <0x1a000000 0x04000000>;
+				label = "kernel-nand";
 			};
 
-			dtb@1e000000 {
+			partition@1e000000 {
 				reg = <0x1e000000 0x01000000>;
+				label = "dtb-nand";
 				read-only;
 			};
 
-			empty@1f000000 {
+			partition@1f000000 {
 				reg = <0x1f000000 0x21000000>;
+				label = "reserved-nand";
 			};
 		};
 
@@ -154,6 +167,13 @@
 		nand@6,0 {
 			compatible = "fsl,elbc-fcm-nand";
 			reg = <0x6 0x0 0x40000>;
+		};
+
+		ngpixis@3,0 {
+			compatible = "fsl,p2020ds-fpga";
+			reg = <0x3 0 0x30>;
+			interrupt-parent = <&mpic>;
+			interrupts = <0 0>;
 		};
 	};
 
@@ -228,10 +248,43 @@
 		};
 
 		spi@7000 {
+			cell-index = <0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
 			compatible = "fsl,espi";
 			reg = <0x7000 0x1000>;
 			interrupts = <59 0x2>;
 			interrupt-parent = <&mpic>;
+			espi,num-ss-bits = <4>;
+			mode = "cpu";
+
+			fsl_m25p80@0 {
+				#address-cells = <1>;
+				#size-cells = <1>;
+				compatible = "fsl,espi-flash";
+				reg = <0>;
+				linux,modalias = "fsl_m25p80";
+				spi-max-frequency = <40000000>; /* input clock */
+				partition@0 {
+					label = "u-boot-spi";
+					reg = <0x00000000 0x00100000>;
+					read-only;
+				};
+				partition@100000 {
+					label = "kernel-spi";
+					reg = <0x00100000 0x00500000>;
+					read-only;
+				};
+				partition@600000 {
+					label = "dtb-spi";
+					reg = <0x00600000 0x00100000>;
+					read-only;
+				};
+				partition@700000 {
+					label = "file system-spi";
+					reg = <0x00700000 0x00900000>;
+				};
+			};
 		};
 
 		dma@c300 {
@@ -336,6 +389,11 @@
 			phy_type = "ulpi";
 		};
 
+		ptp_timer: ptimer@24e00 {
+			compatible = "fsl,gianfar-ptp-timer";
+			reg = <0x24e00 0xb0>;
+		};
+
 		enet0: ethernet@24000 {
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -351,6 +409,9 @@
 			tbi-handle = <&tbi0>;
 			phy-handle = <&phy0>;
 			phy-connection-type = "rgmii-id";
+			ptimer-handle = <&ptp_timer>;
+			fsl,magic-packet;
+			clk-handle = <&etsec1_clk>;
 
 			mdio@520 {
 				#address-cells = <1>;
@@ -395,6 +456,9 @@
 			tbi-handle = <&tbi1>;
 			phy-handle = <&phy1>;
 			phy-connection-type = "rgmii-id";
+			ptimer-handle = <&ptp_timer>;
+			fsl,magic-packet;
+			clk-handle = <&etsec2_clk>;
 
 			mdio@520 {
 				#address-cells = <1>;
@@ -424,6 +488,9 @@
 			tbi-handle = <&tbi2>;
 			phy-handle = <&phy2>;
 			phy-connection-type = "rgmii-id";
+			ptimer-handle = <&ptp_timer>;
+			fsl,magic-packet;
+			clk-handle = <&etsec3_clk>;
 
 			mdio@520 {
 				#address-cells = <1>;
@@ -443,6 +510,7 @@
 			reg = <0x2e000 0x1000>;
 			interrupts = <72 0x2>;
 			interrupt-parent = <&mpic>;
+			fsl,sdhci-adjust-timeout;
 			/* Filled in by U-Boot */
 			clock-frequency = <0>;
 		};
@@ -457,6 +525,15 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0xbfe>;
 			fsl,descriptor-types-mask = <0x3ab0ebf>;
+			fsl,multi-host-mode = "dual";
+			fsl,channel-remap = <0x3>;
+		};
+
+		timer@41100 {
+			compatible = "fsl,mpic-global-timer";
+			reg = <0x41100 0x204>;
+			interrupts = <0xf7 0x2>;
+			interrupt-parent = <&mpic>;
 		};
 
 		mpic: pic@40000 {
@@ -466,6 +543,43 @@
 			reg = <0x40000 0x40000>;
 			compatible = "chrp,open-pic";
 			device_type = "open-pic";
+		};
+
+		message@41400 {
+			compatible = "fsl,p2020-msg", "fsl,mpic-msg";
+			reg = <0x41400 0x200>;
+			interrupts = <
+				0xb0 2
+				0xb1 2
+				0xb2 2
+				0xb3 2>;
+			interrupt-parent = <&mpic>;
+		};
+
+		message@42400 {
+			compatible = "fsl,p2020-msg", "fsl,mpic-msg";
+			reg = <0x42400 0x200>;
+			interrupts = <
+				0xb4 2
+				0xb5 2
+				0xb6 2
+				0xb7 2>;
+			interrupt-parent = <&mpic>;
+		};
+
+		power@e0070{
+			compatible = "fsl,mpc8548-pmc", "fsl,p2020-pmc";
+			reg = <0xe0070 0x20>;
+
+			etsec1_clk: soc-clk@24{
+				fsl,pmcdr-mask = <0x00000080>;
+			};
+			etsec2_clk: soc-clk@25{
+				fsl,pmcdr-mask = <0x00000040>;
+			};
+			etsec3_clk: soc-clk@26{
+				fsl,pmcdr-mask = <0x00000020>;
+			};
 		};
 
 		msi@41600 {
@@ -485,14 +599,27 @@
 		};
 
 		global-utilities@e0000 {	//global utilities block
-			compatible = "fsl,p2020-guts";
+			compatible = "fsl,p2020-guts", "fsl,mpc8548-guts";
 			reg = <0xe0000 0x1000>;
 			fsl,has-rstcr;
 		};
 	};
 
+	rapidio0: rapidio@ffec0000 {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		compatible = "fsl,rapidio-delta";
+		reg = <0 0xffec0000 0 0x20000>;
+		ranges = <0 0 0 0xa0000000 0 0x10000000>;
+		interrupt-parent = <&mpic>;
+		/* err_irq bell_outb_irq bell_inb_irq
+			msg1_tx_irq msg1_rx_irq msg2_tx_irq msg2_rx_irq */
+		interrupts = <48 2 49 2 50 2 53 2 54 2 55 2 56 2>;
+	};
+
 	pci0: pcie@ffe08000 {
 		compatible = "fsl,mpc8548-pcie";
+		cell-index = <3>;
 		device_type = "pci";
 		#interrupt-cells = <1>;
 		#size-cells = <2>;
@@ -507,10 +634,10 @@
 		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
 		interrupt-map = <
 			/* IDSEL 0x0 */
-			0000 0x0 0x0 0x1 &mpic 0x8 0x1
-			0000 0x0 0x0 0x2 &mpic 0x9 0x1
-			0000 0x0 0x0 0x3 &mpic 0xa 0x1
-			0000 0x0 0x0 0x4 &mpic 0xb 0x1
+			0000 0x0 0x0 0x1 &mpic 0x8 0x2
+			0000 0x0 0x0 0x2 &mpic 0x9 0x2
+			0000 0x0 0x0 0x3 &mpic 0xa 0x2
+			0000 0x0 0x0 0x4 &mpic 0xb 0x2
 			>;
 		pcie@0 {
 			reg = <0x0 0x0 0x0 0x0 0x0>;
@@ -529,6 +656,7 @@
 
 	pci1: pcie@ffe09000 {
 		compatible = "fsl,mpc8548-pcie";
+		cell-index = <2>;
 		device_type = "pci";
 		#interrupt-cells = <1>;
 		#size-cells = <2>;
@@ -668,6 +796,7 @@
 
 	pci2: pcie@ffe0a000 {
 		compatible = "fsl,mpc8548-pcie";
+		cell-index = <1>;
 		device_type = "pci";
 		#interrupt-cells = <1>;
 		#size-cells = <2>;

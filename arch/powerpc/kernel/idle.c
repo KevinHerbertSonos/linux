@@ -39,6 +39,10 @@
 #define cpu_should_die()	0
 #endif
 
+#if defined(CONFIG_SONOS_LIMELIGHT)
+unsigned int powerSaves=0;
+#endif	// CONFIG_SONOS_LIMELIGHT
+
 static int __init powersave_off(char *arg)
 {
 	ppc_md.power_save = NULL;
@@ -59,7 +63,9 @@ void cpu_idle(void)
 		tick_nohz_stop_sched_tick(1);
 		while (!need_resched() && !cpu_should_die()) {
 			ppc64_runlatch_off();
-
+#ifdef CONFIG_SONOS_FENWAY
+         		ppc_md.power_save = 0;
+#endif	// CONFIG_SONOS_FENWAY
 			if (ppc_md.power_save) {
 				clear_thread_flag(TIF_POLLING_NRFLAG);
 				/*
@@ -73,8 +79,14 @@ void cpu_idle(void)
 				stop_critical_timings();
 
 				/* check again after disabling irqs */
-				if (!need_resched() && !cpu_should_die())
+				if (!need_resched() && !cpu_should_die()) {
+#if !defined(CONFIG_DEBUG_CW)
+#if defined(CONFIG_SONOS_LIMELIGHT)
+               				powerSaves++;
+#endif	// CONFIG_SONOS_LIMELIGHT
 					ppc_md.power_save();
+#endif
+				}
 
 				start_critical_timings();
 

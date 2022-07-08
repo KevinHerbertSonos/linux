@@ -1,7 +1,7 @@
 /*
  * OpenFirmware bindings for Secure Digital Host Controller Interface.
  *
- * Copyright (c) 2007 Freescale Semiconductor, Inc.
+ * Copyright (c) 2007-2010 Freescale Semiconductor, Inc.
  * Copyright (c) 2009 MontaVista Software, Inc.
  *
  * Authors: Xiaobo Xie <X.Xie@freescale.com>
@@ -96,6 +96,7 @@ static int sdhci_of_resume(struct of_device *ofdev)
 {
 	struct sdhci_host *host = dev_get_drvdata(&ofdev->dev);
 
+	host->ops->enable_dma(host);
 	return mmc_resume_host(host->mmc);
 }
 
@@ -157,8 +158,20 @@ static int __devinit sdhci_of_probe(struct of_device *ofdev,
 	if (of_get_property(np, "sdhci,1-bit-only", NULL))
 		host->quirks |= SDHCI_QUIRK_FORCE_1_BIT_DATA;
 
+	if (of_get_property(np, "fsl,sdhci-auto-cmd12", NULL))
+		host->quirks |= SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12;
+
 	if (sdhci_of_wp_inverted(np))
 		host->quirks |= SDHCI_QUIRK_INVERTED_WRITE_PROTECT;
+
+	if (of_get_property(np, "fsl,sdhci-dma-broken", NULL))
+		host->quirks |= SDHCI_QUIRK_BROKEN_DMA;
+
+	if (of_get_property(np, "fsl,sdhci-ahb2mag-irq-bypass", NULL))
+		host->quirks |= SDHCI_QUIRK_SET_AHB2MAG_IRQ_BYPASS;
+
+	if (of_get_property(np, "fsl,sdhci-adjust-timeout", NULL))
+		host->quirks |= SDHCI_QUIRK_BROKEN_TIMEOUT_VAL;
 
 	clk = of_get_property(np, "clock-frequency", &size);
 	if (clk && size == sizeof(*clk) && *clk)

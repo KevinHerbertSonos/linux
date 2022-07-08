@@ -165,6 +165,10 @@ static inline int nf_hook_thresh(u_int8_t pf, unsigned int hook,
 				 struct net_device *outdev,
 				 int (*okfn)(struct sk_buff *), int thresh)
 {
+#ifdef CONFIG_ATH_HW_NAT
+        if (skb->ath_hw_nat_fw_flags)
+                return 1;
+#endif
 #ifndef CONFIG_NETFILTER_DEBUG
 	if (list_empty(&nf_hooks[pf][hook]))
 		return 1;

@@ -249,7 +249,7 @@ static int spidev_message(struct spidev_data *spidev,
 			k_tmp->rx_buf = buf;
 			if (!access_ok(VERIFY_WRITE, (u8 __user *)
 						(uintptr_t) u_tmp->rx_buf,
-						u_tmp->len))
+                        u_tmp->len))
 				goto done;
 		}
 		if (u_tmp->tx_buf) {
@@ -534,6 +534,22 @@ static int spidev_release(struct inode *inode, struct file *filp)
 	return status;
 }
 
+
+struct spi_device * spidev_get_device(unsigned long minor)
+{
+	struct spidev_data	*spidev;
+
+	list_for_each_entry(spidev, &device_list, device_entry) {
+		if (spidev->devt == MKDEV(SPIDEV_MAJOR, minor)) {
+         return spidev->spi;
+		}
+	}
+   
+   return NULL;
+}
+EXPORT_SYMBOL(spidev_get_device);
+
+
 static const struct file_operations spidev_fops = {
 	.owner =	THIS_MODULE,
 	/* REVISIT switch to aio primitives, so that userspace
@@ -564,6 +580,7 @@ static int __devinit spidev_probe(struct spi_device *spi)
 	int			status;
 	unsigned long		minor;
 
+	printk("spidev_probe\n");
 	/* Allocate driver data */
 	spidev = kzalloc(sizeof(*spidev), GFP_KERNEL);
 	if (!spidev)
@@ -588,6 +605,7 @@ static int __devinit spidev_probe(struct spi_device *spi)
 		dev = device_create(spidev_class, &spi->dev, spidev->devt,
 				    spidev, "spidev%d.%d",
 				    spi->master->bus_num, spi->chip_select);
+		printk("spidev create %ld %d.%d.\n", minor, spi->master->bus_num, spi->chip_select);
 		status = IS_ERR(dev) ? PTR_ERR(dev) : 0;
 	} else {
 		dev_dbg(&spi->dev, "no minor number available!\n");
@@ -656,6 +674,7 @@ static int __init spidev_init(void)
 	 */
 	BUILD_BUG_ON(N_SPI_MINORS > 256);
 	status = register_chrdev(SPIDEV_MAJOR, "spi", &spidev_fops);
+	printk("spidev register %d.\n", status);
 	if (status < 0)
 		return status;
 
@@ -670,6 +689,7 @@ static int __init spidev_init(void)
 		class_destroy(spidev_class);
 		unregister_chrdev(SPIDEV_MAJOR, spidev_spi_driver.driver.name);
 	}
+	printk("spidev init done %d.\n", status);
 	return status;
 }
 module_init(spidev_init);

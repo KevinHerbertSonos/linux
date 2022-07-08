@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2001-2002 by David Brownell
- *
+ * Copyright (C) 2010 Freescale Semiconductor, Inc. All rights reserved.
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
  * Free Software Foundation; either version 2 of the License, or (at your
@@ -150,6 +150,14 @@ struct ehci_hcd {			/* one per controller */
 #else
 #	define COUNT(x) do {} while (0)
 #endif
+
+	/*
+	 * OTG controllers and transceivers need software interaction;
+	 * other external transceivers should be software-transparent
+	 */
+	struct otg_transceiver  *transceiver;
+	u32 			power_budget;
+	struct work_struct change_hcd_work;
 
 	/* debug files */
 #ifdef DEBUG

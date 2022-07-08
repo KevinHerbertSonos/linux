@@ -325,6 +325,7 @@ static int parse_cmdline_partitions(struct mtd_info *master,
 				  offset = part->parts[i].offset;
 				if (part->parts[i].size == SIZE_REMAINING)
 				  part->parts[i].size = master->size - offset;
+				printk("part found %i %lx %llx.\n", i, offset, part->parts[i].size);
 				if (offset + part->parts[i].size > master->size)
 				{
 					printk(KERN_WARNING ERRP

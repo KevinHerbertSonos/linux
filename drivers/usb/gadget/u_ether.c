@@ -747,9 +747,11 @@ static const struct net_device_ops eth_netdev_ops = {
 	.ndo_validate_addr	= eth_validate_addr,
 };
 
+#ifndef CONFIG_SONOS_FILLMORE
 static struct device_type gadget_type = {
 	.name	= "gadget",
 };
+#endif
 
 /**
  * gether_setup - initialize one ethernet-over-usb link
@@ -812,8 +814,13 @@ int gether_setup(struct usb_gadget *g, u8 ethaddr[ETH_ALEN])
 	netif_carrier_off(net);
 
 	dev->gadget = g;
+#ifdef CONFIG_SONOS_FILLMORE
+//	SET_NETDEV_DEV(net, &g->dev);
+//	SET_NETDEV_DEVTYPE(net, &gadget_type);
+#else
 	SET_NETDEV_DEV(net, &g->dev);
 	SET_NETDEV_DEVTYPE(net, &gadget_type);
+#endif
 
 	status = register_netdev(net);
 	if (status < 0) {

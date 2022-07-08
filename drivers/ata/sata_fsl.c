@@ -6,7 +6,7 @@
  * Author: Ashish Kalra <ashish.kalra@freescale.com>
  * Li Yang <leoli@freescale.com>
  *
- * Copyright (c) 2006-2007 Freescale Semiconductor, Inc.
+ * Copyright (c) 2006-2010 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -158,7 +158,11 @@ enum {
 	    IE_ON_SINGL_DEVICE_ERR | IE_ON_CMD_COMPLETE,
 
 	EXT_INDIRECT_SEG_PRD_FLAG = (1 << 31),
+#if defined(CONFIG_P1022_DS) || defined(CONFIG_P1010_RDB)
+	DATA_SNOOP_ENABLE = (1 << 28),
+#else
 	DATA_SNOOP_ENABLE = (1 << 22),
+#endif
 };
 
 /*
@@ -1223,6 +1227,10 @@ static int sata_fsl_init_controller(struct ata_host *host)
 	 * part of the port_start() callback
 	 */
 
+	/* Changing P1022 sata controller to operate in enterprise mode */
+	temp = ioread32(hcr_base + HCONTROL);
+	iowrite32((temp & ~0x10000000), hcr_base + HCONTROL);
+
 	/* ack. any pending IRQs for this controller/port */
 	temp = ioread32(hcr_base + HSTATUS);
 	if (temp & 0x3F)
@@ -1401,6 +1409,7 @@ static int sata_fsl_resume(struct of_device *op)
 	void __iomem *hcr_base = host_priv->hcr_base;
 	struct ata_port *ap = host->ports[0];
 	struct sata_fsl_port_priv *pp = ap->private_data;
+	u32 temp;
 
 	ret = sata_fsl_init_controller(host);
 	if (ret) {
@@ -1411,6 +1420,9 @@ static int sata_fsl_resume(struct of_device *op)
 
 	/* Recovery the CHBA register in host controller cmd register set */
 	iowrite32(pp->cmdslot_paddr & 0xffffffff, hcr_base + CHBA);
+
+	temp = ioread32(hcr_base + HCONTROL);
+	iowrite32(temp | 0x80000700, hcr_base+HCONTROL);
 
 	ata_host_resume(host);
 	return 0;

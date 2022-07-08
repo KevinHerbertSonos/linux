@@ -112,6 +112,7 @@ cp_convert:
 	len = cp->uni2char(le16_to_cpu(src_char), target,
 			   NLS_MAX_CHARSET_SIZE);
 	if (len <= 0) {
+		printk(KERN_ERR "mapchar fails - non-plane 0 unicode character in filename? may not be able to index...\n");
 		*target = '?';
 		len = 1;
 	}
@@ -192,8 +193,32 @@ cifs_strtoUCS(__le16 *to, const char *from, int len,
 	      const struct nls_table *codepage)
 {
 	int charlen;
-	int i;
+	int i, j;
 	wchar_t *wchar_to = (wchar_t *)to; /* needed to quiet sparse */
+
+	/* special case for utf8 to handle no plane0 chars */
+	if (!strcmp(codepage->charset, "utf8")) {
+		/*
+		 * convert utf8 -> utf16, we assume we have enough space
+		 * as caller should have assumed conversion does not overflow
+		 * in destination len is length in wchar_t units (16bits)
+		 */
+		i  = utf8s_to_utf16s(from, len, (wchar_t *) to);
+
+		/* convert to LE form */
+		for (j = 0; j < i; j++)
+			to[j] = cpu_to_le16(to[j]);
+
+		/* if success terminate and exit */
+		if (i >= 0)
+			goto success;
+		/*
+		 * if fails fall back to UCS encoding as this
+		 * function should not return negative values
+		 * currently can fail only if source contains
+		 * invalid encoded characters
+		 */
+	}
 
 	for (i = 0; len && *from; i++, from += charlen, len -= charlen) {
 
@@ -210,6 +235,7 @@ cifs_strtoUCS(__le16 *to, const char *from, int len,
 
 	}
 
+success:
 	to[i] = 0;
 	return i;
 }

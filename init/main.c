@@ -6,7 +6,7 @@
  *  GK 2/5/95  -  Changed to support mounting root fs via NFS
  *  Added initrd & change_root: Werner Almesberger & Hans Lermen, Feb '96
  *  Moan early if gcc is old, avoiding bogus kernels - Paul Gortmaker, May '96
- *  Simplified starting of init:  Michael A. Griffith <grif@acm.org> 
+ *  Simplified starting of init:  Michael A. Griffith <grif@acm.org>
  */
 
 #include <linux/types.h>
@@ -82,6 +82,14 @@
 #include <asm/smp.h>
 #endif
 
+#ifdef CONFIG_SONOS_FENWAY
+#include "asm/mpc83xx-gpio.h"
+#include "asm/fenway-gpio.h"
+#endif
+
+#include "mdp.h"
+extern struct manufacturing_data_page sys_mdp;
+
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
@@ -98,6 +106,16 @@ static inline void mark_rodata_ro(void) { }
 #ifdef CONFIG_TC
 extern void tc_init(void);
 #endif
+
+#ifdef CONFIG_SONOS_FENWAY
+#define LED_WHITE          0x01
+#define LED_GREEN          0x02
+#define LED_AMBER          0x04
+#define LED_RED            0x08
+#define LED_GREEN_BUTTON   0x10
+#define LED_OVERRIDE       0x20
+extern int fenway_submodel;
+#endif	// CONFIG_SONOS_FENWAY
 
 enum system_states system_state __read_mostly;
 EXPORT_SYMBOL(system_state);
@@ -863,6 +881,160 @@ static noinline int init_post(void)
 	      "See Linux Documentation/init.txt for guidance.");
 }
 
+#ifdef CONFIG_SONOS_FENWAY
+/* bit 22-23 configure the */
+#define SICRH_PWM_FIXED_MASK     (3 << (30 - 10)) /* GPIO pin 5 */
+#define SICRH_PWM_VARIABLE_MASK  (3 << (30 - 22)) /* GPIO pin 11 */
+
+/* bits are 01 for PWM, 11 for GPIO*/
+#define SICRH_PWM_FIXED_PWM      (1 << (30 - 10))
+#define SICRH_PWM_FIXED_GPIO     (3 << (30 - 10))
+#define SICRH_PWM_VARIABLE_PWM   (1 << (30 - 22))
+#define SICRH_PWM_VARIABLE_GPIO  (3 << (30 - 22))
+
+struct timer_list ledtimer;
+int actl_ledtimerdisable=0;
+unsigned char actl_leddata[8]={0,LED_WHITE,0,LED_WHITE,0,LED_WHITE,0,LED_WHITE};
+int actl_ledcur=0;
+
+void audioctl_set_leds(unsigned long arg);
+void audioctl_ledtimer(unsigned long x)
+{
+	if (actl_ledtimerdisable==0)
+		audioctl_set_leds(actl_leddata[actl_ledcur]);
+	actl_ledcur=((actl_ledcur+1)&7);
+	mod_timer(&(ledtimer),jiffies+((3*HZ)/4)); /*750ms into the future*/
+}
+
+/* The white LED pins are multiplexed with timers so that we are able to do
+ * PWM dimming. There is currently no requirement to actually do PWM dimming, so
+ * the pins are locked into GPIO mode. See the Amoeba HDD for details on the
+ * PWM hardware configuration, and @193101 for the code that was removed.
+ */
+static void audioctl_configureWhiteLedPins(void)
+{
+	int sicrl_mask, sicrl_bits;
+	int sicrh_mask, sicrh_bits;
+
+	/* we don't need to change the SICRL */
+	sicrl_mask = sicrl_bits = 0;
+
+	sicrh_mask = SICRH_PWM_FIXED_MASK | SICRH_PWM_VARIABLE_MASK;
+	sicrh_bits = SICRH_PWM_FIXED_GPIO | SICRH_PWM_VARIABLE_GPIO;
+	mpc83xx_set_sicr(sicrl_mask, sicrl_bits, sicrh_mask, sicrh_bits);
+}
+
+void audioctl_set_leds(unsigned long arg)
+{
+   u32 gpio;
+   u32 gpio_led_green_mask = 0;
+   u32 gpio_led_red_mask;
+   u32 gpio_led_amber_mask;
+   u32 gpio_led_white_mask;
+
+   gpio = mpc83xx_read_gpio(MPC8315_GPIO_GPDAT);
+
+   if (MDP_SUBMODEL_IS_ANVIL(fenway_submodel)) {
+      gpio_led_white_mask = ANVIL_GPIO_LED_WHITE_MASK;
+      gpio_led_green_mask = ANVIL_GPIO_LED_GREEN_MASK;
+      gpio_led_amber_mask = ANVIL_GPIO_LED_AMBER_MASK;
+      gpio_led_red_mask   = ANVIL_GPIO_LED_RED_MASK;
+      gpio &= ~ANVIL_GPIO_LED_WHITE_FIXED_MASK;
+   }
+   else if (MDP_SUBMODEL_IS_AMOEBA(fenway_submodel)) {
+      gpio_led_white_mask = AMOEBA_GPIO_LED_WHITE_MASK;
+      gpio_led_green_mask = AMOEBA_GPIO_LED_GREEN_MASK;
+      gpio_led_amber_mask = AMOEBA_GPIO_LED_AMBER_MASK;
+      gpio_led_red_mask   = AMOEBA_GPIO_LED_RED_MASK;
+      gpio &= ~ANVIL_GPIO_LED_WHITE_FIXED_MASK;
+   }
+   else {
+      gpio_led_white_mask = FENWAY_GPIO_LED_WHITE_MASK;
+      gpio_led_amber_mask = FENWAY_GPIO_LED_AMBER_MASK;
+      if (sys_mdp.mdp_hwfeatures & MDP_HWFEATURE_LED_SWAP) {
+          /* swapped units with red under play/pause button */
+          gpio_led_red_mask   = FENWAY_GPIO_LED_GREEN_MASK;
+          gpio_led_green_mask = FENWAY_GPIO_LED_RED_MASK;
+      } else {
+          /* unswapped units with green under mute button */
+          gpio_led_red_mask   = FENWAY_GPIO_LED_RED_MASK;
+          gpio_led_green_mask = FENWAY_GPIO_LED_GREEN_MASK;
+      }
+   }
+
+   actl_ledtimerdisable=((arg&LED_OVERRIDE)?1:0);
+
+   /* Fenway family LEDs are active low */
+   if (arg & LED_WHITE)
+      gpio &= ~gpio_led_white_mask;
+   else
+      gpio |= gpio_led_white_mask;
+
+   if (arg & LED_RED)
+      gpio &= ~gpio_led_red_mask;
+   else
+      gpio |= gpio_led_red_mask;
+
+   if (arg & (LED_GREEN | LED_GREEN_BUTTON))
+      gpio &= ~gpio_led_green_mask;
+   else
+      gpio |= gpio_led_green_mask;
+
+   if (arg & LED_AMBER)
+      gpio &= ~gpio_led_amber_mask;
+   else
+      gpio |= gpio_led_amber_mask;
+
+   mpc83xx_write_gpio(MPC8315_GPIO_GPDAT, gpio);
+}
+EXPORT_SYMBOL(audioctl_set_leds);
+
+void audioctl_update_led_data(unsigned char *led_data)
+{
+	memcpy(actl_leddata, led_data, 8);
+
+	/* Force blinking to restart at slot 0  (new pattern) */
+	if (led_data[0] & 0x80) {
+		actl_leddata[0] &= ~0x80;
+		actl_ledcur=0;
+		audioctl_ledtimer(0);
+	}
+}
+EXPORT_SYMBOL(audioctl_update_led_data);
+#endif	// CONFIG_SONOS_FENWAY
+
+#if defined(CONFIG_SONOS_LIMELIGHT)
+#define WHITE_LED_PIN  6
+#define WHITE_LED_MASK (1 << (31 - WHITE_LED_PIN))
+#define IMMR_BASE       0xFFE00000
+#define PMUXCR1_OFFSET  (0x000E0060>>2)
+#define PMUXCR1_SPI     0x00000030
+#define PMUXCR1_GPIO69  0x00000020
+#define GPDIR_OFFSET    (0x0000F000>>2)
+#define GPDAT_OFFSET    (0x0000F008>>2)
+char audioctl_fpga_init_done=0;
+struct timer_list ledtimer;
+__be32 __iomem *pimmr;
+
+void audioctl_notify_fpga_init_done(void)
+{
+   audioctl_fpga_init_done = 1;
+}
+EXPORT_SYMBOL(audioctl_notify_fpga_init_done);
+
+void audioctl_ledtimer(unsigned long x)
+{
+   if (!audioctl_fpga_init_done) {
+      /* toggle the white LED pin */
+      u32 gpdat;
+      gpdat = in_be32(pimmr + GPDAT_OFFSET);
+      gpdat ^= WHITE_LED_MASK;
+      out_be32(pimmr + GPDAT_OFFSET, gpdat);
+      mod_timer(&(ledtimer),jiffies+((3*HZ)/4)); /*750ms into the future*/
+   }
+}
+#endif	// CONFIG_SONOS_LIMELIGHT
+
 static int __init kernel_init(void * unused)
 {
 	/*
@@ -871,6 +1043,35 @@ static int __init kernel_init(void * unused)
 	wait_for_completion(&kthreadd_done);
 	lock_kernel();
 
+#if defined(CONFIG_SONOS_LIMELIGHT) && !defined(CONFIG_SONOS_DIAGS)
+   /* Get the white LED blinking as soon as possible. The Limelight white LED
+      is controlled by the FPGA which is accessed via the SPI. We can't access
+      the FPGA until the SPI driver is initialized which is much later. The
+      FPGA has a default mode which connects the SPI_MOSI pin to the white LED
+      pin. The SPI_MOSI pin is configured as a GPIO output and is toggled
+      periodically by the timer routine. Once the SPI driver is initialized
+      and the FPGA LED register reconfigured, the pin is configured for SPI by
+      the FPGA driver.
+    */
+   {
+      u32 gpdir, pmuxcr1;
+      pimmr = ioremap(IMMR_BASE, 0xF0000);
+      gpdir = in_be32(pimmr + GPDIR_OFFSET);
+      gpdir |= WHITE_LED_MASK;
+      out_be32(pimmr + GPDIR_OFFSET, gpdir);
+      pmuxcr1 = in_be32(pimmr + PMUXCR1_OFFSET);
+      pmuxcr1 &= ~PMUXCR1_SPI;
+      pmuxcr1 |= PMUXCR1_GPIO69;
+      out_be32(pimmr + PMUXCR1_OFFSET, pmuxcr1);
+
+      init_timer(&ledtimer);
+      ledtimer.data=0;
+      ledtimer.function=audioctl_ledtimer;
+      mod_timer(&(ledtimer),jiffies+((3*HZ)/4)); /*750ms into the future*/
+      //audioctl_ledtimer(0);
+   }
+#endif	// CONFIG_SONOS_LIMELIGHT && !CONFIG_SONOS_DIAGS
+
 	/*
 	 * init can allocate pages on any node
 	 */
@@ -878,6 +1079,23 @@ static int __init kernel_init(void * unused)
 	/*
 	 * init can run on any cpu.
 	 */
+
+#ifdef CONFIG_SONOS_FENWAY
+	printk("Fenway/Anvil/Amoeba White LED init\n");
+	fenway_gpio_init();
+	if (MDP_SUBMODEL_IS_ANVIL(fenway_submodel)|| MDP_SUBMODEL_IS_AMOEBA(fenway_submodel)) {
+		audioctl_configureWhiteLedPins();
+	}
+
+#ifndef CONFIG_SONOS_DIAGS
+	init_timer(&ledtimer);
+	ledtimer.data=0;
+	ledtimer.function=audioctl_ledtimer;
+	audioctl_ledtimer(0);
+#endif  // CONFIG_SONOS_DIAGS
+
+#endif	// CONFIG_SONOS_FENWAY
+
 	set_cpus_allowed_ptr(current, cpu_all_mask);
 	/*
 	 * Tell the world that we're going to be the grim

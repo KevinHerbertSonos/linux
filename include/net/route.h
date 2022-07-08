@@ -39,6 +39,21 @@
 #warning This file is not supposed to be used outside of kernel.
 #endif
 
+#define ROUTE_HOOK
+#ifdef ROUTE_HOOK
+typedef int route_hook_add_fn(short iif, short oif, uint32_t daddr,
+		uint32_t saddr, int tos, void *ctx);
+typedef int route_hook_del_fn(short iif, short oif, uint32_t daddr,
+		uint32_t saddr, int tos);
+typedef void *route_hook_lookup_fn(short iif, short oif, uint32_t daddr,
+		uint32_t saddr, int tos);
+
+void route_hook_register(route_hook_add_fn *add,
+		route_hook_del_fn *del,
+		route_hook_lookup_fn *lookup);
+void route_hook_unregister(void);
+#endif
+
 #define RTO_ONLINK	0x01
 
 #define RTO_CONN	0

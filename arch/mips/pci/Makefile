@@ -18,6 +18,18 @@ obj-$(CONFIG_PCI_TX4927)	+= ops-tx4927.o
 obj-$(CONFIG_BCM47XX)		+= pci-bcm47xx.o
 obj-$(CONFIG_BCM63XX)		+= pci-bcm63xx.o fixup-bcm63xx.o \
 					ops-bcm63xx.o
+obj-$(CONFIG_MACH_AR7240)	+= fixup-ar7240.o ops-ar7240.o pci-ar7240.o
+
+ifeq ($(strip ${ATH_LOW_POWER_ENABLE}),1)
+CFLAGS_pci-ath.o += -DATH_LOW_POWER_ENABLE=1
+else
+CFLAGS_pci-ath.o += -DATH_LOW_POWER_ENABLE=0
+endif
+
+obj-$(CONFIG_MACH_AR724x)	+= fixup-ath.o ops-ath.o pci-ath.o
+obj-$(CONFIG_MACH_AR934x)	+= fixup-ath.o ops-ath.o pci-ath.o
+obj-$(CONFIG_MACH_QCA955x)	+= fixup-ath.o ops-ath.o pci-ath.o
+obj-$(CONFIG_MACH_AR7100)	+= fixup-ar7100.o ops-ar7100.o pci-ar7100.o
 
 #
 # These are still pretty much in the old state, watch, go blind.

@@ -122,7 +122,7 @@ static int i2c_wait(struct mpc_i2c *i2c, unsigned timeout, int writing)
 		while (!(readb(i2c->base + MPC_I2C_SR) & CSR_MIF)) {
 			schedule();
 			if (time_after(jiffies, orig_jiffies + timeout)) {
-				dev_dbg(i2c->dev, "timeout\n");
+				dev_dbg(i2c->dev, "w-timeout\n");
 				writeccr(i2c, 0);
 				result = -EIO;
 				break;
@@ -500,7 +500,7 @@ static int mpc_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 			return -EINTR;
 		}
 		if (time_after(jiffies, orig_jiffies + HZ)) {
-			dev_dbg(i2c->dev, "timeout\n");
+			dev_dbg(i2c->dev, "w-timeout\n");
 			if (readb(i2c->base + MPC_I2C_SR) ==
 			    (CSR_MCF | CSR_MBB | CSR_RXAK))
 				mpc_i2c_fixup(i2c);
@@ -511,10 +511,12 @@ static int mpc_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 
 	for (i = 0; ret >= 0 && i < num; i++) {
 		pmsg = &msgs[i];
+#ifndef CONFIG_SONOS
 		dev_dbg(i2c->dev,
 			"Doing %s %d bytes to 0x%02x - %d of %d messages\n",
 			pmsg->flags & I2C_M_RD ? "read" : "write",
 			pmsg->len, pmsg->addr, i + 1, num);
+#endif	// ! CONFIG_SONOS
 		if (pmsg->flags & I2C_M_RD)
 			ret =
 			    mpc_read(i2c, pmsg->addr, pmsg->buf, pmsg->len, i);
@@ -542,6 +544,45 @@ static struct i2c_adapter mpc_ops = {
 	.algo = &mpc_algo,
 	.timeout = HZ,
 };
+
+#ifdef CONFIG_SONOS_FENWAY
+void mpc_i2c_recover_bus(struct mpc_i2c *i2c)
+{
+   int i;
+	u32 x;
+
+   writeccr(i2c, CCR_MSTA);
+	udelay(30);
+
+   writeccr(i2c, CCR_MEN | CCR_MSTA);
+	udelay(30);
+
+   readb(i2c->base + MPC_I2C_DR);
+	udelay(30);
+
+   /* wait for MCF */
+   for (i = 3000; i > 0; i--) {
+      x = readb(i2c->base + MPC_I2C_SR);
+      if (x & CSR_MCF) {
+         break;
+      }
+      mdelay(1);
+   }
+
+   writeccr(i2c, CCR_MEN);
+	udelay(30);
+
+   /* wait for MBB */
+   for (i = 3000; i > 0; i--) {
+      x = readb(i2c->base + MPC_I2C_SR);
+      if (!(x & CSR_MBB)) {
+         break;
+      }
+      mdelay(1);
+   }
+   printk("i2c bus init recovery complete\n");
+}
+#endif	// CONFIG_SONOS_FENWAY
 
 static int __devinit fsl_i2c_probe(struct of_device *op,
 				   const struct of_device_id *match)
@@ -594,6 +635,10 @@ static int __devinit fsl_i2c_probe(struct of_device *op,
 		if (of_get_property(op->dev.of_node, "dfsrr", NULL))
 			mpc_i2c_setup_8xxx(op->dev.of_node, i2c, clock, 0);
 	}
+
+#ifdef CONFIG_SONOS_FENWAY
+	mpc_i2c_recover_bus(i2c);
+#endif	// CONFIG_SONOS_FENWAY
 
 	dev_set_drvdata(&op->dev, i2c);
 

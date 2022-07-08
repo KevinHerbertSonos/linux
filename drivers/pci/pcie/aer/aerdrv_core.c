@@ -755,6 +755,7 @@ void aer_isr(struct work_struct *work)
 	struct pcie_device *p_device = rpc->rpd;
 	struct aer_err_source e_src;
 
+	e_src.status = e_src.id = 0;
 	mutex_lock(&rpc->rpc_mutex);
 	while (get_e_source(rpc, &e_src))
 		aer_isr_one_error(p_device, &e_src);

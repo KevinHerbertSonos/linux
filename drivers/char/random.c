@@ -702,6 +702,26 @@ void add_interrupt_randomness(int irq)
 	add_timer_randomness(state, 0x100 + irq);
 }
 
+#ifdef CONFIG_SONOS_FILLMORE
+void add_randomness(const char *buffer, int size, int nbits)
+{
+	preempt_disable();
+	/* if over the trickle threshold, use only 1 in 4096 samples */
+	if (input_pool.entropy_count > trickle_thresh &&
+	    (__get_cpu_var(trickle_count)++ & 0xfff))
+		goto out;
+
+	nbits = min_t(int, nbits, size * 8);
+
+	mix_pool_bytes(&input_pool, buffer, size);
+	credit_entropy_bits(&input_pool, nbits);
+
+out:
+	preempt_enable();
+}
+EXPORT_SYMBOL(add_randomness);
+#endif
+
 #ifdef CONFIG_BLOCK
 void add_disk_randomness(struct gendisk *disk)
 {

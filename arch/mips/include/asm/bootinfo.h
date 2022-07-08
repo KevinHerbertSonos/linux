@@ -59,6 +59,21 @@
 #define MACH_MIKROTIK_RB532A	1	/* Mikrotik RouterBoard 532A 	*/
 
 /*
+ * Atheros ar7240
+ */
+#define MACH_GROUP_AR7240       24
+#define MACH_ATHEROS_AR7240     1
+
+#define MACH_GROUP_ATHEROS	24 /* Look for ATH_MACH_TYPE in arch/mips/Kconfig */
+
+/*
+ * Atheros ar7100 ( hydra )
+ */
+#define MACH_GROUP_AR7100       23
+#define MACH_ATHEROS_AR7100     1
+
+
+/*
  * Valid machtype for Loongson family
  */
 #define MACH_LOONGSON_UNKNOWN  0

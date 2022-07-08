@@ -31,6 +31,8 @@
 #include <asm/setup.h>
 #include <asm/smp-ops.h>
 #include <asm/system.h>
+#include <asm/sonos.h>
+#include "mdp.h"
 
 struct cpuinfo_mips cpu_data[NR_CPUS] __read_mostly;
 
@@ -55,6 +57,44 @@ EXPORT_SYMBOL(PCI_DMA_BUS_IS_PHYS);
 unsigned long mips_machtype __read_mostly = MACH_UNKNOWN;
 
 EXPORT_SYMBOL(mips_machtype);
+
+#ifdef CONFIG_SONOS_FILLMORE
+extern struct manufacturing_data_page sys_mdp;
+
+void __init mdp_init(void)
+{
+	struct manufacturing_data_page *mdpp = (struct manufacturing_data_page *)FLASH_BASE_MDP;
+
+	/* Build bomb - mdp sizes must be the same for all builds, platforms, controllers */
+	BUILD_BUG_ON(sizeof(struct manufacturing_data_page)!=MDP1_BYTES);
+	BUILD_BUG_ON(sizeof(struct manufacturing_data_page2)!=MDP2_BYTES);
+	BUILD_BUG_ON(sizeof(struct manufacturing_data_page3)!=MDP3_BYTES);
+
+	/* Verify Magic */
+	if (mdpp->mdp_magic == MDP_MAGIC) {
+		memcpy(&sys_mdp, mdpp, sizeof(sys_mdp));
+	} else {
+		sys_mdp.mdp_magic = MDP_MAGIC ;
+		sys_mdp.mdp_vendor = MDP_VENDOR_RINCONNETWORKS;
+		sys_mdp.mdp_model = MDP_MODEL_FILLMORE;
+		sys_mdp.mdp_submodel = MDP_SUBMODEL_FILLMORE;
+		sys_mdp.mdp_revision = MDP_REVISION_FILLMORE_P1;
+		sys_mdp.mdp_region = MDP_REGION_USCA;
+		sys_mdp.mdp_flags = 0;
+		sys_mdp.mdp_reserved = MDP_RESERVED;
+		sys_mdp.mdp_hwfeatures = 0;
+	}
+
+#ifdef CONFIG_SONOS_DIAGS
+	/* Always turn on the 8250 console UART and console output for Diags */
+	sys_mdp.mdp_flags = MDP_KERNEL_PRINTK_ENABLE | MDP_FLAG_CONSOLE_ENABLE;
+#endif
+
+	printk("MDP: Model %d Sub-model %d Revision %d %s\n",
+		(int)sys_mdp.mdp_model, (int)sys_mdp.mdp_submodel, (int)sys_mdp.mdp_revision,
+		(mdpp->mdp_magic == MDP_MAGIC) ? "" : "  (Invalid MDP in flash)");
+}
+#endif
 
 struct boot_mem_map boot_mem_map;
 
@@ -462,6 +502,10 @@ static void __init arch_mem_init(char **cmdline_p)
 	pr_info("Determined physical RAM map:\n");
 	print_memory_map();
 
+#if defined(CONFIG_SONOS) && defined(CONFIG_SONOS_DIAGS)
+	/* Always turn on the 8250 console UART and console output */
+	sys_mdp.mdp_flags = MDP_KERNEL_PRINTK_ENABLE | MDP_FLAG_CONSOLE_ENABLE;
+#endif
 #ifdef CONFIG_CMDLINE_BOOL
 #ifdef CONFIG_CMDLINE_OVERRIDE
 	strlcpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
@@ -564,6 +608,10 @@ void __init setup_arch(char **cmdline_p)
 #endif
 
 	arch_mem_init(cmdline_p);
+
+#ifdef CONFIG_SONOS_FILLMORE
+	mdp_init();
+#endif
 
 	resource_init();
 	plat_smp_setup();

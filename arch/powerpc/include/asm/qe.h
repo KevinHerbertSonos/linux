@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006 Freescale Semicondutor, Inc. All rights reserved.
+ * Copyright (C) 2006-2009 Freescale Semiconductor, Inc. All rights reserved.
  *
  * Authors: 	Shlomi Gridish <gridish@freescale.com>
  * 		Li Yang <leoli@freescale.com>
@@ -31,6 +31,20 @@
 #define MEM_PART_SYSTEM		0
 #define MEM_PART_SECONDARY	1
 #define MEM_PART_MURAM		2
+
+/* Clock Source Direction */
+enum clk_dir {
+	CLK_RX = 1,
+	CLK_TX = 2,
+	CLK_RTX = 3,
+	CLK_INTERNAL = 4
+};
+
+struct clock_map {
+	u8 dir;
+	const char name[5];
+	u16 value;
+};
 
 /* Clocks and BRGs */
 enum qe_clock {
@@ -256,6 +270,8 @@ struct qe_firmware_info *qe_get_firmware_info(void);
 /* QE USB */
 int qe_usb_clock_set(enum qe_clock clk, int rate);
 
+int qe_enable_time_stamp(int num);
+
 /* Buffer descriptors */
 struct qe_bd {
 	__be16 status;
@@ -338,6 +354,14 @@ enum comm_dir {
 #define QE_CMXUCR_TSA			0x00004000
 #define QE_CMXUCR_BKPT			0x00000100
 #define QE_CMXUCR_TX_CLK_SRC_MASK	0x0000000F
+
+/* The CMXUPCR represents two UPCs.
+ * Bits 0-15 represents UPC 1.
+ * Bits 16-31 represents UPC 2
+ */
+#define QE_CMXUPCR_RCS_SHIFT	12
+#define QE_CMXUPCR_TCS_SHIFT	8
+#define QE_CMXUPCR_RCS_MASK	0x0007
 
 /* QE CMXGCR Registers.
 */
@@ -451,6 +475,10 @@ enum comm_dir {
 #define QE_CR_PROTOCOL_ATM_POS		0x0A
 #define QE_CR_PROTOCOL_ETHERNET		0x0C
 #define QE_CR_PROTOCOL_L2_SWITCH	0x0D
+
+/* Time stamp register */
+#define QE_CETSCR_EC	0x8000
+#define QE_CETSCR_RTE	0x0400
 
 /* BRG configuration register */
 #define QE_BRGC_ENABLE		0x00010000

@@ -43,8 +43,10 @@
 
 static inline int cifs_convert_flags(unsigned int flags)
 {
-	if ((flags & O_ACCMODE) == O_RDONLY)
-		return GENERIC_READ;
+	if ((flags & O_ACCMODE) == O_RDONLY) {
+		/* Sonos: Use explicit permissions rather than GENERIC_READ */
+		return (READ_CONTROL | FILE_READ_ATTRIBUTES | FILE_READ_EA | FILE_READ_DATA);
+	}
 	else if ((flags & O_ACCMODE) == O_WRONLY)
 		return GENERIC_WRITE;
 	else if ((flags & O_ACCMODE) == O_RDWR) {

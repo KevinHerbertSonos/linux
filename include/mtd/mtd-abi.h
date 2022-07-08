@@ -20,7 +20,12 @@ struct erase_info_user64 {
 struct mtd_oob_buf {
 	__u32 start;
 	__u32 length;
-	unsigned char __user *ptr;
+	unsigned char *ptr;
+};
+
+struct partition_geometry {
+	u_int32_t start;
+	u_int32_t length;
 };
 
 struct mtd_oob_buf64 {
@@ -67,11 +72,22 @@ struct mtd_info_user {
 	__u32 size;	 // Total size of the MTD
 	__u32 erasesize;
 	__u32 writesize;
+	__u32 oobblock;
 	__u32 oobsize;   // Amount of OOB data per block (e.g. 16)
 	/* The below two fields are obsolete and broken, do not use them
 	 * (TODO: remove at some point) */
 	__u32 ecctype;
 	__u32 eccsize;
+};
+
+struct mtd_special_info {
+	__u32 datalen;
+	void *databuf;
+	__u32 preop_cmdlen;
+	__u8 preop_cmd[8];
+	__u32 addrlen;
+	__u8 addr[8];
+	__u32 alternate_read;
 };
 
 struct region_info_user {
@@ -86,6 +102,12 @@ struct otp_info {
 	__u32 start;
 	__u32 length;
 	__u32 locked;
+};
+
+struct mtd_write_physical {
+	__u32 start;
+	__u32 length;
+	__u32 dataptr;
 };
 
 #define MEMGETINFO		_IOR('M', 1, struct mtd_info_user)
@@ -110,6 +132,16 @@ struct otp_info {
 #define MEMERASE64		_IOW('M', 20, struct erase_info_user64)
 #define MEMWRITEOOB64		_IOWR('M', 21, struct mtd_oob_buf64)
 #define MEMREADOOB64		_IOWR('M', 22, struct mtd_oob_buf64)
+
+#define MEMSNAP                 _IO('M', 32)
+#define MEMUNSNAP               _IO('M', 33)
+#define MEMSETGEOMETRY          _IOW('M', 34, struct partition_geometry)
+#define MEMREADSPECIAL          _IOW('M', 35, struct mtd_special_info)
+#define MEMGETDEVID             _IOR('M', 36, uint32_t)
+#define MEMWRITESPECIAL         _IOW('M', 37, struct mtd_special_info)
+
+#define MTDSETLASTBLOCK         _IO('M', 38)
+#define MTDWRITEPHYSICAL        _IOW('M', 39, struct mtd_write_physical)
 
 /*
  * Obsolete legacy interface. Keep it in order not to break userspace

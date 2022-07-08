@@ -144,8 +144,16 @@ int jffs2_scan_medium(struct jffs2_sb_info *c)
 		/* reset summary info for next eraseblock scan */
 		jffs2_sum_reset_collected(s);
 
+#ifdef CONFIG_SONOS_FILLMORE
+		if (c->flags & (1 << 7))
+			ret = BLK_STATE_ALLFF;
+		else
+			ret = jffs2_scan_eraseblock(c, jeb, buf_size?flashbuf:(flashbuf+jeb->offset),
+							buf_size, s);
+#else
 		ret = jffs2_scan_eraseblock(c, jeb, buf_size?flashbuf:(flashbuf+jeb->offset),
 						buf_size, s);
+#endif
 
 		if (ret < 0)
 			goto out;
@@ -547,6 +555,19 @@ static int jffs2_scan_eraseblock (struct jffs2_sb_info *c, struct jffs2_eraseblo
 		if (err)
 			return err;
 	}
+
+#ifdef CONFIG_SONOS_FILLMORE
+	if ((buf[0] == 0xde) &&
+		(buf[1] == 0xad) &&
+		(buf[2] == 0xc0) &&
+		(buf[3] == 0xde)) {
+		/* end of filesystem. erase everything after this point */
+		printk("%s(): End of filesystem marker found at 0x%x\n", __func__, jeb->offset);
+		c->flags |= (1 << 7);
+
+		return BLK_STATE_ALLFF;
+	}
+#endif
 
 	/* We temporarily use 'ofs' as a pointer into the buffer/jeb */
 	ofs = 0;

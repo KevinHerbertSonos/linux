@@ -63,7 +63,7 @@ void cifs_dump_detail(struct smb_hdr *smb)
 	cERROR(1, "Cmd: %d Err: 0x%x Flags: 0x%x Flgs2: 0x%x Mid: %d Pid: %d",
 		  smb->Command, smb->Status.CifsError,
 		  smb->Flags, smb->Flags2, smb->Mid, smb->Pid);
-	cERROR(1, "smb buf %p len %d", smb, smbCalcSize_LE(smb));
+	cERROR(1, "smb buf %p len %d", smb, smbCalcSize(smb));
 }
 
 
@@ -155,6 +155,12 @@ static int cifs_debug_data_proc_show(struct seq_file *m, void *v)
 			seq_printf(m, " In Send: %d In MaxReq Wait: %d",
 				atomic_read(&server->inSend),
 				atomic_read(&server->num_waiters));
+#endif
+
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+			struct timespec utc = CURRENT_TIME;
+			seq_printf(m, "\n\tSince 1970: %ld / %ld",
+				utc.tv_sec + ses->timeOff, utc.tv_sec + server->timeOff);
 #endif
 
 			seq_puts(m, "\n\tShares:");

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006 Freescale Semicondutor, Inc. All rights reserved.
+ * Copyright (C) 2006, 2009 Freescale Semiconductor, Inc. All rights reserved.
  *
  * Authors: 	Shlomi Gridish <gridish@freescale.com>
  * 		Li Yang <leoli@freescale.com>
@@ -145,7 +145,6 @@ int ucc_fast_init(struct ucc_fast_info * uf_info, struct ucc_fast_private ** ucc
 
 	if (!uf_info)
 		return -EINVAL;
-
 	/* check if the UCC port number is in range. */
 	if ((uf_info->ucc_num < 0) || (uf_info->ucc_num > UCC_MAX_NUM - 1)) {
 		printk(KERN_ERR "%s: illegal UCC number\n", __func__);
@@ -301,32 +300,38 @@ int ucc_fast_init(struct ucc_fast_info * uf_info, struct ucc_fast_private ** ucc
 	out_be32(&uf_regs->utfb, uccf->ucc_fast_tx_virtual_fifo_base_offset);
 	out_be32(&uf_regs->urfb, uccf->ucc_fast_rx_virtual_fifo_base_offset);
 
-	/* Mux clocking */
-	/* Grant Support */
-	ucc_set_qe_mux_grant(uf_info->ucc_num, uf_info->grant_support);
-	/* Breakpoint Support */
-	ucc_set_qe_mux_bkpt(uf_info->ucc_num, uf_info->brkpt_support);
-	/* Set Tsa or NMSI mode. */
-	ucc_set_qe_mux_tsa(uf_info->ucc_num, uf_info->tsa);
-	/* If NMSI (not Tsa), set Tx and Rx clock. */
-	if (!uf_info->tsa) {
-		/* Rx clock routing */
-		if ((uf_info->rx_clock != QE_CLK_NONE) &&
-		    ucc_set_qe_mux_rxtx(uf_info->ucc_num, uf_info->rx_clock,
-					COMM_DIR_RX)) {
-			printk(KERN_ERR "%s: illegal value for RX clock\n",
-			       __func__);
-			ucc_fast_free(uccf);
-			return -EINVAL;
-		}
-		/* Tx clock routing */
-		if ((uf_info->tx_clock != QE_CLK_NONE) &&
-		    ucc_set_qe_mux_rxtx(uf_info->ucc_num, uf_info->tx_clock,
-					COMM_DIR_TX)) {
-			printk(KERN_ERR "%s: illegal value for TX clock\n",
-			       __func__);
-			ucc_fast_free(uccf);
-			return -EINVAL;
+	/*
+	 * If UCC works as ATM, its clocks come from UPC
+	 * and do not needs io pins
+	 */
+	if (uf_info->mode != UCC_FAST_PROTOCOL_MODE_ATM) {
+		/* Mux clocking */
+		/* Grant Support */
+		ucc_set_qe_mux_grant(uf_info->ucc_num, uf_info->grant_support);
+		/* Breakpoint Support */
+		ucc_set_qe_mux_bkpt(uf_info->ucc_num, uf_info->brkpt_support);
+		/* Set Tsa or NMSI mode. */
+		ucc_set_qe_mux_tsa(uf_info->ucc_num, uf_info->tsa);
+		/* If NMSI (not Tsa), set Tx and Rx clock. */
+		if (!uf_info->tsa) {
+			/* Rx clock routing */
+			if ((uf_info->rx_clock != QE_CLK_NONE) &&
+				ucc_set_qe_mux_rxtx(uf_info->ucc_num,
+					uf_info->rx_clock, COMM_DIR_RX)) {
+				printk(KERN_ERR"%s: illegal value for RX clock",
+					__FUNCTION__);
+				ucc_fast_free(uccf);
+				return -EINVAL;
+			}
+			/* Tx clock routing */
+			if ((uf_info->tx_clock != QE_CLK_NONE) &&
+				ucc_set_qe_mux_rxtx(uf_info->ucc_num,
+					uf_info->tx_clock, COMM_DIR_TX)) {
+				printk(KERN_ERR "%s:illegal value for TX clock",
+					__FUNCTION__);
+				ucc_fast_free(uccf);
+				return -EINVAL;
+			}
 		}
 	}
 

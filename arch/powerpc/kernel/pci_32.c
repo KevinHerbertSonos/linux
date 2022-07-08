@@ -54,11 +54,19 @@ static void
 fixup_hide_host_resource_fsl(struct pci_dev *dev)
 {
 	int i, class = dev->class >> 8;
+	/*When configured as agent, programing interface = 1*/
+	int prog_if = dev->class & 0xf;
 
 	if ((class == PCI_CLASS_PROCESSOR_POWERPC ||
 	     class == PCI_CLASS_BRIDGE_OTHER) &&
 		(dev->hdr_type == PCI_HEADER_TYPE_NORMAL) &&
-		(dev->bus->parent == NULL)) {
+		(prog_if == 0) &&
+		(dev->bus->parent == NULL)
+#ifdef CONFIG_SONOS_FENWAY
+		/*PCI_DEVICE_ID_MPC8315E 0x00b4*/
+		&& (dev->subsystem_device != 0x00b4)
+#endif
+		) {
 		for (i = 0; i < DEVICE_COUNT_RESOURCE; i++) {
 			dev->resource[i].start = 0;
 			dev->resource[i].end = 0;

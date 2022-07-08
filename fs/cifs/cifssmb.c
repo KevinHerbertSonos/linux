@@ -232,7 +232,7 @@ static int
 small_smb_init(int smb_command, int wct, struct cifsTconInfo *tcon,
 		void **request_buf)
 {
-	int rc = 0;
+	int rc;
 
 	rc = cifs_reconnect_tcon(tcon, smb_command);
 	if (rc)
@@ -250,7 +250,7 @@ small_smb_init(int smb_command, int wct, struct cifsTconInfo *tcon,
 	if (tcon != NULL)
 		cifs_stats_inc(&tcon->num_smbs_sent);
 
-	return rc;
+	return 0;
 }
 
 int
@@ -316,7 +316,6 @@ static int validate_t2(struct smb_t2_rsp *pSMB)
 {
 	int rc = -EINVAL;
 	int total_size;
-	char *pBCC;
 
 	/* check for plausible wct, bcc and t2 data and parm sizes */
 	/* check for parm and data offset going beyond end of smb */
@@ -329,13 +328,9 @@ static int validate_t2(struct smb_t2_rsp *pSMB)
 			if (total_size < 512) {
 				total_size +=
 					le16_to_cpu(pSMB->t2_rsp.DataCount);
-				/* BCC le converted in SendReceive */
-				pBCC = (pSMB->hdr.WordCount * 2) +
-					sizeof(struct smb_hdr) +
-					(char *)pSMB;
-				if ((total_size <= (*(u16 *)pBCC)) &&
-				   (total_size <
-					CIFSMaxBufSize+MAX_CIFS_HDR_SIZE)) {
+				if (total_size <= get_bcc(&pSMB->hdr) &&
+				    total_size <
+					CIFSMaxBufSize + MAX_CIFS_HDR_SIZE) {
 					return 0;
 				}
 			}
@@ -345,6 +340,7 @@ static int validate_t2(struct smb_t2_rsp *pSMB)
 		sizeof(struct smb_t2_rsp) + 16);
 	return rc;
 }
+
 int
 CIFSSMBNegotiate(unsigned int xid, struct cifsSesInfo *ses)
 {
@@ -385,7 +381,7 @@ CIFSSMBNegotiate(unsigned int xid, struct cifsSesInfo *ses)
 		cFYI(1, "Kerberos only mechanism, enable extended security");
 		pSMB->hdr.Flags2 |= SMBFLG2_EXT_SEC;
 	}
-#ifdef CONFIG_CIFS_EXPERIMENTAL
+#if defined(CONFIG_CIFS_EXPERIMENTAL) || defined(CONFIG_CIFS_NTLMSSP_SONOS)
 	else if ((secFlags & CIFSSEC_MUST_NTLMSSP) == CIFSSEC_MUST_NTLMSSP)
 		pSMB->hdr.Flags2 |= SMBFLG2_EXT_SEC;
 	else if ((secFlags & CIFSSEC_AUTH_MASK) == CIFSSEC_MAY_NTLMSSP) {
@@ -460,6 +456,10 @@ CIFSSMBNegotiate(unsigned int xid, struct cifsSesInfo *ses)
 			int val, seconds, remain, result;
 			struct timespec ts, utc;
 			utc = CURRENT_TIME;
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+			// REVIEW: shouldn't be using LANMAN anyways, and we don't
+			// particularly care about timezone anyways. so... do nothing
+#endif
 			ts = cnvrtDosUnixTm(rsp->SrvTime.Date,
 					    rsp->SrvTime.Time, 0);
 			cFYI(1, "SrvTime %d sec since 1970 (utc: %d) diff: %d",
@@ -480,13 +480,18 @@ CIFSSMBNegotiate(unsigned int xid, struct cifsSesInfo *ses)
 		}
 		cFYI(1, "server->timeAdj: %d seconds", server->timeAdj);
 
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+		// should be zero already, but just make sure
+		server->timeOff = 0;
+		ses->timeOff = 0;
+#endif
 
 		/* BB get server time for time conversions and add
 		code to use it and timezone since this is not UTC */
 
 		if (rsp->EncryptionKeyLength ==
 				cpu_to_le16(CIFS_CRYPTO_KEY_SIZE)) {
-			memcpy(server->cryptKey, rsp->EncryptionKey,
+			memcpy(ses->server->cryptkey, rsp->EncryptionKey,
 				CIFS_CRYPTO_KEY_SIZE);
 		} else if (server->secMode & SECMODE_PW_ENCRYPT) {
 			rc = -EIO; /* need cryptkey unless plain text */
@@ -556,8 +561,18 @@ CIFSSMBNegotiate(unsigned int xid, struct cifsSesInfo *ses)
 	server->capabilities = le32_to_cpu(pSMBr->Capabilities);
 	server->timeAdj = (int)(__s16)le16_to_cpu(pSMBr->ServerTimeZone);
 	server->timeAdj *= 60;
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	struct timespec utc = CURRENT_TIME;
+	struct timespec ts = cifs_NTtimeToUnix(*((__le64*)(&pSMBr->SystemTimeLow)));
+	server->timeOff = ts.tv_sec - utc.tv_sec;
+	ses->timeOff = server->timeOff;
+	cFYI(1, "found server timestamp %ld.%06ld local %ld.%06d delta %ld",
+		ts.tv_sec, ts.tv_nsec/1000,
+		utc.tv_sec, utc.tv_nsec/1000,
+		ses->timeOff);
+#endif
 	if (pSMBr->EncryptionKeyLength == CIFS_CRYPTO_KEY_SIZE) {
-		memcpy(server->cryptKey, pSMBr->u.EncryptionKey,
+		memcpy(ses->server->cryptkey, pSMBr->u.EncryptionKey,
 		       CIFS_CRYPTO_KEY_SIZE);
 	} else if ((pSMBr->hdr.Flags2 & SMBFLG2_EXT_SEC)
 			&& (pSMBr->EncryptionKeyLength == 0)) {
@@ -571,7 +586,7 @@ CIFSSMBNegotiate(unsigned int xid, struct cifsSesInfo *ses)
 
 	if ((pSMBr->hdr.Flags2 & SMBFLG2_EXT_SEC) &&
 		(server->capabilities & CAP_EXTENDED_SECURITY)) {
-		count = pSMBr->ByteCount;
+		count = get_bcc(&pSMBr->hdr);
 		if (count < 16) {
 			rc = -EIO;
 			goto neg_err_exit;
@@ -604,11 +619,16 @@ CIFSSMBNegotiate(unsigned int xid, struct cifsSesInfo *ses)
 			else
 				rc = -EINVAL;
 
-			if (server->sec_kerberos || server->sec_mskerberos)
-				server->secType = Kerberos;
-			else if (server->sec_ntlmssp)
-				server->secType = RawNTLMSSP;
-			else
+			/* Sonos: Changed this check to be more like the
+			   one from 2.6.38 */
+			if (server->secType == Kerberos) {
+				if (!server->sec_kerberos &&
+						!server->sec_mskerberos)
+					rc = -EOPNOTSUPP;
+			} else if (server->secType == RawNTLMSSP) {
+				if (!server->sec_ntlmssp)
+					rc = -EOPNOTSUPP;
+			} else
 				rc = -EOPNOTSUPP;
 		}
 	} else
@@ -1019,7 +1039,7 @@ PsxCreat:
 	cFYI(1, "copying inode info");
 	rc = validate_t2((struct smb_t2_rsp *)pSMBr);
 
-	if (rc || (pSMBr->ByteCount < sizeof(OPEN_PSX_RSP))) {
+	if (rc || get_bcc(&pSMBr->hdr) < sizeof(OPEN_PSX_RSP)) {
 		rc = -EIO;	/* bad smb */
 		goto psx_create_err;
 	}
@@ -1040,7 +1060,7 @@ PsxCreat:
 		pRetData->Type = cpu_to_le32(-1); /* unknown */
 		cFYI(DBG2, "unknown type");
 	} else {
-		if (pSMBr->ByteCount < sizeof(OPEN_PSX_RSP)
+		if (get_bcc(&pSMBr->hdr) < sizeof(OPEN_PSX_RSP)
 					+ sizeof(FILE_UNIX_BASIC_INFO)) {
 			cERROR(1, "Open response data too small");
 			pRetData->Type = cpu_to_le32(-1);
@@ -1804,7 +1824,7 @@ CIFSSMBPosixLock(const int xid, struct cifsTconInfo *tcon,
 		__u16 data_count;
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
 
-		if (rc || (pSMBr->ByteCount < sizeof(struct cifs_posix_lock))) {
+		if (rc || get_bcc(&pSMBr->hdr) < sizeof(*parm_data)) {
 			rc = -EIO;      /* bad smb */
 			goto plk_err_exit;
 		}
@@ -2431,7 +2451,7 @@ querySymLinkRetry:
 
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
 		/* BB also check enough total bytes returned */
-		if (rc || (pSMBr->ByteCount < 2))
+		if (rc || get_bcc(&pSMBr->hdr) < 2)
 			rc = -EIO;
 		else {
 			bool is_unicode;
@@ -2503,6 +2523,7 @@ validate_ntransact(char *buf, char **ppparm, char **ppdata,
 	char *end_of_smb;
 	__u32 data_count, data_offset, parm_count, parm_offset;
 	struct smb_com_ntransact_rsp *pSMBr;
+	u16 bcc;
 
 	*pdatalen = 0;
 	*pparmlen = 0;
@@ -2512,8 +2533,8 @@ validate_ntransact(char *buf, char **ppparm, char **ppdata,
 
 	pSMBr = (struct smb_com_ntransact_rsp *)buf;
 
-	/* ByteCount was converted from little endian in SendReceive */
-	end_of_smb = 2 /* sizeof byte count */ + pSMBr->ByteCount +
+	bcc = get_bcc(&pSMBr->hdr);
+	end_of_smb = 2 /* sizeof byte count */ + bcc +
 			(char *)&pSMBr->ByteCount;
 
 	data_offset = le32_to_cpu(pSMBr->DataOffset);
@@ -2539,7 +2560,7 @@ validate_ntransact(char *buf, char **ppparm, char **ppdata,
 			*ppdata, data_count, (data_count + *ppdata),
 			end_of_smb, pSMBr);
 		return -EINVAL;
-	} else if (parm_count + data_count > pSMBr->ByteCount) {
+	} else if (parm_count + data_count > bcc) {
 		cFYI(1, "parm count and data count larger than SMB");
 		return -EINVAL;
 	}
@@ -2592,14 +2613,14 @@ CIFSSMBQueryReparseLinkInfo(const int xid, struct cifsTconInfo *tcon,
 	} else {		/* decode response */
 		__u32 data_offset = le32_to_cpu(pSMBr->DataOffset);
 		__u32 data_count = le32_to_cpu(pSMBr->DataCount);
-		if ((pSMBr->ByteCount < 2) || (data_offset > 512)) {
-		/* BB also check enough total bytes returned */
+		if (get_bcc(&pSMBr->hdr) < 2 || data_offset > 512) {
+			/* BB also check enough total bytes returned */
 			rc = -EIO;	/* bad smb */
 			goto qreparse_out;
 		}
 		if (data_count && (data_count < 2048)) {
 			char *end_of_smb = 2 /* sizeof byte count */ +
-				pSMBr->ByteCount + (char *)&pSMBr->ByteCount;
+			       get_bcc(&pSMBr->hdr) + (char *)&pSMBr->ByteCount;
 
 			struct reparse_data *reparse_buf =
 						(struct reparse_data *)
@@ -2649,7 +2670,7 @@ qreparse_out:
 
 	return rc;
 }
-#endif /* CIFS_EXPERIMENTAL */
+#endif /* CONFIG_CIFS_EXPERIMENTAL */
 
 #ifdef CONFIG_CIFS_POSIX
 
@@ -2857,8 +2878,8 @@ queryAclRetry:
 		/* decode response */
 
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
-		if (rc || (pSMBr->ByteCount < 2))
 		/* BB also check enough total bytes returned */
+		if (rc || get_bcc(&pSMBr->hdr) < 2)
 			rc = -EIO;      /* bad smb */
 		else {
 			__u16 data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
@@ -3007,8 +3028,8 @@ GetExtAttrRetry:
 	} else {
 		/* decode response */
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
-		if (rc || (pSMBr->ByteCount < 2))
 		/* BB also check enough total bytes returned */
+		if (rc || get_bcc(&pSMBr->hdr) < 2)
 			/* If rc should we check for EOPNOSUPP and
 			   disable the srvino flag? or in caller? */
 			rc = -EIO;      /* bad smb */
@@ -3316,7 +3337,7 @@ QFileInfoRetry:
 
 		if (rc) /* BB add auto retry on EOPNOTSUPP? */
 			rc = -EIO;
-		else if (pSMBr->ByteCount < 40)
+		else if (get_bcc(&pSMBr->hdr) < 40)
 			rc = -EIO;	/* bad smb */
 		else if (pFindData) {
 			__u16 data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
@@ -3404,9 +3425,9 @@ QPathInfoRetry:
 
 		if (rc) /* BB add auto retry on EOPNOTSUPP? */
 			rc = -EIO;
-		else if (!legacy && (pSMBr->ByteCount < 40))
+		else if (!legacy && get_bcc(&pSMBr->hdr) < 40)
 			rc = -EIO;	/* bad smb */
-		else if (legacy && (pSMBr->ByteCount < 24))
+		else if (legacy && get_bcc(&pSMBr->hdr) < 24)
 			rc = -EIO;  /* 24 or 26 expected but we do not read
 					last field */
 		else if (pFindData) {
@@ -3482,7 +3503,7 @@ UnixQFileInfoRetry:
 	} else {		/* decode response */
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
 
-		if (rc || (pSMBr->ByteCount < sizeof(FILE_UNIX_BASIC_INFO))) {
+		if (rc || get_bcc(&pSMBr->hdr) < sizeof(FILE_UNIX_BASIC_INFO)) {
 			cERROR(1, "Malformed FILE_UNIX_BASIC_INFO response.\n"
 				   "Unix Extensions can be disabled on mount "
 				   "by specifying the nosfu mount option.");
@@ -3568,7 +3589,7 @@ UnixQPathInfoRetry:
 	} else {		/* decode response */
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
 
-		if (rc || (pSMBr->ByteCount < sizeof(FILE_UNIX_BASIC_INFO))) {
+		if (rc || get_bcc(&pSMBr->hdr) < sizeof(FILE_UNIX_BASIC_INFO)) {
 			cERROR(1, "Malformed FILE_UNIX_BASIC_INFO response.\n"
 				   "Unix Extensions can be disabled on mount "
 				   "by specifying the nosfu mount option.");
@@ -3665,7 +3686,13 @@ findFirstRetry:
 	pSMB->SearchAttributes =
 	    cpu_to_le16(ATTR_READONLY | ATTR_HIDDEN | ATTR_SYSTEM |
 			ATTR_DIRECTORY);
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	// use the minimum sized entry to work around OSX Yosemite, which will prematurely
+	// set EndOfSearch on hitting the SearchCount even if there are more entries
+	pSMB->SearchCount = cpu_to_le16(CIFSMaxBufSize/sizeof(FILE_BASIC_INFO));
+#else
 	pSMB->SearchCount = cpu_to_le16(CIFSMaxBufSize/sizeof(FILE_UNIX_INFO));
+#endif
 	pSMB->SearchFlags = cpu_to_le16(CIFS_SEARCH_CLOSE_AT_END |
 		CIFS_SEARCH_RETURN_RESUME);
 	pSMB->InformationLevel = cpu_to_le16(psrch_inf->info_level);
@@ -3718,6 +3745,7 @@ findFirstRetry:
 					le16_to_cpu(parms->SearchCount);
 			psrch_inf->index_of_last_entry = 2 /* skip . and .. */ +
 				psrch_inf->entries_in_buffer;
+			*pnetfid = parms->SearchHandle;
 			lnoff = le16_to_cpu(parms->LastNameOffset);
 			if (tcon->ses->server->maxBuf - MAX_CIFS_HDR_SIZE <
 			      lnoff) {
@@ -3728,8 +3756,6 @@ findFirstRetry:
 
 			psrch_inf->last_entry = psrch_inf->srch_entries_start +
 							lnoff;
-
-			*pnetfid = parms->SearchHandle;
 		} else {
 			cifs_buf_release(pSMB);
 		}
@@ -3779,8 +3805,13 @@ int CIFSFindNext(const int xid, struct cifsTconInfo *tcon,
 	pSMB->Reserved3 = 0;
 	pSMB->SubCommand = cpu_to_le16(TRANS2_FIND_NEXT);
 	pSMB->SearchHandle = searchHandle;      /* always kept as le */
-	pSMB->SearchCount =
-		cpu_to_le16(CIFSMaxBufSize / sizeof(FILE_UNIX_INFO));
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	// use the minimum sized entry to work around OSX Yosemite, which will prematurely
+	// set EndOfSearch on hitting the SearchCount even if there are more entries
+	pSMB->SearchCount = cpu_to_le16(CIFSMaxBufSize/sizeof(FILE_BASIC_INFO));
+#else
+	pSMB->SearchCount = cpu_to_le16(CIFSMaxBufSize/sizeof(FILE_UNIX_INFO));
+#endif
 	pSMB->InformationLevel = cpu_to_le16(psrch_inf->info_level);
 	pSMB->ResumeKey = psrch_inf->resume_key;
 	pSMB->SearchFlags =
@@ -3973,8 +4004,8 @@ GetInodeNumberRetry:
 	} else {
 		/* decode response */
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
-		if (rc || (pSMBr->ByteCount < 2))
 		/* BB also check enough total bytes returned */
+		if (rc || get_bcc(&pSMBr->hdr) < 2)
 			/* If rc should we check for EOPNOSUPP and
 			disable the srvino flag? or in caller? */
 			rc = -EIO;      /* bad smb */
@@ -4199,13 +4230,13 @@ getDFSRetry:
 	rc = validate_t2((struct smb_t2_rsp *)pSMBr);
 
 	/* BB Also check if enough total bytes returned? */
-	if (rc || (pSMBr->ByteCount < 17)) {
+	if (rc || get_bcc(&pSMBr->hdr) < 17) {
 		rc = -EIO;      /* bad smb */
 		goto GetDFSRefExit;
 	}
 
 	cFYI(1, "Decoding GetDFSRefer response BCC: %d  Offset %d",
-				pSMBr->ByteCount,
+				get_bcc(&pSMBr->hdr),
 				le16_to_cpu(pSMBr->t2.DataOffset));
 
 	/* parse returned result into more usable form */
@@ -4271,12 +4302,12 @@ oldQFSInfoRetry:
 	} else {                /* decode response */
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
 
-		if (rc || (pSMBr->ByteCount < 18))
+		if (rc || get_bcc(&pSMBr->hdr) < 18)
 			rc = -EIO;      /* bad smb */
 		else {
 			__u16 data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
 			cFYI(1, "qfsinf resp BCC: %d  Offset %d",
-				 pSMBr->ByteCount, data_offset);
+				 get_bcc(&pSMBr->hdr), data_offset);
 
 			response_data = (FILE_SYSTEM_ALLOC_INFO *)
 				(((char *) &pSMBr->hdr.Protocol) + data_offset);
@@ -4350,7 +4381,7 @@ QFSInfoRetry:
 	} else {		/* decode response */
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
 
-		if (rc || (pSMBr->ByteCount < 24))
+		if (rc || get_bcc(&pSMBr->hdr) < 24)
 			rc = -EIO;	/* bad smb */
 		else {
 			__u16 data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
@@ -4430,7 +4461,7 @@ QFSAttributeRetry:
 	} else {		/* decode response */
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
 
-		if (rc || (pSMBr->ByteCount < 13)) {
+		if (rc || get_bcc(&pSMBr->hdr) < 13) {
 			/* BB also check if enough bytes returned */
 			rc = -EIO;	/* bad smb */
 		} else {
@@ -4501,7 +4532,8 @@ QFSDeviceRetry:
 	} else {		/* decode response */
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
 
-		if (rc || (pSMBr->ByteCount < sizeof(FILE_SYSTEM_DEVICE_INFO)))
+		if (rc || get_bcc(&pSMBr->hdr) <
+			  sizeof(FILE_SYSTEM_DEVICE_INFO))
 			rc = -EIO;	/* bad smb */
 		else {
 			__u16 data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
@@ -4570,7 +4602,7 @@ QFSUnixRetry:
 	} else {		/* decode response */
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
 
-		if (rc || (pSMBr->ByteCount < 13)) {
+		if (rc || get_bcc(&pSMBr->hdr) < 13) {
 			rc = -EIO;	/* bad smb */
 		} else {
 			__u16 data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
@@ -4715,7 +4747,7 @@ QFSPosixRetry:
 	} else {		/* decode response */
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
 
-		if (rc || (pSMBr->ByteCount < 13)) {
+		if (rc || get_bcc(&pSMBr->hdr) < 13) {
 			rc = -EIO;	/* bad smb */
 		} else {
 			__u16 data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
@@ -5520,7 +5552,7 @@ QAllEAsRetry:
 	of these trans2 responses */
 
 	rc = validate_t2((struct smb_t2_rsp *)pSMBr);
-	if (rc || (pSMBr->ByteCount < 4)) {
+	if (rc || get_bcc(&pSMBr->hdr) < 4) {
 		rc = -EIO;	/* bad smb */
 		goto QAllEAsOut;
 	}
@@ -5545,7 +5577,7 @@ QAllEAsRetry:
 	}
 
 	/* make sure list_len doesn't go past end of SMB */
-	end_of_smb = (char *)pByteArea(&pSMBr->hdr) + BCC(&pSMBr->hdr);
+	end_of_smb = (char *)pByteArea(&pSMBr->hdr) + get_bcc(&pSMBr->hdr);
 	if ((char *)ea_response_data + list_len > end_of_smb) {
 		cFYI(1, "EA list appears to go beyond SMB");
 		rc = -EIO;

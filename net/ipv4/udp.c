@@ -1185,6 +1185,29 @@ try_again:
 		sin->sin_port = udp_hdr(skb)->source;
 		sin->sin_addr.s_addr = ip_hdr(skb)->saddr;
 		memset(sin->sin_zero, 0, sizeof(sin->sin_zero));
+
+#ifdef CONFIG_SONOS
+		if (sk->sonos_options & SO_SONOS_OPTION_SONOS_SOCKADDR) {
+			/* This is mightly ugly since loopback and some other local paths
+			 * make this something other than an ethernet header.  I can either
+			 * mark the SKB somewhere lower in the stack so that we know this,
+			 * or just continue hacking and copy the header if the eth_hdr is
+			 * the proper length.
+			 *
+			 * We could also filter out locally generated traffic, but even
+			 * that seems moderately painful.
+			 */
+			char *eth = (char *)eth_hdr(skb);
+			char *ip  = (char *)ip_hdr(skb);
+
+			if ((ip > eth) && (ip - eth == sizeof(struct ethhdr))) {
+				struct sonos_socket_data *p = 
+					(struct sonos_socket_data *)&(sin->sin_zero[0]);
+				p->flags = SONOS_SOCKET_DATA_FLAG_MAC_VALID;
+				memcpy(&p->mac[0], eth_hdr(skb)->h_source, ETH_ALEN);
+			}
+		}
+#endif
 	}
 	if (inet->cmsg_flags)
 		ip_cmsg_recv(msg, skb);

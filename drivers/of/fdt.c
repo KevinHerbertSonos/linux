@@ -22,6 +22,11 @@
 
 #include <asm/page.h>
 
+#ifdef CONFIG_SONOS
+#include "mdp.h"
+extern struct manufacturing_data_page sys_mdp;
+#endif 
+
 int __initdata dt_root_addr_cells;
 int __initdata dt_root_size_cells;
 
@@ -489,6 +494,31 @@ int __init early_init_dt_scan_memory(unsigned long node, const char *uname,
 
 	pr_debug("memory scan node %s, reg size %ld, data: %x %x %x %x,\n",
 	    uname, l, reg[0], reg[1], reg[2], reg[3]);
+
+#ifdef CONFIG_SONOS
+    if (IS_AMOEBA_128MB) {
+        reg[1] += 0x04000000;
+        printk("128mb amoeba\n");
+    } else if (IS_AMOEBA_LP) {
+        reg[1] += 0x04000000;
+        printk("large page nand amoeba\n");
+    } else if (IS_AMOEBA) {
+        printk("64mb amoeba\n");
+    } else if (IS_FENWAY_128MB) {
+        reg[1] += 0x04000000;
+        printk("128mb fenway\n");
+    } else if (IS_FENWAY) {
+        printk("64mb fenway\n");
+    } else if (IS_ANVIL_LP) {
+        reg[1] += 0x04000000;
+        printk("large page nand anvil\n");
+    } else if (IS_ANVIL_128MB) {
+        reg[1] += 0x04000000;
+        printk("128mb anvil\n");
+    } else if (IS_ANVIL) {
+        printk("64mb anvil\n");
+    }
+#endif
 
 	while ((endp - reg) >= (dt_root_addr_cells + dt_root_size_cells)) {
 		u64 base, size;

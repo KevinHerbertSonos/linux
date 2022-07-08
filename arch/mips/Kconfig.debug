@@ -128,4 +128,10 @@ config SPINLOCK_TEST
 	help
 	  Add several files to the debugfs to test spinlock speed.
 
+config BDI_SWITCH
+	bool "Include BDI-2000 user context switcher"
+	depends on DEBUG_KERNEL
+	help
+	  Include in-kernel support for Abatron BDI2000 debugger.
+
 endmenu

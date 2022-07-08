@@ -82,6 +82,27 @@ To add: #define SO_REUSEPORT 0x0200	/* Allow local address and port reuse.  */
 
 #define SO_RXQ_OVFL             40
 
+#if defined(CONFIG_SONOS) || defined (__SONOS_LINUX__)
+/* Sonos socket options */
+#define SO_SONOS_OPTIONS        41
+#define SO_SONOS_OPTION_SOCKET_TAG  1
+#define SO_SONOS_OPTION_SONOS_SOCKADDR 2
+
+/* Setting SO_SONOS_OPTION_SONOS_SOCKADDR on a socket used to receive UDP
+ * datagrams results in sin_zero in sockaddr_in being populated with the
+ * following instead of 0s.  This *must* be exactly 8 bytes in length.
+ *
+ * NOTE: This can *not* contain sin_zero in the name.  Don't ask me how much
+ *       time I spent figuring this out.
+ */
+struct sonos_socket_data {
+  unsigned short int flags;
+  unsigned char      mac[6];
+};
+#define SONOS_SOCKET_DATA_FLAG_MAC_VALID (1 << 0)
+
+#endif
+
 #ifdef __KERNEL__
 
 /** sock_type - Socket types

@@ -1,6 +1,8 @@
 /*
  * 	NET3	Protocol independent device support routines.
  *
+ *		Copyright 2009-2010 Freescale Semiconductor, Inc.
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -140,6 +142,9 @@
 /* This should be increased if a protocol with a bigger head is added. */
 #define GRO_MAX_HEAD (MAX_HEADER + 128)
 
+#ifdef CONFIG_NET_GIANFAR_FP
+static void dev_do_clear_fastroute(struct net_device *dev);
+#endif
 /*
  *	The list of packet types we will receive (as opposed to discard)
  *	and the routines to invoke.
@@ -267,6 +272,14 @@ static RAW_NOTIFIER_HEAD(netdev_chain);
 DEFINE_PER_CPU_ALIGNED(struct softnet_data, softnet_data);
 EXPORT_PER_CPU_SYMBOL(softnet_data);
 
+#ifdef CONFIG_NET_GIANFAR_FP
+int netdev_fastroute;
+EXPORT_SYMBOL(netdev_fastroute);
+
+int netdev_fastroute_obstacles;
+EXPORT_SYMBOL(netdev_fastroute_obstacles);
+#endif
+
 #ifdef CONFIG_LOCKDEP
 /*
  * register_netdevice() inits txq->_xmit_lock and sets lockdep class
@@ -351,6 +364,38 @@ static inline void netdev_set_addr_lockdep_class(struct net_device *dev)
 }
 #endif
 
+#ifdef CONFIG_NET_GIANFAR_FP
+static void dev_do_clear_fastroute(struct net_device *dev)
+{
+	if (dev->netdev_ops->ndo_accept_fastpath) {
+		int i;
+
+		for (i = 0; i <= NETDEV_FASTROUTE_HMASK; i++) {
+			struct dst_entry *dst;
+
+			write_lock_irq(&dev->fastpath_lock);
+			dst = dev->fastpath[i];
+			dev->fastpath[i] = NULL;
+			write_unlock_irq(&dev->fastpath_lock);
+
+			dst_release(dst);
+		}
+	}
+}
+
+void dev_clear_fastroute(struct net_device *dev)
+{
+	if (dev) {
+		dev_do_clear_fastroute(dev);
+	} else {
+		read_lock(&dev_base_lock);
+		for_each_netdev(dev_net(dev), dev)
+			dev_do_clear_fastroute(dev);
+		read_unlock(&dev_base_lock);
+	}
+}
+#endif
+
 /*******************************************************************************
 
 		Protocol management and registration routines
@@ -391,6 +436,12 @@ void dev_add_pack(struct packet_type *pt)
 	int hash;
 
 	spin_lock_bh(&ptype_lock);
+#ifdef CONFIG_NET_GIANFAR_FP
+	if (pt->af_packet_priv) {
+		netdev_fastroute_obstacles++;
+		dev_clear_fastroute(pt->dev);
+	}
+#endif
 	if (pt->type == htons(ETH_P_ALL))
 		list_add_rcu(&pt->list, &ptype_all);
 	else {
@@ -428,6 +479,10 @@ void __dev_remove_pack(struct packet_type *pt)
 
 	list_for_each_entry(pt1, head, list) {
 		if (pt == pt1) {
+#ifdef CONFIG_NET_GIANFAR_FP
+			if (pt->af_packet_priv)
+				netdev_fastroute_obstacles--;
+#endif
 			list_del_rcu(&pt->list);
 			goto out;
 		}
@@ -1207,6 +1262,9 @@ int dev_open(struct net_device *dev)
 {
 	int ret;
 
+#ifdef CONFIG_NET_GIANFAR_FP
+	dev_clear_fastroute(dev);
+#endif
 	/*
 	 *	Is it already up?
 	 */
@@ -2027,8 +2085,13 @@ static inline u16 dev_cap_txqueue(struct net_device *dev, u16 queue_index)
 	return queue_index;
 }
 
+#ifdef CONFIG_SONOS_FILLMORE
+struct netdev_queue *dev_pick_tx(struct net_device *dev,
+					struct sk_buff *skb)
+#else
 static struct netdev_queue *dev_pick_tx(struct net_device *dev,
 					struct sk_buff *skb)
+#endif
 {
 	int queue_index;
 	struct sock *sk = skb->sk;
@@ -2499,6 +2562,11 @@ int netif_rx(struct sk_buff *skb)
 	if (netdev_tstamp_prequeue)
 		net_timestamp_check(skb);
 
+#ifdef CONFIG_NET_GIANFAR_FP
+	if (skb->pkt_type == PACKET_FASTROUTE)
+		return dev_queue_xmit(skb);
+#endif
+
 #ifdef CONFIG_RPS
 	{
 		struct rps_dev_flow voidflow, *rflow = &voidflow;
@@ -2617,19 +2685,44 @@ EXPORT_SYMBOL_GPL(br_fdb_test_addr_hook);
  * If bridge module is loaded call bridging hook.
  *  returns NULL if packet was consumed.
  */
+#ifdef CONFIG_SONOS
+struct sk_buff *(*br_handle_frame_hook)(struct net_bridge_port_list_node *pl,
+					struct sk_buff *skb) __read_mostly;
+#else
 struct sk_buff *(*br_handle_frame_hook)(struct net_bridge_port *p,
 					struct sk_buff *skb) __read_mostly;
+#endif
+
 EXPORT_SYMBOL_GPL(br_handle_frame_hook);
 
 static inline struct sk_buff *handle_bridge(struct sk_buff *skb,
 					    struct packet_type **pt_prev, int *ret,
 					    struct net_device *orig_dev)
 {
-	struct net_bridge_port *port;
+#ifdef CONFIG_SONOS
+	struct net_bridge_port_list_node *port_list;
 
 	if (skb->pkt_type == PACKET_LOOPBACK ||
-	    (port = rcu_dereference(skb->dev->br_port)) == NULL)
+	    (port_list = rcu_dereference(skb->dev->br_port_list)) == NULL) {
+#if 0
+		printk("br: not bridged: %s (%d)\n", 
+		       &(skb->dev->name[0]),
+		       skb->pkt_type == PACKET_LOOPBACK);
+#endif
 		return skb;
+	}
+        if (*pt_prev) {
+		*ret = deliver_skb(skb, *pt_prev, orig_dev);
+		*pt_prev = NULL;
+	}
+	return br_handle_frame_hook(port_list, skb);
+#else
+        struct net_bridge_port *port;
+	
+	if (skb->pkt_type == PACKET_LOOPBACK ||
+	    (port = rcu_dereference(skb->dev->br_port)) == NULL) {
+		return skb;
+	}
 
 	if (*pt_prev) {
 		*ret = deliver_skb(skb, *pt_prev, orig_dev);
@@ -2637,6 +2730,8 @@ static inline struct sk_buff *handle_bridge(struct sk_buff *skb,
 	}
 
 	return br_handle_frame_hook(port, skb);
+#endif
+
 }
 #else
 #define handle_bridge(skb, pt_prev, ret, orig_dev)	(skb)
@@ -2784,7 +2879,13 @@ int __skb_bond_should_drop(struct sk_buff *skb, struct net_device *master)
 	if (master->priv_flags & IFF_MASTER_ARPMON)
 		dev->last_rx = jiffies;
 
-	if ((master->priv_flags & IFF_MASTER_ALB) && master->br_port) {
+	if ((master->priv_flags & IFF_MASTER_ALB) &&
+#ifdef CONFIG_SONOS
+            master->br_port_list)
+#else
+            master->br_port)
+#endif
+        {
 		/* Do address unmangle. The local destination address
 		 * will be always the one master has. Provides the right
 		 * functionality in a bridge.
@@ -4063,6 +4164,13 @@ static int __dev_set_promiscuity(struct net_device *dev, int inc)
 		}
 	}
 	if (dev->flags != old_flags) {
+#ifdef CONFIG_NET_GIANFAR_FP
+		if (dev->flags & IFF_PROMISC) {
+			netdev_fastroute_obstacles++;
+			dev_clear_fastroute(dev);
+		} else
+			netdev_fastroute_obstacles--;
+#endif
 		printk(KERN_INFO "device %s %s promiscuous mode\n",
 		       dev->name, (dev->flags & IFF_PROMISC) ? "entered" :
 							       "left");
@@ -4717,7 +4825,31 @@ int dev_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 		 * Not applicable in our case */
 	case SIOCSIFLINK:
 		return -EINVAL;
+	case SIOCGIFSTATS:
+	{
+#if defined (CONFIG_SONOS_FILLMORE) || defined (CONFIG_SONOS_LIMELIGHT)
+		struct net_device_stats stats;
 
+		if (strcmp("eth0", ifr.ifr_name) == 0) {
+			if ((ret = sonos_ethernet_callback(0x00, &stats)))
+				return ret;
+		}
+		else if (strcmp("eth1", ifr.ifr_name) == 0) {
+			if ((ret = sonos_ethernet_callback(0x01, &stats)))
+				return ret;
+		}
+		else
+			return -ENODEV;
+		ret = copy_to_user(ifr.ifr_data, (void *)&stats, sizeof(struct net_device_stats));
+		return ret;
+#else
+		struct net_device *dev;
+
+		dev = dev_get_by_name(net, ifr.ifr_name);
+		ret = copy_to_user(ifr.ifr_data, (void *)dev_get_stats(dev), sizeof(struct net_device_stats));
+		return ret;
+#endif
+	}
 	/*
 	 *	Unknown or private ioctl.
 	 */
@@ -4968,6 +5100,9 @@ int register_netdevice(struct net_device *dev)
 	netdev_set_addr_lockdep_class(dev);
 	netdev_init_queue_locks(dev);
 
+#ifdef CONFIG_NET_GIANFAR_FP
+	dev->fastpath_lock = __RW_LOCK_UNLOCKED();
+#endif
 	dev->iflink = -1;
 
 #ifdef CONFIG_RPS

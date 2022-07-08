@@ -121,6 +121,129 @@ config EQUALIZER
 	  To compile this driver as a module, choose M here: the module
 	  will be called eql.  If unsure, say N.
 
+config IMQ
+	tristate "IMQ (intermediate queueing device) support"
+	depends on NETDEVICES && NETFILTER
+	---help---
+	  The IMQ device(s) is used as placeholder for QoS queueing
+	  disciplines. Every packet entering/leaving the IP stack can be
+	  directed through the IMQ device where it's enqueued/dequeued to the
+	  attached qdisc. This allows you to treat network devices as classes
+	  and distribute bandwidth among them. Iptables is used to specify
+	  through which IMQ device, if any, packets travel.
+
+	  More information at: http://www.linuximq.net/
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called imq.  If unsure, say N.
+
+choice
+	prompt "IMQ behavior (PRE/POSTROUTING)"
+	depends on IMQ
+	default IMQ_BEHAVIOR_AB
+	help
+
+		This settings defines how IMQ behaves in respect to its
+		hooking in PREROUTING and POSTROUTING.
+
+		IMQ can work in any of the following ways:
+
+		    PREROUTING   |      POSTROUTING
+		-----------------|-------------------
+		#1  After NAT    |      After NAT
+		#2  After NAT    |      Before NAT
+		#3  Before NAT   |      After NAT
+		#4  Before NAT   |      Before NAT
+
+		The default behavior is to hook before NAT on PREROUTING
+		and after NAT on POSTROUTING (#3).
+
+		This settings are specially usefull when trying to use IMQ
+		to shape NATed clients.
+
+		More information can be found at: www.linuximq.net
+
+		If not sure leave the default settings alone.
+
+config IMQ_BEHAVIOR_AA
+	bool "IMQ AA"
+	help
+		This settings defines how IMQ behaves in respect to its
+		hooking in PREROUTING and POSTROUTING.
+
+		Choosing this option will make IMQ hook like this:
+
+		PREROUTING:   After NAT
+		POSTROUTING:  After NAT
+
+		More information can be found at: www.linuximq.net
+
+		If not sure leave the default settings alone.
+
+config IMQ_BEHAVIOR_AB
+	bool "IMQ AB"
+	help
+		This settings defines how IMQ behaves in respect to its
+		hooking in PREROUTING and POSTROUTING.
+
+		Choosing this option will make IMQ hook like this:
+
+		PREROUTING:   After NAT
+		POSTROUTING:  Before NAT
+
+		More information can be found at: www.linuximq.net
+
+		If not sure leave the default settings alone.
+
+config IMQ_BEHAVIOR_BA
+	bool "IMQ BA"
+	help
+		This settings defines how IMQ behaves in respect to its
+		hooking in PREROUTING and POSTROUTING.
+
+		Choosing this option will make IMQ hook like this:
+
+		PREROUTING:   Before NAT
+		POSTROUTING:  After NAT
+
+		More information can be found at: www.linuximq.net
+
+		If not sure leave the default settings alone.
+
+config IMQ_BEHAVIOR_BB
+	bool "IMQ BB"
+	help
+		This settings defines how IMQ behaves in respect to its
+		hooking in PREROUTING and POSTROUTING.
+
+		Choosing this option will make IMQ hook like this:
+
+		PREROUTING:   Before NAT
+		POSTROUTING:  Before NAT
+
+		More information can be found at: www.linuximq.net
+
+		If not sure leave the default settings alone.
+
+endchoice
+
+config IMQ_NUM_DEVS
+
+	int "Number of IMQ devices"
+	range 2 16
+	depends on IMQ
+	default "16"
+	help
+
+		This settings defines how many IMQ devices will be
+		created.
+
+		The default value is 16.
+
+		More information can be found at: www.linuximq.net
+
+		If not sure leave the default settings alone.
+
 config TUN
 	tristate "Universal TUN/TAP device driver support"
 	select CRC32
@@ -174,6 +297,10 @@ config NET_SB1000
 	  <http://linuxpower.cx/~cable/>
 
 	  If you don't have this card, of course say N.
+
+if FSL_SOC_BOOKE
+	source "drivers/net/fsl_pci_veth/Kconfig"
+endif
 
 source "drivers/net/arcnet/Kconfig"
 
@@ -2400,6 +2527,63 @@ config GIANFAR
 	  This driver supports the Gigabit TSEC on the MPC83xx, MPC85xx,
 	  and MPC86xx family of chips, and the FEC on the 8540.
 
+config GFAR_TX_NONAPI
+	default n
+	bool "TX non-NAPI mode"
+	depends on GIANFAR && EXPERIMENTAL && !GIANFAR_TXNAPI
+	help
+	  TX non-NAPI mode for Ethernet load balance on multi-core.
+
+config GFAR_SKBUFF_RECYCLING
+	default y
+	bool "Socket Buffer Recycling Support (v1.1.5) (EXPERIMENTAL)"
+	depends on GIANFAR && EXPERIMENTAL
+	help
+	 This implements a new private socket data buffer recycling algorithm
+	 used for fast IPv4 packet forwarding and TCP transmission. Select this
+	 if you would like to improve your latency and throughput performance.
+
+config GIANFAR_TXNAPI
+	default n
+	bool "Introduce seperate tx_napi for cleaning the tx ring(V 0.0.1) (EXPERIMENTAL)"
+	depends on GIANFAR && EXPERIMENTAL
+	help
+	  Selecting this option introduces a seperate TX NAPI for cleaning the
+	  tx ring(s).
+
+config GIANFAR_L2SRAM
+	bool "Selecting L2sram bd allocation"
+	depends on (GIANFAR && FSL_SOC_BOOKE)
+	select FSL_85XX_CACHE_SRAM
+	help
+	  This option supports BD alloc in L2SRAM.
+
+config NET_GIANFAR_FP
+	default y
+	bool "Fast Path routing"
+	depends on GIANFAR && EXPERIMENTAL
+	help
+	  Fast path routing. To enable,
+	  $ echo 1 > /proc/sys/net/core/netdev_fastroute
+
+config 1588_MUX_eTSEC1
+	bool "Selecting 1588 signals over eTSEC1 signals"
+	depends on GIANFAR
+	default n
+	help
+	  This option switches ON 1588 signals over eth1.
+	  Eth1 will not work if this is selected.
+	  This is needed when user want to use external clock, PPn signals etc
+
+config 1588_MUX_eTSEC2
+	bool "Selecting 1588 signals over eTSEC2 signals"
+	depends on GIANFAR
+	default n
+	help
+	  This option switches ON 1588 signals over eth1.
+	  Eth2 will not work if this is selected.
+	  This is needed when user want to use external clock, PPn signals etc
+
 config UCC_GETH
 	tristate "Freescale QE Gigabit Ethernet"
 	depends on QUICC_ENGINE
@@ -2499,6 +2683,177 @@ config S6GMAC
 
 	  To compile this driver as a module, choose M here. The module
 	  will be called s6gmac.
+
+config AG7240
+	tristate "Atheros AR7240 GigE"
+	depends on MACH_AR7240 || MACH_HORNET || \
+		MACH_AR724x || MACH_AR933x || MACH_AR934x
+	help
+	  This enables the building of Atheros AR7240 gigE driver module.
+
+config AR7240_PLC_FILTER
+    bool "Support power line filter"
+    depends on AG7240
+
+config FLOWMAC
+    tristate "Atheros Flowcontrol For GigE and Wifi"
+    help
+        This enables the building of Flow control between AG7100 and Wifi.
+
+config AR7240_S26_VLAN_IGMP
+	bool "Support vlan and igmp functions in AR7240-S26 switch"
+	depends on AG7240
+
+config AR7240_S27_VLAN_IGMP
+	bool "Support vlan and igmp functions in AR7240-S27 switch"
+
+config AR7240_S16_VLAN_IGMP
+	bool "Support vlan and igmp functions in AR7240-S16 switch"
+	depends on AG7240
+
+config ATHEROS_HEADER_EN
+	bool "Add two bytes atheros header before the ethernet packet."
+	depends on AG7240
+
+config AG7240_GE0_IS_CONNECTED
+	bool "port 0 is connected to a PHY"
+	depends on AG7240
+
+choice
+	prompt "port 0 interface"
+	depends on AG7240_GE0_IS_CONNECTED
+
+config AG7240_GE0_MII
+	bool "MII mode"
+
+config AG7240_GE0_GMII
+	bool "GMII mode"
+
+config AG7240_GE0_RGMII
+	bool "RGMII mode"
+
+endchoice
+
+choice
+	prompt "Phy or Switch used"
+	depends on AG7240_GE0_IS_CONNECTED
+
+config ATHRF1_PHY
+	bool "Atheros F1 GigE Phy"
+
+config AR7240_S26_PHY
+	bool "Atheros 7240 S26 internal Phy"
+
+config ATHRS27_PHY
+	bool "Atheros S27 Phy"
+
+config AR8021_PHY
+	bool "Atheros AR8021 Phy"
+config ATHRS16_PHY_CONNECT_GE0
+	bool "Atheros S16 Phy"
+endchoice
+
+config AG7240_GE1_IS_CONNECTED
+	bool "port 1 is connected to a PHY"
+	depends on AG7240
+
+choice
+	prompt "port 1 interface"
+	depends on AG7240_GE1_IS_CONNECTED
+
+config AG7240_GE1_MII
+	bool "MII mode"
+
+config AG7240_GE1_GMII
+	bool "GMII mode"
+
+config AG7240_GE1_RGMII
+	bool "RGMII mode"
+endchoice
+
+config GE1_EXTERNAL_PHY
+	bool "GE1 is connected to different PHY"
+	depends on AG7240_GE1_IS_CONNECTED
+
+choice
+	prompt "Phy or Switch used"
+	depends on GE1_EXTERNAL_PHY
+config ATHRS16_PHY
+    bool "Athrs S16 Phy"
+    depends on GE1_EXTERNAL_PHY
+endchoice
+
+config AG7240_QOS
+	bool "Enable MAC 0 QOS "
+	depends on AG7240
+
+config ATHRS_HW_NAT
+	bool "Enable MAC 0 Egress and Ingress NAT engine "
+	depends on AG7240
+
+config ATHRS_HW_ACL
+	bool "Enable MAC 0 Egress and Ingress ACL engine "
+	depends on AG7240
+
+config AG7100_LEN_PER_TX_DS
+	int "Len per tx descriptor"
+	default "1536"
+	depends on (REALTEK_PHY || ADM6996FC_PHY || ICPLUS_PHY) && AG7100
+
+config AG7100_LEN_PER_TX_DS
+	int "Len per tx descriptor"
+	default "512"
+	depends on !(REALTEK_PHY || ADM6996FC_PHY || ICPLUS_PHY) && AG7100
+
+config AG7100_MAC_LOCATION
+	hex "Memory location of MAC addresses (in flash)"
+	default "0xbfff1000"
+	help
+	  This is the physical address in memory that contains
+	  the MAC addresses for the board Ethernet interfaces.  They
+	  are stored sequentially in 6 byte groups, for the total number
+	  of interfaces supported on the board.
+	depends on AG7100
+
+config AG7240_LEN_PER_TX_DS
+	int "Len per tx descriptor"
+	default "1536"
+	depends on (REALTEK_PHY || ADM6996FC_PHY || ICPLUS_PHY) && AG7240
+
+config AG7240_LEN_PER_TX_DS
+	int "Len per tx descriptor"
+	default "512"
+	depends on !(REALTEK_PHY || ADM6996FC_PHY || ICPLUS_PHY) && AG7240
+
+config  AG7240_NUMBER_TX_PKTS
+        int "Number tx pkts for intf 0"
+        default "100"
+        depends on AG7240
+
+config  AG7240_NUMBER_RX_PKTS
+        int "Number rx pkts for intf 0"
+        default "252"
+        depends on AG7240
+
+config  AG7240_NUMBER_TX_PKTS_1
+        int "Number tx pkts for intf 1"
+        default "40"
+        depends on AG7240_GE1_IS_CONNECTED
+
+config  AG7240_NUMBER_RX_PKTS_1
+        int "Number rx pkts for intf 1"
+        default "252"
+        depends on AG7240_GE1_IS_CONNECTED
+
+config  AG7240_MAC_LOCATION
+	hex "Memory location of MAC addresses (in flash)"
+	default "0xbfff0000"
+	help
+	  This is the physical address in memory that contains
+	  the MAC addresses for the board Ethernet interfaces. They
+	  are stored sequentially in 6 byte groups, for the total number
+	  of interfaces supported on the board.
+	depends on AG7240
 
 source "drivers/net/stmmac/Kconfig"
 

@@ -3,8 +3,12 @@
  *
  * (C) Copyright 2002-2004, 2007 Greg Kroah-Hartman <greg@kroah.com>
  * (C) Copyright 2007 Novell Inc.
+ * Copyright 2010 Freescale Semiconductor, Inc.
  *
  * Released under the GPL v2 only.
+ *
+ * 2010_01_04 - Add pcie inbound and outbound window save and restore support
+ *              for P1022 PM.
  *
  */
 
@@ -622,6 +626,139 @@ static void pci_pm_complete(struct device *dev)
 
 #ifdef CONFIG_SUSPEND
 
+#include <asm/io.h>
+#include <sysdev/fsl_pci.h>
+#define PCIE_POW_NUMBER	5
+#define PCIE_POW_BIAS	0xc00
+#define PCIE_PIW_NUMBER 3
+#define PCIE_PIW_BIAS   0xda0
+static int pcie_saved_pow_piw=0;
+struct pci_outbound_window_regs pcie_saved_pow[PCIE_POW_NUMBER];
+struct pci_inbound_window_regs pcie_saved_piw[PCIE_PIW_NUMBER];
+
+static int fsl_pcie_save_pow_piw(struct resource *pcie_rsrc)
+{
+	struct pci_outbound_window_regs __iomem *pcie_pow;
+	struct pci_inbound_window_regs __iomem *pcie_piw;
+	unsigned int i;
+
+	// save pow
+	pcie_pow = ioremap(pcie_rsrc->start + PCIE_POW_BIAS,
+			sizeof(struct pci_outbound_window_regs)
+			* PCIE_POW_NUMBER);
+	if (!pcie_pow) {
+		printk("pcie_pow ioremap error!\n");
+		return -1;
+	}
+
+	for(i = 0; i < PCIE_POW_NUMBER; i++) {
+		pcie_saved_pow[i].potar = in_be32(&pcie_pow[i].potar);
+		pcie_saved_pow[i].potear = in_be32(&pcie_pow[i].potear);
+		pcie_saved_pow[i].powbar = in_be32(&pcie_pow[i].powbar);
+		pcie_saved_pow[i].powar = in_be32(&pcie_pow[i].powar);
+	}
+	iounmap(pcie_pow);
+
+	//save piw
+	pcie_piw = ioremap(pcie_rsrc->start + PCIE_PIW_BIAS,
+			sizeof(struct pci_inbound_window_regs)
+			* PCIE_PIW_NUMBER);
+	if (!pcie_piw) {
+		printk("pcie_piw ioremap error!\n");
+		return -1;
+	}
+
+	for(i = 0; i < PCIE_PIW_NUMBER; i++) {
+		pcie_saved_piw[i].pitar = in_be32(&pcie_piw[i].pitar);
+		pcie_saved_piw[i].piwbar = in_be32(&pcie_piw[i].piwbar);
+		pcie_saved_piw[i].piwbear = in_be32(&pcie_piw[i].piwbear);
+		pcie_saved_piw[i].piwar = in_be32(&pcie_piw[i].piwar);
+	}
+	iounmap(pcie_piw);
+
+	return 0;
+}
+
+static int fsl_pcie_restore_pow_piw(struct resource *pcie_rsrc)
+{
+	struct pci_outbound_window_regs __iomem *pcie_pow;
+	struct pci_inbound_window_regs __iomem *pcie_piw;
+	unsigned int i;
+
+	// restore pow
+	pcie_pow = ioremap(pcie_rsrc->start + PCIE_POW_BIAS,
+			sizeof(struct pci_outbound_window_regs)
+			* PCIE_POW_NUMBER);
+	if (!pcie_pow) {
+		printk("pcie_pow ioremap error!\n");
+		return -1;
+	}
+
+	for(i = 0; i < PCIE_POW_NUMBER; i++) {
+		out_be32(&pcie_pow[i].potar, pcie_saved_pow[i].potar);
+		out_be32(&pcie_pow[i].potear, pcie_saved_pow[i].potear);
+		out_be32(&pcie_pow[i].powbar, pcie_saved_pow[i].powbar);
+		out_be32(&pcie_pow[i].powar, pcie_saved_pow[i].powar);
+	}
+	iounmap(pcie_pow);
+
+	//restore piw
+	pcie_piw = ioremap(pcie_rsrc->start + PCIE_PIW_BIAS,
+			sizeof(struct pci_inbound_window_regs)
+			* PCIE_PIW_NUMBER);
+	if (!pcie_piw) {
+		printk("pcie_piw ioremap error!\n");
+		return -1;
+	}
+
+	for(i = 0; i < PCIE_PIW_NUMBER; i++) {
+		out_be32(&pcie_piw[i].pitar, pcie_saved_piw[i].pitar);
+		out_be32(&pcie_piw[i].piwbar, pcie_saved_piw[i].piwbar);
+		out_be32(&pcie_piw[i].piwbear, pcie_saved_piw[i].piwbear);
+		out_be32(&pcie_piw[i].piwar, pcie_saved_piw[i].piwar);
+	}
+	iounmap(pcie_piw);
+
+	return 0;
+}
+
+static int fsl_pcie_suspend_save(void)
+{
+	struct device_node *np;
+	struct resource rsrc;
+
+	if (pcie_saved_pow_piw == 1)
+		return 0;
+
+	for_each_node_by_type(np, "pci") {
+		if (of_device_is_compatible(np, "fsl,p1022-pcie")) {
+			of_address_to_resource(np, 0, &rsrc);
+			fsl_pcie_save_pow_piw(&rsrc);
+		}
+	}
+	pcie_saved_pow_piw = 1;
+	return 0;
+}
+
+static int fsl_pcie_resume_restore(void)
+{
+	struct device_node *np;
+	struct resource rsrc;
+
+	if (pcie_saved_pow_piw == 0)
+		return 0;
+
+	for_each_node_by_type(np, "pci") {
+		if (of_device_is_compatible(np, "fsl,p1022-pcie")) {
+			of_address_to_resource(np, 0, &rsrc);
+			fsl_pcie_restore_pow_piw(&rsrc);
+		}
+	}
+	pcie_saved_pow_piw = 0;
+	return 0;
+}
+
+
 static int pci_pm_suspend(struct device *dev)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
@@ -654,6 +791,8 @@ static int pci_pm_suspend(struct device *dev)
 
  Fixup:
 	pci_fixup_device(pci_fixup_suspend, pci_dev);
+
+	fsl_pcie_suspend_save();
 
 	return 0;
 }
@@ -713,6 +852,8 @@ static int pci_pm_resume_noirq(struct device *dev)
 
 	if (drv && drv->pm && drv->pm->resume_noirq)
 		error = drv->pm->resume_noirq(dev);
+
+	fsl_pcie_resume_restore();
 
 	return error;
 }

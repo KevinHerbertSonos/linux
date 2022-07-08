@@ -35,6 +35,11 @@ config PPC_8xx
 	select 8xx
 	select PPC_LIB_RHEAP
 
+config PPC_74xx
+	bool "Freescale 74xx"
+	select PPC_FPU
+	select 6xx
+
 config 40x
 	bool "AMCC 40x"
 	select PPC_DCR_NATIVE
@@ -124,7 +129,6 @@ config 8xx
 	bool
 
 config E500
-	select FSL_EMB_PERFMON
 	bool
 
 config PPC_E500MC
@@ -289,7 +293,7 @@ config PPC_HAVE_PMU_SUPPORT
 
 config PPC_PERF_CTRS
        def_bool y
-       depends on PERF_EVENTS && PPC_HAVE_PMU_SUPPORT
+       depends on PERF_EVENTS && PPC_HAVE_PMU_SUPPORT && !PPC_83xx
        help
          This enables the powerpc-specific perf_event back-end.
 

@@ -396,7 +396,9 @@ static int jffs2_block_check_erase(struct jffs2_sb_info *c, struct jffs2_erasebl
 			unsigned long *datum = ebuf + i;
 			if (*datum + 1) {
 				*bad_offset += i;
-				printk(KERN_WARNING "Newly-erased block contained word 0x%lx at offset 0x%08x\n", *datum, *bad_offset);
+                                //Allen - Changing the annoying Kernel warning to a debug message
+                                //printk(KERN_WARNING "Newly-erased block contained word 0x%lx at offset 0x%08x\n", *datum, *bad_offset);
+				printk(KERN_DEBUG "Newly-erased block contained word 0x%lx at offset 0x%08x\n", *datum, *bad_offset);
 				ret = -EIO;
 				goto fail;
 			}

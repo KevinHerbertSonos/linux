@@ -1,5 +1,5 @@
 /*
- * Copyright 2008 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright 2008-2010 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  *  Freescale DIU Frame Buffer device driver
  *
@@ -30,6 +30,8 @@
  */
 #define MIN_PIX_CLK 5629
 #define MAX_PIX_CLK 96096
+#define MFB_PALETTE_ENTRIES 256
+#define OUT_DISP_AREA   2000
 
 #include <linux/types.h>
 
@@ -53,19 +55,23 @@ struct aoi_display_offset {
 	int y_aoi_d;
 };
 
-#define MFB_SET_CHROMA_KEY	_IOW('M', 1, struct mfb_chroma_key)
 #define MFB_WAIT_FOR_VSYNC	_IOW('F', 0x20, u_int32_t)
 #define MFB_SET_BRIGHTNESS	_IOW('M', 3, __u8)
 
+#define MFB_SET_CHROMA_KEY	0x80024d00
+#define MFB_GET_CHROMA_KEY	0x40024d00
 #define MFB_SET_ALPHA		0x80014d00
 #define MFB_GET_ALPHA		0x40014d00
 #define MFB_SET_AOID		0x80084d04
 #define MFB_GET_AOID		0x40084d04
 #define MFB_SET_PIXFMT		0x80014d08
 #define MFB_GET_PIXFMT		0x40014d08
+#define MFB_SET_BYTE_FLIP	0x80044d00
 
 #define FBIOGET_GWINFO		0x46E0
 #define FBIOPUT_GWINFO		0x46E1
+#define MFB_SET_GAMMA		0x80014d01
+#define MFB_GET_GAMMA		0x40014d01
 
 #ifdef __KERNEL__
 #include <linux/spinlock.h>
@@ -186,7 +192,7 @@ struct diu_pool {
 	struct diu_addr cursor;
 };
 
-#define FSL_DIU_BASE_OFFSET	0x2C000	/* Offset of DIU */
+#define FSL_DIU_BASE_OFFSET	0x10000	/* Offset of DIU */
 #define INT_LCDC		64	/* DIU interrupt number */
 
 #define FSL_AOI_NUM	6	/* 5 AOIs and one dummy AOI */

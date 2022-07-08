@@ -15,6 +15,8 @@
  *		Bjorn Ekwall. <bj0rn@blox.se>
  *              Pekka Riikonen <priikone@poseidon.pspt.fi>
  *
+ *              Copyright 2009-2010 Freescale Semiconductor, Inc.
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -192,7 +194,7 @@ struct net_device_stats {
 	unsigned long	tx_fifo_errors;
 	unsigned long	tx_heartbeat_errors;
 	unsigned long	tx_window_errors;
-	
+
 	/* for cslip etc */
 	unsigned long	rx_compressed;
 	unsigned long	tx_compressed;
@@ -218,6 +220,13 @@ enum {
 struct neighbour;
 struct neigh_parms;
 struct sk_buff;
+
+struct netif_rx_stats {
+	unsigned total;
+	unsigned dropped;
+	unsigned time_squeeze;
+	unsigned cpu_collision;
+};
 
 struct netdev_hw_addr {
 	struct list_head	list;
@@ -716,6 +725,10 @@ struct net_device_ops {
 						  int new_mtu);
 	int			(*ndo_neigh_setup)(struct net_device *dev,
 						   struct neigh_parms *);
+#ifdef CONFIG_NET_GIANFAR_FP
+	int                     (*ndo_accept_fastpath)(struct net_device *,
+							   struct dst_entry *);
+#endif
 	void			(*ndo_tx_timeout) (struct net_device *dev);
 
 	struct net_device_stats* (*ndo_get_stats)(struct net_device *dev);
@@ -920,7 +933,7 @@ struct net_device {
 
 
 	/* Protocol specific pointers */
-	
+
 #ifdef CONFIG_NET_DSA
 	void			*dsa_ptr;	/* dsa specific data */
 #endif
@@ -1025,7 +1038,18 @@ struct net_device {
 	void			*ml_priv;
 
 	/* bridge stuff */
+#if defined(CONFIG_SONOS) || defined(__SONOS_LINUX__)
+	struct net_bridge_port_list_node *br_port_list;
+#else
 	struct net_bridge_port	*br_port;
+#endif
+
+#ifdef CONFIG_NET_GIANFAR_FP
+#define NETDEV_FASTROUTE_HMASK 0xF
+	/* Semi-private data. Keep it at the end of device struct. */
+	rwlock_t		fastpath_lock;
+	struct dst_entry	*fastpath[NETDEV_FASTROUTE_HMASK+1];
+#endif
 	/* macvlan */
 	struct macvlan_port	*macvlan_port;
 	/* GARP */
@@ -1281,6 +1305,9 @@ extern int		dev_alloc_name(struct net_device *dev, const char *name);
 extern int		dev_open(struct net_device *dev);
 extern int		dev_close(struct net_device *dev);
 extern void		dev_disable_lro(struct net_device *dev);
+#ifdef CONFIG_SONOS_FILLMORE
+extern struct netdev_queue *dev_pick_tx(struct net_device *dev, struct sk_buff *skb);
+#endif
 extern int		dev_queue_xmit(struct sk_buff *skb);
 extern int		register_netdevice(struct net_device *dev);
 extern void		unregister_netdevice_queue(struct net_device *dev,
@@ -2343,5 +2370,9 @@ do {								\
 #endif
 
 #endif /* __KERNEL__ */
+
+#if defined (CONFIG_SONOS_FILLMORE) || defined (CONFIG_SONOS_LIMELIGHT)
+int sonos_ethernet_callback(char arg, struct net_device_stats *stats);
+#endif
 
 #endif	/* _LINUX_NETDEVICE_H */

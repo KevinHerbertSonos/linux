@@ -16,7 +16,9 @@
 #include "op_impl.h"
 
 extern struct op_mips_model op_model_mipsxx_ops __weak;
+#ifndef CONFIG_OPROFILE_WASP
 extern struct op_mips_model op_model_rm9000_ops __weak;
+#endif
 extern struct op_mips_model op_model_loongson2_ops __weak;
 
 static struct op_mips_model *model;
@@ -92,9 +94,11 @@ int __init oprofile_arch_init(struct oprofile_operations *ops)
 		lmodel = &op_model_mipsxx_ops;
 		break;
 
+#ifndef CONFIG_OPROFILE_WASP
 	case CPU_RM9000:
 		lmodel = &op_model_rm9000_ops;
 		break;
+#endif
 	case CPU_LOONGSON2:
 		lmodel = &op_model_loongson2_ops;
 		break;

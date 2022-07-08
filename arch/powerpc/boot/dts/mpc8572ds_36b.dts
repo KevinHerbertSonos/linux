@@ -1,7 +1,7 @@
 /*
  * MPC8572 DS Device Tree Source
  *
- * Copyright 2007-2009 Freescale Semiconductor Inc.
+ * Copyright 2007-2010 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -87,37 +87,44 @@
 			bank-width = <2>;
 			device-width = <1>;
 
-			ramdisk@0 {
+			partition@0 {
 				reg = <0x0 0x03000000>;
+				label = "ramdisk-nor";
 				read-only;
 			};
 
-			diagnostic@3000000 {
+			partition@3000000 {
 				reg = <0x03000000 0x00e00000>;
+				label = "diagnostic-nor";
 				read-only;
 			};
 
-			dink@3e00000 {
+			partition@3e00000 {
 				reg = <0x03e00000 0x00200000>;
+				label = "dink-nor";
 				read-only;
 			};
 
-			kernel@4000000 {
+			partition@4000000 {
 				reg = <0x04000000 0x00400000>;
+				label = "kernel-nor";
 				read-only;
 			};
 
-			jffs2@4400000 {
+			partition@4400000 {
 				reg = <0x04400000 0x03b00000>;
+				label = "jffs2-nor";
 			};
 
-			dtb@7f00000 {
+			partition@7f00000 {
 				reg = <0x07f00000 0x00080000>;
+				label = "dtb-nor";
 				read-only;
 			};
 
-			u-boot@7f80000 {
+			partition@7f80000 {
 				reg = <0x07f80000 0x00080000>;
+				label = "u-boot-nor";
 				read-only;
 			};
 		};
@@ -129,31 +136,37 @@
 				     "fsl,elbc-fcm-nand";
 			reg = <0x2 0x0 0x40000>;
 
-			u-boot@0 {
+			partition@0 {
 				reg = <0x0 0x02000000>;
+				label = "u-boot-nand";
 				read-only;
 			};
 
-			jffs2@2000000 {
+			partition@2000000 {
 				reg = <0x02000000 0x10000000>;
+				label = "jffs2-nand";
 			};
 
-			ramdisk@12000000 {
+			partition@12000000 {
 				reg = <0x12000000 0x08000000>;
+				label = "ramdisk-nand";
 				read-only;
 			};
 
-			kernel@1a000000 {
+			partition@1a000000 {
 				reg = <0x1a000000 0x04000000>;
+				label = "kernel-nand";
 			};
 
-			dtb@1e000000 {
+			partition@1e000000 {
 				reg = <0x1e000000 0x01000000>;
+				label = "dtb-nand";
 				read-only;
 			};
 
-			empty@1f000000 {
+			partition@1f000000 {
 				reg = <0x1f000000 0x21000000>;
+				label = "reserved-nand";
 			};
 		};
 
@@ -482,9 +495,21 @@
 		};
 
 		global-utilities@e0000 {	//global utilities block
-			compatible = "fsl,mpc8572-guts";
+			compatible = "fsl,mpc8572-guts", "fsl,mpc8548-guts";
 			reg = <0xe0000 0x1000>;
 			fsl,has-rstcr;
+		};
+
+		power@e0070{
+			compatible = "fsl,mpc8548-pmc";
+			reg = <0xe0070 0x20>;
+		};
+
+		timer@41100 {
+			compatible = "fsl,mpic-global-timer";
+			reg = <0x41100 0x204>;
+			interrupts = <0xf7 0x2>;
+			interrupt-parent = <&mpic>;
 		};
 
 		msi@41600 {
@@ -531,6 +556,7 @@
 		#interrupt-cells = <1>;
 		#size-cells = <2>;
 		#address-cells = <3>;
+		cell-index = <3>;
 		reg = <0xf 0xffe08000 0 0x1000>;
 		bus-range = <0 255>;
 		ranges = <0x2000000 0x0 0xe0000000 0xc 0x00000000 0x0 0x20000000
@@ -740,6 +766,7 @@
 		#interrupt-cells = <1>;
 		#size-cells = <2>;
 		#address-cells = <3>;
+		cell-index = <2>;
 		reg = <0xf 0xffe09000 0 0x1000>;
 		bus-range = <0 255>;
 		ranges = <0x2000000 0x0 0xe0000000 0xc 0x20000000 0x0 0x20000000
@@ -776,6 +803,7 @@
 		#interrupt-cells = <1>;
 		#size-cells = <2>;
 		#address-cells = <3>;
+		cell-index = <1>;
 		reg = <0xf 0xffe0a000 0 0x1000>;
 		bus-range = <0 255>;
 		ranges = <0x2000000 0x0 0xe0000000 0xc 0x40000000 0x0 0x20000000

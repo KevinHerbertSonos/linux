@@ -111,4 +111,18 @@ source "drivers/xen/Kconfig"
 source "drivers/staging/Kconfig"
 
 source "drivers/platform/Kconfig"
+
+source "drivers/tdm/Kconfig"
+
+config FSL_SWIM_EDC
+    tristate "Freescale SWIM EDC"
+    help
+        SWIM (System Wide Instrumentation and Monitoring) Tool Suite
+        EDC (Event Data Collector)
+        --------------------------
+        EDC is a low level interface to hardware registers, including Performance Monitor and RMON registers. It is driven by the input from tPMG.
+        tPMG is an application on target, it is installed in '/usr/bin' and its name is 'swim' normally.
+        EDC should be installed via 'swim_insmod.sh' in '/usr/bin' first.
+        Currently, EDC focuses on Performance Monitor of PowerQUICC III.
+
 endmenu

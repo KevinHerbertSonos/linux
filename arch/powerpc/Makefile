@@ -121,6 +121,11 @@ KBUILD_CFLAGS	+= $(call cc-option,-fno-dwarf2-cfi-asm)
 # often slow when they are implemented at all
 KBUILD_CFLAGS		+= -mno-string
 
+ifeq ($(CONFIG_DEBUG_CW),y)
+CFLAGS += -g2 -gdwarf-2
+AFLAGS_KERNEL += -Wa,-gdwarf2
+endif
+
 ifeq ($(CONFIG_6xx),y)
 KBUILD_CFLAGS		+= -mcpu=powerpc
 endif
@@ -163,7 +168,7 @@ drivers-$(CONFIG_OPROFILE)	+= arch/powerpc/oprofile/
 # Default to zImage, override when needed
 all: zImage
 
-BOOT_TARGETS = zImage zImage.initrd uImage zImage% dtbImage% treeImage.% cuImage.% simpleImage.%
+BOOT_TARGETS = zImage zImage.initrd uImage
 
 PHONY += $(BOOT_TARGETS)
 
@@ -183,7 +188,10 @@ endif
 $(BOOT_TARGETS): vmlinux
 	$(Q)$(MAKE) ARCH=ppc64 $(build)=$(boot) $(patsubst %,$(boot)/%,$@)
 
-bootwrapper_install %.dtb:
+bootwrapper_install:
+	$(Q)$(MAKE) ARCH=ppc64 $(build)=$(boot) $(patsubst %,$(boot)/%,$@)
+
+%.dtb:
 	$(Q)$(MAKE) ARCH=ppc64 $(build)=$(boot) $(patsubst %,$(boot)/%,$@)
 
 define archhelp

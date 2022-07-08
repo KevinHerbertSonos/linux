@@ -116,6 +116,8 @@ static unsigned int __init probe_baud(struct uart_port *port)
 
 static void __init init_port(struct early_serial8250_device *device)
 {
+#ifndef CONFIG_SONOS_FILLMORE
+	//Fillmore uses the uart setup from u-boot and skips this
 	struct uart_port *port = &device->port;
 	unsigned int divisor;
 	unsigned char c;
@@ -131,6 +133,7 @@ static void __init init_port(struct early_serial8250_device *device)
 	serial_out(port, UART_DLL, divisor & 0xff);
 	serial_out(port, UART_DLM, (divisor >> 8) & 0xff);
 	serial_out(port, UART_LCR, c & ~UART_LCR_DLAB);
+#endif	// CONFIG_SONOS_FILLMORE
 }
 
 static int __init parse_options(struct early_serial8250_device *device,

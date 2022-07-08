@@ -138,41 +138,10 @@ static BRPORT_ATTR(hold_timer, S_IRUGO, show_hold_timer, NULL);
 
 static ssize_t store_flush(struct net_bridge_port *p, unsigned long v)
 {
-	br_fdb_delete_by_port(p->br, p, 0); // Don't delete local entry
+	br_fdb_delete_by_port(p->br, p); // Don't delete local entry
 	return 0;
 }
 static BRPORT_ATTR(flush, S_IWUSR, NULL, store_flush);
-
-static ssize_t show_hairpin_mode(struct net_bridge_port *p, char *buf)
-{
-	int hairpin_mode = (p->flags & BR_HAIRPIN_MODE) ? 1 : 0;
-	return sprintf(buf, "%d\n", hairpin_mode);
-}
-static ssize_t store_hairpin_mode(struct net_bridge_port *p, unsigned long v)
-{
-	if (v)
-		p->flags |= BR_HAIRPIN_MODE;
-	else
-		p->flags &= ~BR_HAIRPIN_MODE;
-	return 0;
-}
-static BRPORT_ATTR(hairpin_mode, S_IRUGO | S_IWUSR,
-		   show_hairpin_mode, store_hairpin_mode);
-
-#ifdef CONFIG_BRIDGE_IGMP_SNOOPING
-static ssize_t show_multicast_router(struct net_bridge_port *p, char *buf)
-{
-	return sprintf(buf, "%d\n", p->multicast_router);
-}
-
-static ssize_t store_multicast_router(struct net_bridge_port *p,
-				      unsigned long v)
-{
-	return br_multicast_set_port_router(p, v);
-}
-static BRPORT_ATTR(multicast_router, S_IRUGO | S_IWUSR, show_multicast_router,
-		   store_multicast_router);
-#endif
 
 static struct brport_attribute *brport_attrs[] = {
 	&brport_attr_path_cost,
@@ -190,10 +159,6 @@ static struct brport_attribute *brport_attrs[] = {
 	&brport_attr_forward_delay_timer,
 	&brport_attr_hold_timer,
 	&brport_attr_flush,
-	&brport_attr_hairpin_mode,
-#ifdef CONFIG_BRIDGE_IGMP_SNOOPING
-	&brport_attr_multicast_router,
-#endif
 	NULL
 };
 
@@ -224,8 +189,7 @@ static ssize_t brport_store(struct kobject * kobj,
 
 	val = simple_strtoul(buf, &endp, 0);
 	if (endp != buf) {
-		if (!rtnl_trylock())
-			return restart_syscall();
+		rtnl_lock();
 		if (p->dev && p->br && brport_attr->store) {
 			spin_lock_bh(&p->br->lock);
 			ret = brport_attr->store(p, val);
@@ -238,7 +202,7 @@ static ssize_t brport_store(struct kobject * kobj,
 	return ret;
 }
 
-const struct sysfs_ops brport_sysfs_ops = {
+struct sysfs_ops brport_sysfs_ops = {
 	.show = brport_show,
 	.store = brport_store,
 };
@@ -246,7 +210,7 @@ const struct sysfs_ops brport_sysfs_ops = {
 /*
  * Add sysfs entries to ethernet device added to a bridge.
  * Creates a brport subdirectory with bridge attributes.
- * Puts symlink in bridge's brif subdirectory
+ * Puts symlink in bridge's brport subdirectory
  */
 int br_sysfs_addif(struct net_bridge_port *p)
 {
@@ -257,37 +221,22 @@ int br_sysfs_addif(struct net_bridge_port *p)
 	err = sysfs_create_link(&p->kobj, &br->dev->dev.kobj,
 				SYSFS_BRIDGE_PORT_LINK);
 	if (err)
-		return err;
+		goto out2;
 
 	for (a = brport_attrs; *a; ++a) {
 		err = sysfs_create_file(&p->kobj, &((*a)->attr));
 		if (err)
-			return err;
+			goto out2;
 	}
 
-	strlcpy(p->sysfs_name, p->dev->name, IFNAMSIZ);
-	return sysfs_create_link(br->ifobj, &p->kobj, p->sysfs_name);
-}
+/* SONOS(MartyC):  begin SYSSW-308 - Fillmore Kernel Panic with "brctl addif br0 eth0" */
+#if defined(CONFIG_SONOS_FILLMORE)
+    sysfs_remove_link(br->ifobj, p->dev->name);
+#endif
+/* SONOS(MartyC):  end SYSSW-308 - Fillmore Kernel Panic with "brctl addif br0 eth0" */
 
-/* Rename bridge's brif symlink */
-int br_sysfs_renameif(struct net_bridge_port *p)
-{
-	struct net_bridge *br = p->br;
-	int err;
 
-	/* If a rename fails, the rollback will cause another
-	 * rename call with the existing name.
-	 */
-	if (!strncmp(p->sysfs_name, p->dev->name, IFNAMSIZ))
-		return 0;
-
-	err = sysfs_rename_link(br->ifobj, &p->kobj,
-				p->sysfs_name, p->dev->name);
-	if (err)
-		netdev_notice(br->dev, "unable to rename link %s to %s",
-			      p->sysfs_name, p->dev->name);
-	else
-		strlcpy(p->sysfs_name, p->dev->name, IFNAMSIZ);
-
+	err = sysfs_create_link(br->ifobj, &p->kobj, p->dev->name);
+out2:
 	return err;
 }

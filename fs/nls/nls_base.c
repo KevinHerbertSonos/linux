@@ -128,6 +128,7 @@ int utf8s_to_utf16s(const u8 *s, int len, wchar_t *pwcs)
 				return -EINVAL;
 
 			if (u >= PLANE_SIZE) {
+				printk(KERN_WARNING "Non-plane 0 unicode character in path - access may not work.\n");
 				u -= PLANE_SIZE;
 				*op++ = (wchar_t) (SURROGATE_PAIR |
 						((u >> 10) & SURROGATE_BITS));

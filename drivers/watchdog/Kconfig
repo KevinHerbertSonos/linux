@@ -28,6 +28,14 @@ menuconfig WATCHDOG
 
 if WATCHDOG
 
+config WATCHDOG_AR7240
+    tristate "Atheros AR7240 Hardware Watchdog support"
+    depends on WATCHDOG
+    help
+      Say Y here to support the hardware watchdog capability on AR7240.
+      The watchdog timeout period is normally one minute but 
+      can be changed with a boot-time parameter.
+
 config WATCHDOG_NOWAYOUT
 	bool "Disable watchdog shutdown on close"
 	help
@@ -921,6 +929,14 @@ config BOOKE_WDT
 	---help---
 	  Please see Documentation/watchdog/watchdog-api.txt for
 	  more information.
+
+config BOOKE_WDT_TESTER
+	tristate "PowerPC Book-E Watchdog Timer Tester(only used as moduler)"
+	depends on BOOKE_WDT
+	default m
+	---help---
+	  This moduler will block kernel by loop occupy cpu resource, and
+	  then watchdog will timeout and reset system. Only used as moduler.
 
 # PPC64 Architecture
 

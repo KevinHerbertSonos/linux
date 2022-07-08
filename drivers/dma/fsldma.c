@@ -1,7 +1,7 @@
 /*
  * Freescale MPC85xx, MPC83xx DMA Engine support
  *
- * Copyright (C) 2007 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright (C) 2007-2010 Freescale Semiconductor, Inc. All rights reserved.
  *
  * Author:
  *   Zhang Wei <wei.zhang@freescale.com>, Jul 2007
@@ -49,9 +49,11 @@ static void dma_init(struct fsldma_chan *chan)
 		 * EIE - Error interrupt enable
 		 * EOSIE - End of segments interrupt enable (basic mode)
 		 * EOLNIE - End of links interrupt enable
+		 * BWC - Bandwidth sharing among channels
 		 */
-		DMA_OUT(chan, &chan->regs->mr, FSL_DMA_MR_EIE
-				| FSL_DMA_MR_EOLNIE | FSL_DMA_MR_EOSIE, 32);
+		DMA_OUT(chan, &chan->regs->mr, FSL_DMA_MR_BWC
+				| FSL_DMA_MR_EIE | FSL_DMA_MR_EOLNIE
+				| FSL_DMA_MR_EOSIE, 32);
 		break;
 	case FSL_DMA_IP_83XX:
 		/* Set the channel to below modes:
@@ -1326,7 +1328,13 @@ static int __devinit fsldma_of_probe(struct of_device *op,
 	fdev->irq = irq_of_parse_and_map(op->dev.of_node, 0);
 
 	dma_cap_set(DMA_MEMCPY, fdev->common.cap_mask);
+#ifndef CONFIG_ASYNC_CORE
+	/*
+	 * The DMA_INTERRUPT async_tx is a NULL transfer, which will
+	 * triger a PE interrupt.
+	 */
 	dma_cap_set(DMA_INTERRUPT, fdev->common.cap_mask);
+#endif
 	dma_cap_set(DMA_SLAVE, fdev->common.cap_mask);
 	fdev->common.device_alloc_chan_resources = fsl_dma_alloc_chan_resources;
 	fdev->common.device_free_chan_resources = fsl_dma_free_chan_resources;
@@ -1337,6 +1345,8 @@ static int __devinit fsldma_of_probe(struct of_device *op,
 	fdev->common.device_prep_slave_sg = fsl_dma_prep_slave_sg;
 	fdev->common.device_control = fsl_dma_device_control;
 	fdev->common.dev = &op->dev;
+
+	dma_set_mask(&(op->dev), DMA_BIT_MASK(36));
 
 	dev_set_drvdata(&op->dev, fdev);
 

@@ -37,6 +37,9 @@
 #include <linux/ratelimit.h>
 #include <linux/kmsg_dump.h>
 #include <linux/syslog.h>
+#ifdef CONFIG_SONOS
+#include "mdp.h"
+#endif
 
 #include <asm/uaccess.h>
 
@@ -77,6 +80,7 @@ int console_printk[4] = {
  */
 int oops_in_progress;
 EXPORT_SYMBOL(oops_in_progress);
+
 
 /*
  * console_sem protects the console_drivers list, and also
@@ -135,6 +139,7 @@ static int selected_console = -1;
 static int preferred_console = -1;
 int console_set_on_cmdline;
 EXPORT_SYMBOL(console_set_on_cmdline);
+
 
 /* Flag: console code may call schedule() */
 static int console_may_schedule;
@@ -256,6 +261,20 @@ static void boot_delay_msec(void)
 #else
 static inline void boot_delay_msec(void)
 {
+// XXX BT the following is insane which is why I have ifdef'd it out
+#if 0
+	unsigned long long k;
+	unsigned long timeout;
+    k = (unsigned long long) 1000000 ;
+	timeout = jiffies + msecs_to_jiffies(1);
+	while(k) {
+		k--;
+		cpu_relax();
+		if(time_after(jiffies, timeout))
+			break;
+		touch_nmi_watchdog();
+	}
+#endif //0
 }
 #endif
 
@@ -802,7 +821,7 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	 * Try to acquire and then immediately release the
 	 * console semaphore. The release will do all the
 	 * actual magic (print out buffers, wake up klogd,
-	 * etc). 
+	 * etc).
 	 *
 	 * The acquire_console_semaphore_for_printk() function
 	 * will release 'logbuf_lock' regardless of whether it
@@ -1080,7 +1099,11 @@ void release_console_sem(void)
 		con_start = log_end;		/* Flush */
 		spin_unlock(&logbuf_lock);
 		stop_critical_timings();	/* don't trace print latency */
-		call_console_drivers(_con_start, _log_end);
+		if (
+#ifdef CONFIG_SONOS
+			((sys_mdp.mdp_flags & MDP_KERNEL_PRINTK_ENABLE))||
+#endif
+			(oops_in_progress)) call_console_drivers(_con_start, _log_end);
 		start_critical_timings();
 		local_irq_restore(flags);
 	}

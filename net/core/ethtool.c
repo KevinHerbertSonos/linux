@@ -187,6 +187,7 @@ EXPORT_SYMBOL(ethtool_ntuple_flush);
 
 /* Handlers for each ethtool command */
 
+#ifndef CONFIG_SONOS_FILLMORE
 static int ethtool_get_settings(struct net_device *dev, void __user *useraddr)
 {
 	struct ethtool_cmd cmd = { .cmd = ETHTOOL_GSET };
@@ -203,6 +204,37 @@ static int ethtool_get_settings(struct net_device *dev, void __user *useraddr)
 		return -EFAULT;
 	return 0;
 }
+#endif	// CONFIG_SONOS_FILLMORE
+
+#ifdef CONFIG_SONOS_FILLMORE
+static int ethtool_get_settings_name(struct net_device *dev, void __user *useraddr , char *name)
+{
+	struct ethtool_cmd cmd;
+	int err;
+
+	if (!dev->ethtool_ops || !dev->ethtool_ops->get_settings)
+		return -EOPNOTSUPP;
+
+	memset(&cmd, 0, sizeof(struct ethtool_cmd));
+	cmd.cmd = ETHTOOL_GSET;
+
+	/* port 0 connects to the mac */
+	if (strcmp("eth0", name) == 0)
+		cmd.port = 1;
+	else if (strcmp("eth1", name) == 0)
+		cmd.port = 2;
+	else
+		return -ENODEV;
+
+	err = dev->ethtool_ops->get_settings(dev, &cmd);
+	if (err < 0)
+		return err;
+
+	if (copy_to_user(useraddr, &cmd, sizeof(cmd)))
+		return -EFAULT;
+	return 0;
+}
+#endif	// CONFIG_SONOS_FILLMORE
 
 static int ethtool_set_settings(struct net_device *dev, void __user *useraddr)
 {
@@ -1337,11 +1369,51 @@ static noinline_for_stack int ethtool_flash_device(struct net_device *dev,
 
 int dev_ethtool(struct net *net, struct ifreq *ifr)
 {
-	struct net_device *dev = __dev_get_by_name(net, ifr->ifr_name);
+	struct net_device *dev;
 	void __user *useraddr = ifr->ifr_data;
 	u32 ethcmd;
 	int rc;
 	unsigned long old_features;
+
+#ifdef CONFIG_SONOS_FILLMORE
+	/* Fillmore has 2 external ethernet ports connected to an AR8236 fast ethernet switch.
+	   Port 0 is connected to the RGMII mac (mac 0) via MII.  This hack intercepts the
+	   ETHTOOL_GSET ioctl and get the external port status for the intended port. ifr_name eth0
+	   returns port 1 and eth1 returns port2. */
+	if (strcmp("eth1", ifr->ifr_name) == 0)
+		dev = __dev_get_by_name(net, "eth0");
+	else
+#endif
+		dev = __dev_get_by_name(net, ifr->ifr_name);
+#if defined(CONFIG_SONOS_LIMELIGHT)
+	{
+		/* Limelight has 2 external ethernet ports but they connected to an ethernet 
+		   switch chip instead of a PHY. A third internal ethernet port connects the 
+		   switch chip to a single TSEC on the P1014. Thus linux only sees one ethernet 
+		   port. This hack intercepts the ETHTOOL_GSET ioctl and get the external port 
+		   status from the MV88E6020 switch driver directly. */
+		extern void mv88e6020_get_port_status(unsigned int port, struct ethtool_cmd *cmd);
+		struct ethtool_cmd cmd = { .cmd = ETHTOOL_GSET };
+		int port;
+
+		if (copy_from_user(&ethcmd, useraddr, sizeof(ethcmd))) {
+			return -EFAULT;
+		}
+		if (ethcmd == ETHTOOL_GSET) {
+			if (strcmp("eth0", ifr->ifr_name) == 0)
+				port = 0;
+			else if (strcmp("eth1", ifr->ifr_name) == 0)
+				port = 1;
+			else 
+				return -ENODEV;
+			
+			mv88e6020_get_port_status(port, &cmd);
+			if (copy_to_user(useraddr, &cmd, sizeof(cmd)))
+				return -EFAULT;
+			return 0;
+		}
+	}
+#endif	// CONFIG_SONOS_LIMELIGHT
 
 	if (!dev || !netif_device_present(dev))
 		return -ENODEV;
@@ -1390,7 +1462,11 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 
 	switch (ethcmd) {
 	case ETHTOOL_GSET:
+#ifdef CONFIG_SONOS_FILLMORE
+		rc = ethtool_get_settings_name(dev, useraddr , ifr->ifr_name);
+#else
 		rc = ethtool_get_settings(dev, useraddr);
+#endif
 		break;
 	case ETHTOOL_SSET:
 		rc = ethtool_set_settings(dev, useraddr);

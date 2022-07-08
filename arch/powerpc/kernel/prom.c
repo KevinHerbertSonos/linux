@@ -68,6 +68,10 @@ int __initdata iommu_force_on;
 unsigned long tce_alloc_start, tce_alloc_end;
 #endif
 
+#ifdef CONFIG_SONOS
+extern char SonosCmdLine[];
+#endif
+
 static int __init early_parse_mem(char *p)
 {
 	if (!p)
@@ -680,6 +684,9 @@ void __init early_init_devtree(void *params)
 	 * size, TCE reserve, and more ...
 	 */
 	of_scan_flat_dt(early_init_dt_scan_chosen, NULL);
+#ifdef CONFIG_SONOS
+	strlcpy(cmd_line, SonosCmdLine, COMMAND_LINE_SIZE);
+#endif
 
 	/* Scan memory nodes and rebuild MEMBLOCKs */
 	memblock_init();

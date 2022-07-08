@@ -3,6 +3,7 @@
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/core directory entry (empty =) ). [MS]
+ * Copyright 2009-2010 Freescale Semiconductor, Inc.
  */
 
 #include <linux/mm.h>
@@ -77,6 +78,10 @@ static int rps_sock_flow_sysctl(ctl_table *table, int write,
 }
 #endif /* CONFIG_RPS */
 
+#ifdef CONFIG_NET_GIANFAR_FP
+extern int netdev_fastroute;
+#endif
+
 static struct ctl_table net_core_table[] = {
 #ifdef CONFIG_NET
 	{
@@ -93,6 +98,15 @@ static struct ctl_table net_core_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec
 	},
+#ifdef CONFIG_NET_GIANFAR_FP
+	{
+		.procname	= "netdev_fastroute",
+		.data		= &netdev_fastroute,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec
+	},
+#endif
 	{
 		.procname	= "wmem_default",
 		.data		= &sysctl_wmem_default,

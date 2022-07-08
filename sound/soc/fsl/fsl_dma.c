@@ -3,7 +3,9 @@
  *
  * Author: Timur Tabi <timur@freescale.com>
  *
- * Copyright 2007-2008 Freescale Semiconductor, Inc.  This file is licensed
+ * Copyright 2007-2008, 2010 Freescale Semiconductor, Inc.
+ *
+ * This file is licensed
  * under the terms of the GNU General Public License version 2.  This
  * program is licensed "as is" without any warranty of any kind, whether
  * express or implied.
@@ -658,10 +660,12 @@ static int fsl_dma_hw_params(struct snd_pcm_substream *substream,
 			link->source_attr = cpu_to_be32(CCSR_DMA_ATR_SNOOP);
 
 			link->dest_addr = cpu_to_be32(ssi_sxx_phys);
-			link->dest_attr = cpu_to_be32(CCSR_DMA_ATR_NOSNOOP);
+			link->dest_attr = cpu_to_be32(CCSR_DMA_ATR_NOSNOOP |
+				upper_32_bits(ssi_sxx_phys));
 		} else {
 			link->source_addr = cpu_to_be32(ssi_sxx_phys);
-			link->source_attr = cpu_to_be32(CCSR_DMA_ATR_NOSNOOP);
+			link->source_attr = cpu_to_be32(CCSR_DMA_ATR_NOSNOOP |
+				upper_32_bits(ssi_sxx_phys));
 
 			link->dest_addr = cpu_to_be32(temp_addr);
 			link->dest_attr = cpu_to_be32(CCSR_DMA_ATR_SNOOP);

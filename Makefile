@@ -340,10 +340,14 @@ CFLAGS_KERNEL	=
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
+UPTO_ROOT := $(srctree)/../..
+include $(UPTO_ROOT)/sonos_common.mk
 
 # Use LINUXINCLUDE when you must reference the include/ directory.
 # Needed to be compatible with the O= option
-LINUXINCLUDE    := -I$(srctree)/arch/$(hdr-arch)/include -Iinclude \
+LINUXINCLUDE    := \
+                   $(SONOS_PLATFORMS_INCLUDES) \
+                   -I$(srctree)/arch/$(hdr-arch)/include -Iinclude \
                    $(if $(KBUILD_SRC), -I$(srctree)/include) \
                    -include include/generated/autoconf.h
 
@@ -354,6 +358,7 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
 		   -fno-delete-null-pointer-checks
+
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 
 # Read KERNELRELEASE from include/config/kernel.release (if it exists)
@@ -566,6 +571,23 @@ ifdef CONFIG_DEBUG_SECTION_MISMATCH
 KBUILD_CFLAGS += $(call cc-option, -fno-inline-functions-called-once)
 endif
 
+# Advanced mips 24kc optimization
+ifdef CONFIG_MIPS_24K_KERNEL_OPTIMIZATION
+KBUILD_CFLAGS	+= $(call cc-option,-funit-at-a-time)
+KBUILD_CFLAGS	+= $(call cc-option,-pipe)
+KBUILD_CFLAGS	+= $(call cc-option,-mips32r2)
+KBUILD_CFLAGS	+= $(call cc-option,-mtune=mips32r2)
+KBUILD_CFLAGS	+= $(call cc-option,-Os)
+endif
+
+# Advanced mips 74kc optimization
+ifdef CONFIG_MIPS_74K_KERNEL_OPTIMIZATION
+KBUILD_CFLAGS	+= $(call cc-option,-funit-at-a-time)
+KBUILD_CFLAGS	+= $(call cc-option,-pipe)
+KBUILD_CFLAGS	+= $(call cc-option,-mtune=74kc)
+KBUILD_CFLAGS	+= $(call cc-option,-Os)
+endif
+
 # arch Makefile may override CC so keep this after arch Makefile is included
 NOSTDINC_FLAGS += -nostdinc -isystem $(shell $(CC) -print-file-name=include)
 CHECKFLAGS     += $(NOSTDINC_FLAGS)
@@ -600,9 +622,35 @@ ifneq ($(KCFLAGS),)
         KBUILD_CFLAGS += $(KCFLAGS)
 endif
 
+#New toolchain for fenway requires these warnings to be disabled.
+ifeq ($(CONFIG_SONOS_FENWAY),y)
+KBUILD_CFLAGS   += -Wno-narrowing -Wno-unused-but-set-variable -Wno-unused-variable \
+		   -Wno-enum-compare
+endif
+
+#New toolchain for fillmore requires these warnings to be disabled.
+ifeq ($(CONFIG_SONOS_FILLMORE),y)
+KBUILD_CFLAGS   += -Wno-narrowing -Wno-unused-but-set-variable -Wno-unused-variable \
+		   -Wno-enum-compare
+endif
+
+#New toolchain for limelight requires these warnings to be disabled.
+ifeq ($(CONFIG_SONOS_LIMELIGHT),y)
+KBUILD_CFLAGS   += -Wno-narrowing -Wno-unused-but-set-variable -Wno-unused-variable \
+		   -Wno-enum-compare
+endif
+
 # Use --build-id when available.
+ifeq ($(CONFIG_SONOS_LIMELIGHT),y)
+# toolchain dependancy
 LDFLAGS_BUILD_ID = $(patsubst -Wl$(comma)%,%,\
 			      $(call cc-ldoption, -Wl$(comma)--build-id,))
+endif
+ifeq ($(CONFIG_SONOS_FENWAY),y)
+# toolchain dependancy
+LDFLAGS_BUILD_ID = $(patsubst -Wl$(comma)%,%,\
+			      $(call ld-option, -Wl$(comma)--build-id,))
+endif
 LDFLAGS_MODULE += $(LDFLAGS_BUILD_ID)
 LDFLAGS_vmlinux += $(LDFLAGS_BUILD_ID)
 

@@ -41,6 +41,7 @@
 #define  SDHCI_CMD_CRC		0x08
 #define  SDHCI_CMD_INDEX	0x10
 #define  SDHCI_CMD_DATA		0x20
+#define  SDHCI_CMD_ABORT	0xC0
 
 #define  SDHCI_CMD_RESP_NONE	0x00
 #define  SDHCI_CMD_RESP_LONG	0x01
@@ -60,7 +61,7 @@
 #define  SDHCI_DOING_READ	0x00000200
 #define  SDHCI_SPACE_AVAILABLE	0x00000400
 #define  SDHCI_DATA_AVAILABLE	0x00000800
-#define  SDHCI_CARD_PRESENT	0x00010000
+#define  SDHCI_CARD_PRESENT	0x00060000
 #define  SDHCI_WRITE_PROTECT	0x00080000
 
 #define SDHCI_HOST_CONTROL 	0x28
@@ -178,6 +179,11 @@
 #define   SDHCI_SPEC_100	0
 #define   SDHCI_SPEC_200	1
 
+/* 40C DMA control register */
+#define SDHCI_HOST_DMA_CONTROL	0x40C
+#define SDHCI_AHB2MAG_IRQ_BYPASS	0x20
+#define SDHCI_CACHE_SNOOP	0x40
+
 struct sdhci_ops;
 
 struct sdhci_host {
@@ -240,6 +246,10 @@ struct sdhci_host {
 #define SDHCI_QUIRK_CAP_CLOCK_BASE_BROKEN		(1<<25)
 /* Controller cannot support End Attribute in NOP ADMA descriptor */
 #define SDHCI_QUIRK_NO_ENDATTR_IN_NOPDESC		(1<<26)
+/* Controller cannot set DCR[DMA__AHB2MAG_IRQ_BYPASS] automatically*/
+#define SDHCI_QUIRK_SET_AHB2MAG_IRQ_BYPASS		(1<<27)
+/* Controller uses Auto CMD12 command to stop the transfer */
+#define SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12		(1<<28)
 
 	int			irq;		/* Device IRQ */
 	void __iomem *		ioaddr;		/* Mapped address */

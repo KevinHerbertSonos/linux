@@ -52,6 +52,7 @@ config MPC85xx_DS
 	select PPC_I8259
 	select DEFAULT_UIMAGE
 	select FSL_ULI1575 if PCI
+	select HAS_RAPIDIO
 	select SWIOTLB
 	help
 	  This option enables support for the MPC85xx DS (MPC8544 DS) board
@@ -64,6 +65,22 @@ config MPC85xx_RDB
 	select SWIOTLB
 	help
 	  This option enables support for the MPC85xx RDB (P2020 RDB) board
+
+config P1010_RDB
+	bool "Freescale P1010RDB"
+	select PPC_I8259
+	select DEFAULT_UIMAGE
+	select FSL_ULI1575 if PCI
+	select SWIOTLB
+	help
+	  This option enables support for the P1010 RDB (P1010 RDB) board
+
+config P1022_DS
+	bool "Freescale P1022 DS"
+	select DEFAULT_UIMAGE
+	select SWIOTLB
+	help
+	  This option enables support for the P1022DS board
 
 config SOCRATES
 	bool "Socrates"
@@ -145,6 +162,16 @@ config SBC8560
 	help
 	  This option enables support for the Wind River SBC8560 board
 
+config P2020DS_EVENT_IRQ
+	bool "Freescale P2020DS Event button handler"
+	depends on MPC85xx_DS
+	default n
+	help
+	  Response to the EVENT button on the P2020DS board, can be used
+	  as a wakeup source for power management.  Note: The interrupt
+	  is conflicting with intx interrupt on PCIE slot2.  Enable this
+	  only when the PCIE slot2 is using MSI or not used.
+
 config P4080_DS
 	bool "Freescale P4080 DS"
 	select DEFAULT_UIMAGE
@@ -156,6 +183,10 @@ config P4080_DS
 	select HAS_RAPIDIO
 	help
 	  This option enables support for the P4080 DS board
+
+config FSL_85XX_CACHE_SRAM
+       bool
+       select PPC_LIB_RHEAP
 
 endif # FSL_SOC_BOOKE
 

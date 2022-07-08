@@ -790,6 +790,9 @@ struct inode {
 	struct posix_acl	*i_default_acl;
 #endif
 	void			*i_private; /* fs or device private pointer */
+#ifdef CONFIG_OPTIMIZE_SD_PERFORMANCE
+	unsigned int		format_used;	/* indicate usage to the inode */
+#endif
 };
 
 /*
@@ -893,7 +896,7 @@ struct file_ra_state {
 	unsigned int size;		/* # of readahead pages */
 	unsigned int async_size;	/* do asynchronous readahead when
 					   there are only # of pages ahead */
-
+	unsigned int delay_readahead;	/* delay readahead*/
 	unsigned int ra_pages;		/* Maximum readahead window */
 	unsigned int mmap_miss;		/* Cache miss stat for mmap accesses */
 	loff_t prev_pos;		/* Cache last read() position */

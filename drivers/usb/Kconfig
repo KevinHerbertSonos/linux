@@ -51,6 +51,7 @@ config USB_ARCH_HAS_OHCI
 	default y if CPU_SUBTYPE_SH7721
 	default y if CPU_SUBTYPE_SH7763
 	default y if CPU_SUBTYPE_SH7786
+	default y if MACH_AR7100
 	# more:
 	default PCI
 
@@ -64,6 +65,8 @@ config USB_ARCH_HAS_EHCI
 	default y if ARCH_AT91SAM9G45
 	default y if ARCH_MXC
 	default y if ARCH_OMAP3
+	default y if MACH_HORNET
+	default y if MACH_AR7100
 	default PCI
 
 # ARM SA1111 chips have a non-PCI based "OHCI-compatible" USB host interface.
@@ -150,6 +153,13 @@ config USB_USS720
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called uss720.
+
+config FSL_USB_OTG
+	tristate "Freescale USB2 OTG driver"
+	depends on USB || USB_GADGET
+	select USB_OTG
+	---help---
+	  Freescale USB2 DR controller OTG driver
 
 source "drivers/usb/serial/Kconfig"
 

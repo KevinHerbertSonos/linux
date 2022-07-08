@@ -15,6 +15,20 @@ config OPROFILE
 
 	  If unsure, say N.
 
+config OPROFILE_WASP
+	bool "OProfile support for Atheros WASP/7240 chip"
+	default n
+	depends on WASP_SUPPORT || MACH_AR7240
+	select HAVE_PROFILE
+	select PROFILING
+	select TRACING
+	select TRACING_SUPPORT
+	select RING_BUFFER
+	select OPROFILE
+	help
+	  Add the support for profiling linux kernel running on the
+	  atheros wasp chip
+
 config OPROFILE_EVENT_MULTIPLEX
 	bool "OProfile multiplexing support (EXPERIMENTAL)"
 	default n
@@ -149,6 +163,12 @@ config HAVE_MIXED_BREAKPOINTS_REGS
 	  latter fashion.
 
 config HAVE_USER_RETURN_NOTIFIER
+	bool
+
+#
+# Whether Atheros AoW is supported for a given platform.
+#
+config HAVE_AOW_PLATFORM_SUPPORT
 	bool
 
 source "kernel/gcov/Kconfig"

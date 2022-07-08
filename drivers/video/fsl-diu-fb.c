@@ -1,5 +1,5 @@
 /*
- * Copyright 2008 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright 2008, 2010 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  *  Freescale DIU Frame Buffer device driver
  *
@@ -36,6 +36,7 @@
 #include <sysdev/fsl_soc.h>
 #include "fsl-diu-fb.h"
 
+static int hwcursor = 1;
 /*
  * These parameters give default parameters
  * for video output 1024x768,
@@ -58,6 +59,126 @@ static struct fb_videomode __devinitdata fsl_diu_default_mode = {
 };
 
 static struct fb_videomode __devinitdata fsl_diu_mode_db[] = {
+	{
+		.name           = "640x480-60",
+		.refresh        = 60,
+		.xres           = 640,
+		.yres           = 480,
+		.pixclock       = 39722,
+		.left_margin    = 48,
+		.right_margin   = 16,
+		.upper_margin   = 33,
+		.lower_margin   = 10,
+		.hsync_len      = 96,
+		.vsync_len      = 2,
+		.sync           = FB_SYNC_COMP_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+		.vmode          = FB_VMODE_NONINTERLACED
+	 },
+	{
+		.name           = "640x480-72",
+		.refresh        = 72,
+		.xres           = 640,
+		.yres           = 480,
+		.pixclock       = 32052,
+		.left_margin    = 128,
+		.right_margin   = 24,
+		.upper_margin   = 28,
+		.lower_margin   = 9,
+		.hsync_len      = 40,
+		.vsync_len      = 3,
+		.sync           = FB_SYNC_COMP_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+		.vmode          = FB_VMODE_NONINTERLACED
+	},
+	{
+		.name           = "640x480-75",
+		.refresh        = 75,
+		.xres           = 640,
+		.yres           = 480,
+		.pixclock       = 31747,
+		.left_margin    = 120,
+		.right_margin   = 16,
+		.upper_margin   = 16,
+		.lower_margin   = 1,
+		.hsync_len      = 64,
+		.vsync_len      = 3,
+		.sync           = FB_SYNC_COMP_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+		.vmode          = FB_VMODE_NONINTERLACED
+	},
+	{
+		.name           = "640x480-90",
+		.refresh        = 90,
+		.xres           = 640,
+		.yres           = 480,
+		.pixclock       = 25057,
+		.left_margin    = 120,
+		.right_margin   = 32,
+		.upper_margin   = 14,
+		.lower_margin   = 25,
+		.hsync_len      = 40,
+		.vsync_len      = 14,
+		.sync           = FB_SYNC_COMP_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+		.vmode          = FB_VMODE_NONINTERLACED
+	},
+	{
+		.name           = "640x480-100",
+		.refresh        = 100,
+		.xres           = 640,
+		.yres           = 480,
+		.pixclock       = 22272,
+		.left_margin    = 48,
+		.right_margin   = 32,
+		.upper_margin   = 17,
+		.lower_margin   = 22,
+		.hsync_len      = 128,
+		.vsync_len      = 12,
+		.sync           = FB_SYNC_COMP_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+		.vmode          = FB_VMODE_NONINTERLACED
+	},
+	{
+		.name		= "800x480-60",
+		.refresh	= 60,
+		.xres		= 800,
+		.yres		= 480,
+		.pixclock	= 33805,
+		.left_margin	= 96,
+		.right_margin	= 24,
+		.upper_margin	= 10,
+		.lower_margin	= 3,
+		.hsync_len	= 72,
+		.vsync_len	= 7,
+		.sync		= FB_SYNC_COMP_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+		.vmode		= FB_VMODE_NONINTERLACED
+	},
+	{
+		.name		= "854x480-60",
+		.refresh	= 60,
+		.xres		= 854,
+		.yres		= 480,
+		.pixclock	= 31518,
+		.left_margin	= 104,
+		.right_margin	= 16,
+		.upper_margin	= 13,
+		.lower_margin	= 1,
+		.hsync_len	= 88,
+		.vsync_len	= 3,
+		.sync		= FB_SYNC_COMP_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+		.vmode		= FB_VMODE_NONINTERLACED
+	},
+	{
+		.name           = "800x600-60",
+		.refresh        = 60,
+		.xres           = 800,
+		.yres           = 600,
+		.pixclock       = 25000,
+		.left_margin    = 88,
+		.right_margin   = 40,
+		.upper_margin   = 23,
+		.lower_margin   = 1,
+		.hsync_len      = 128,
+		.vsync_len      = 4,
+		.sync           = FB_SYNC_COMP_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+		.vmode          = FB_VMODE_NONINTERLACED
+	},
 	{
 		.name		= "1024x768-60",
 		.refresh	= 60,
@@ -153,13 +274,13 @@ static struct fb_videomode __devinitdata fsl_diu_mode_db[] = {
 		.refresh	= 60,
 		.xres		= 320,
 		.yres		= 240,
-		.pixclock	= 15385,
-		.left_margin	= 0,
-		.right_margin	= 0,
-		.upper_margin	= 0,
-		.lower_margin	= 0,
-		.hsync_len	= 0,
-		.vsync_len	= 0,
+		.pixclock	= 79440,
+		.left_margin	= 16,
+		.right_margin	= 16,
+		.upper_margin	= 16,
+		.lower_margin	= 5,
+		.hsync_len	= 48,
+		.vsync_len	= 1,
 		.sync		= FB_SYNC_COMP_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
 		.vmode		= FB_VMODE_NONINTERLACED
 	},
@@ -181,8 +302,9 @@ static struct fb_videomode __devinitdata fsl_diu_mode_db[] = {
 };
 
 static char *fb_mode = "1024x768-32@60";
-static unsigned long default_bpp = 32;
+static unsigned long default_bpp = 8;
 static int monitor_port;
+static ATOMIC_NOTIFIER_HEAD(fsl_diu_notifier_list);
 
 #if defined(CONFIG_NOT_COHERENT_CACHE)
 static u8 *coherence_data;
@@ -203,13 +325,19 @@ struct fsl_diu_data {
 	int monitor_port;
 };
 
+struct fsl_diu_vsync {
+	wait_queue_head_t wait;
+	unsigned int count;
+	unsigned long addr;
+};
+
 struct mfb_info {
 	int index;
 	int type;
 	char *id;
 	int registered;
 	int blank;
-	unsigned long pseudo_palette[16];
+	unsigned long pseudo_palette[256];
 	struct diu_ad *ad;
 	int cursor_reset;
 	unsigned char g_alpha;
@@ -217,6 +345,7 @@ struct mfb_info {
 	int x_aoi_d;		/* aoi display x offset to physical screen */
 	int y_aoi_d;		/* aoi display y offset to physical screen */
 	struct fsl_diu_data *parent;
+	struct fsl_diu_vsync vsync;
 };
 
 
@@ -278,6 +407,7 @@ static struct diu_hw dr = {
 };
 
 static struct diu_pool pool;
+static struct fsl_diu_data *diu_data;
 
 /**
  * fsl_diu_alloc - allocate memory for the DIU
@@ -674,7 +804,7 @@ static void update_lcdc(struct fb_info *info)
 	struct fsl_diu_data *machine_data = mfbi->parent;
 	struct diu *hw;
 	int i, j;
-	char __iomem *cursor_base, *gamma_table_base;
+	char __iomem *gamma_table_base;
 
 	u32 temp;
 
@@ -687,12 +817,19 @@ static void update_lcdc(struct fb_info *info)
 
 	diu_ops.set_monitor_port(machine_data->monitor_port);
 	gamma_table_base = pool.gamma.vaddr;
-	cursor_base = pool.cursor.vaddr;
 	/* Prep for DIU init  - gamma table, cursor table */
 
 	for (i = 0; i <= 2; i++)
 	   for (j = 0; j <= 255; j++)
 	      *gamma_table_base++ = j;
+
+	if (machine_data->monitor_port == 1) {
+		/* fix the gamma for LCD panel */
+		gamma_table_base = pool.gamma.vaddr;
+		for (i = 0; i < 256*3; i++)
+			gamma_table_base[i] = (gamma_table_base[i] << 2)
+				| ((gamma_table_base[i] >> 6) & 0x03);
+	}
 
 	diu_ops.set_gamma_table(machine_data->monitor_port, pool.gamma.vaddr);
 
@@ -703,6 +840,9 @@ static void update_lcdc(struct fb_info *info)
 
 	out_be32(&hw->gamma, pool.gamma.paddr);
 	out_be32(&hw->cursor, pool.cursor.paddr);
+	out_be32(&hw->pallete, pool.pallete.paddr);
+	memset(pool.cursor.vaddr + pool.cursor.offset, 0, 1024 * 4);
+	memset(pool.pallete.vaddr + pool.pallete.offset, 0, 256 * 4);
 
 	out_be32(&hw->bgnd, 0x007F7F7F); 	/* BGND */
 	out_be32(&hw->bgnd_wb, 0); 		/* BGND_WB */
@@ -741,10 +881,14 @@ static void update_lcdc(struct fb_info *info)
 	out_be32(&hw->syn_pol, 0);	/* SYNC SIGNALS POLARITY */
 	out_be32(&hw->thresholds, 0x00037800); /* The Thresholds */
 	out_be32(&hw->int_status, 0);	/* INTERRUPT STATUS */
+	out_be32(&(hw->int_mask),
+		(0x1F & (~(INT_VSYNC | INT_UNDRUN))));	/* INT MASK */
 	out_be32(&hw->plut, 0x01F5F666);
 
 	/* Enable the DIU */
+#ifndef CONFIG_FRAMEBUFFER_CONSOLE
 	enable_lcdc(info);
+#endif
 }
 
 static int map_video_memory(struct fb_info *info)
@@ -785,6 +929,139 @@ static void unmap_video_memory(struct fb_info *info)
 	mutex_unlock(&info->mm_lock);
 }
 
+static void hide_cursor(struct fb_info *info)
+{
+	struct diu *pdiu = dr.diu_reg;
+	out_be32(&(pdiu->curs_pos), OUT_DISP_AREA);
+}
+
+static void show_cursor(struct fb_info *info)
+{
+	struct diu *pdiu = dr.diu_reg;
+	out_be32(&pdiu->cursor, pool.cursor.paddr);
+}
+
+/*
+ * Copies a cursor image from user space to the proper place in driver
+ * memory so that the hardware can display the cursor image
+ */
+static void load_cursor_image(struct fb_info *info, u8 *data,
+				     u16 bg, u16 fg, u32 w, u32 h, u32 d)
+{
+	u16 *dst = (u16 *)(pool.cursor.vaddr + pool.cursor.offset);
+	int i, j;
+	u8 *s;
+
+	s = data;
+	for (i = h; i--; ) {
+		for (j = 0; j < w; j++) {
+			if (*s & (1 << j))
+				*(dst + j) = cpu_to_le16(fg);
+			else
+				*(dst + j) = cpu_to_le16(bg);
+		}
+
+		dst += 32;
+		s++;
+	}
+}
+
+/*
+ * A cursor function that supports displaying a cursor image via hardware.
+ * Within the kernel, copy and invert rops are supported.  If exported
+ * to user space, only the copy rop will be supported.
+ */
+static int fsl_diu_cursor(struct fb_info *info, struct fb_cursor *cursor)
+{
+	struct mfb_info *mfbi = (struct mfb_info *)info->par;
+	struct diu *pdiu = dr.diu_reg;
+	int set = cursor->set;
+	u16 fg, bg;
+	static u32 curs_pos;
+
+	if (cursor->image.width > MAX_CURS || cursor->image.height > MAX_CURS)
+		return -EINVAL;
+
+	if (!hwcursor)
+		return -ENODEV;
+
+	if (mfbi->cursor_reset) {
+		set = FB_CUR_SETALL;
+		mfbi->cursor_reset = 0;
+	}
+
+	if (set & FB_CUR_SETSIZE)
+		memset_io(pool.cursor.vaddr + pool.cursor.offset,
+				0, MAX_CURS * MAX_CURS * 4);
+
+	if (set & FB_CUR_SETPOS) {
+		u32 xx, yy, temp;
+		yy = cursor->image.dy - info->var.yoffset;
+		xx = cursor->image.dx - info->var.xoffset;
+		temp = xx & 0xFFFF;
+		temp |= yy << 16;
+		out_be32(&(pdiu->curs_pos), temp);
+	}
+
+	if (set & (FB_CUR_SETSHAPE | FB_CUR_SETCMAP | FB_CUR_SETIMAGE)) {
+		u32 i, dsize, s_pitch, s_pitch_max;
+		u32 bg_idx = cursor->image.bg_color;
+		u32 fg_idx = cursor->image.fg_color;
+		u8 *src;
+
+		if (info->state != FBINFO_STATE_RUNNING)
+			return 0;
+
+		s_pitch = (cursor->image.width + 7) >> 3;
+		s_pitch_max = (MAX_CURS + 7) >> 3;
+		dsize = s_pitch * cursor->image.height;
+
+		bg = ((info->cmap.red[bg_idx] & 0xf8) << 7) |
+			((info->cmap.green[bg_idx] & 0xf8) << 2) |
+			((info->cmap.blue[bg_idx] & 0xf8) >> 3) |
+			1 << 15;
+
+		fg = ((info->cmap.red[fg_idx] & 0xf8) << 7) |
+			((info->cmap.green[fg_idx] & 0xf8) << 2) |
+			((info->cmap.blue[fg_idx] & 0xf8) >> 3) |
+			1 << 15;
+
+		src = kmalloc(s_pitch_max * cursor->image.height,
+					GFP_ATOMIC);
+		if (cursor->enable) {
+			switch (cursor->rop) {
+			case ROP_XOR:
+				for (i = 0; i < dsize; i++)
+					src[i] = cursor->image.data[i] ^
+							cursor->mask[i];
+				break;
+			case ROP_COPY:
+			default:
+				for (i = 0; i < dsize; i++)
+					src[i] = cursor->image.data[i] &
+							cursor->mask[i];
+				break;
+			}
+		} else
+			memcpy(src, cursor->image.data, dsize);
+
+		load_cursor_image(info, src, bg, fg,
+					 cursor->image.width,
+					 cursor->image.height,
+					 cursor->image.depth);
+		show_cursor(info);
+		kfree(src);
+	} else if (cursor->enable && cursor->rop == ROP_XOR) {
+		if (pdiu->curs_pos != OUT_DISP_AREA) {
+			curs_pos = pdiu->curs_pos;
+			out_be32(&(pdiu->curs_pos), OUT_DISP_AREA);
+		} else
+			out_be32(&(pdiu->curs_pos), curs_pos);
+	}
+
+	return 0;
+}
+
 /*
  * Using the fb_var_screeninfo in fb_info we set the aoi of this
  * particular framebuffer. It is a light version of fsl_diu_set_par.
@@ -821,6 +1098,14 @@ static int fsl_diu_set_par(struct fb_info *info)
 	hw = dr.diu_reg;
 
 	set_fix(info);
+
+	/* Hide hardware cursor */
+	if (!hwcursor) {
+		hide_cursor(info);
+		info->fbops->fb_cursor = NULL;
+	} else
+		info->fbops->fb_cursor = fsl_diu_cursor;
+
 	mfbi->cursor_reset = 1;
 
 	len = info->var.yres_virtual * info->fix.line_length;
@@ -862,6 +1147,18 @@ static int fsl_diu_set_par(struct fb_info *info)
 	return 0;
 }
 
+#ifdef CONFIG_FRAMEBUFFER_CONSOLE
+static int fsl_diu_set_par_fbc(struct fb_info *info)
+{
+	int ret = 0;
+	ret = fsl_diu_set_par(info);
+	if (!ret)
+		enable_lcdc(info);
+
+	return ret;
+}
+#endif
+
 static inline __u32 CNVT_TOHW(__u32 val, __u32 width)
 {
 	return ((val<<width) + 0x7FFF - val)>>16;
@@ -879,45 +1176,39 @@ static inline __u32 CNVT_TOHW(__u32 val, __u32 width)
 static int fsl_diu_setcolreg(unsigned regno, unsigned red, unsigned green,
 			   unsigned blue, unsigned transp, struct fb_info *info)
 {
-	int ret = 1;
+	u32 *g_pal = (u32 *)pool.pallete.vaddr;
+	u32 *pal = info->pseudo_palette;
+	struct diu *hw;
 
-	/*
-	 * If greyscale is true, then we convert the RGB value
-	 * to greyscale no matter what visual we are using.
-	 */
-	if (info->var.grayscale)
-		red = green = blue = (19595 * red + 38470 * green +
-				      7471 * blue) >> 16;
-	switch (info->fix.visual) {
-	case FB_VISUAL_TRUECOLOR:
-		/*
-		 * 16-bit True Colour.  We encode the RGB value
-		 * according to the RGB bitfield information.
-		 */
-		if (regno < 16) {
-			u32 *pal = info->pseudo_palette;
-			u32 v;
+	if (regno > (MFB_PALETTE_ENTRIES - 1))
+		return -EINVAL;
 
-			red = CNVT_TOHW(red, info->var.red.length);
-			green = CNVT_TOHW(green, info->var.green.length);
-			blue = CNVT_TOHW(blue, info->var.blue.length);
-			transp = CNVT_TOHW(transp, info->var.transp.length);
+	if (info->var.bits_per_pixel > 8) {
+		red = CNVT_TOHW(red, info->var.red.length);
+		green = CNVT_TOHW(green, info->var.green.length);
+		blue = CNVT_TOHW(blue, info->var.blue.length);
+		transp = CNVT_TOHW(transp, info->var.transp.length);
 
-			v = (red << info->var.red.offset) |
-			    (green << info->var.green.offset) |
-			    (blue << info->var.blue.offset) |
-			    (transp << info->var.transp.offset);
+		pal[regno] = (red << info->var.red.offset) |
+			(green << info->var.green.offset) |
+			(blue << info->var.blue.offset) |
+			(transp << info->var.transp.offset);
 
-			pal[regno] = v;
-			ret = 0;
+	} else { /* bits_per_pixel == 8 */
+		g_pal += 2 * regno;
+		red >>= 8;
+		green >>= 8;
+		blue >>= 8;
+		transp >>= 8;
+		*g_pal = cpu_to_le32(transp << 24 | red << 16 |
+					green << 8 | blue);
+		if (regno >= (MFB_PALETTE_ENTRIES - 1)) {
+			hw = dr.diu_reg;
+			out_be32(&(hw->pallete), pool.pallete.paddr);
 		}
-		break;
-	case FB_VISUAL_STATIC_PSEUDOCOLOR:
-	case FB_VISUAL_PSEUDOCOLOR:
-		break;
 	}
 
-	return ret;
+	return 0;
 }
 
 /*
@@ -981,16 +1272,38 @@ static int fsl_diu_blank(int blank_mode, struct fb_info *info)
 	return 0;
 }
 
+static int wait_for_vsync(void)
+{
+	struct fsl_diu_vsync *vsync;
+	unsigned int count;
+	int ret;
+
+	vsync = &(((struct mfb_info *)(diu_data->fsl_diu_info[0]->par))->vsync);
+	count = vsync->count;
+	ret = wait_event_interruptible_timeout(vsync->wait,
+			count != vsync->count, HZ/10);
+	if (ret < 0)
+		return ret;
+
+	if (ret == 0)
+		return -ETIMEDOUT;
+
+	return 0;
+}
+
 static int fsl_diu_ioctl(struct fb_info *info, unsigned int cmd,
 		       unsigned long arg)
 {
 	struct mfb_info *mfbi = info->par;
+	struct fb_var_screeninfo *var = &info->var;
 	struct diu_ad *ad = mfbi->ad;
 	struct mfb_chroma_key ck;
 	unsigned char global_alpha;
 	struct aoi_display_offset aoi_d;
 	__u32 pix_fmt;
 	void __user *buf = (void __user *)arg;
+	u8 byte_flip;
+	int ret;
 
 	if (!arg)
 		return -EINVAL;
@@ -1008,7 +1321,7 @@ static int fsl_diu_ioctl(struct fb_info *info, unsigned int cmd,
 		pr_debug("get pixel format 0x%08x\n", ad->pix_fmt);
 		break;
 	case MFB_SET_AOID:
-		if (copy_from_user(&aoi_d, buf, sizeof(aoi_d)))
+		if (copy_from_user((void *)&aoi_d, buf, sizeof(aoi_d)))
 			return -EFAULT;
 		mfbi->x_aoi_d = aoi_d.x_aoi_d;
 		mfbi->y_aoi_d = aoi_d.y_aoi_d;
@@ -1041,7 +1354,7 @@ static int fsl_diu_ioctl(struct fb_info *info, unsigned int cmd,
 		pr_debug("set global alpha for index %d\n", mfbi->index);
 		break;
 	case MFB_SET_CHROMA_KEY:
-		/* set panel winformation */
+		/* set color-keying winformation */
 		if (copy_from_user(&ck, buf, sizeof(ck)))
 			return -EFAULT;
 
@@ -1068,6 +1381,28 @@ static int fsl_diu_ioctl(struct fb_info *info, unsigned int cmd,
 		}
 		pr_debug("set chroma key\n");
 		break;
+	case MFB_GET_CHROMA_KEY:
+		ck.red_max = ad->ckmax_r;
+		ck.green_max = ad->ckmax_g;
+		ck.blue_max = ad->ckmax_b;
+
+		ck.red_min = ad->ckmin_r;
+		ck.green_min = ad->ckmin_g;
+		ck.blue_min = ad->ckmin_b;
+
+		/* get color-keying information */
+		if (copy_to_user(buf, (void *)&ck, sizeof(ck)))
+			return -EFAULT;
+		break;
+	case MFB_SET_BYTE_FLIP:
+		if (copy_from_user((void *)&byte_flip,
+				buf, sizeof(global_alpha)))
+			return -EFAULT;
+
+		ad->pix_fmt = diu_ops.get_pixel_format(var->bits_per_pixel,
+				byte_flip);
+		break;
+
 	case FBIOGET_GWINFO:
 		if (mfbi->type == MFB_TYPE_OFF)
 			return -ENODEV;
@@ -1084,7 +1419,25 @@ static int fsl_diu_ioctl(struct fb_info *info, unsigned int cmd,
 	case FBIOGET_DISPINFO:
 		pr_debug("FBIOGET_DISPINFO:0x%08x\n", FBIOGET_DISPINFO);
 		break;
-
+	case MFB_WAIT_FOR_VSYNC:
+		ret = wait_for_vsync();
+		if (copy_to_user(buf, (void *)&ret, sizeof(ret)))
+			return -EFAULT;
+		break;
+	case MFB_SET_GAMMA:
+		/* set the gamma table */
+		if (copy_from_user
+			((void *)pool.gamma.vaddr, buf, 3*256))
+			return -EFAULT;
+		out_be32(&(dr.diu_reg->gamma), pool.gamma.paddr);
+		break;
+	case MFB_GET_GAMMA:
+		/* get the gamma table */
+		if (copy_to_user
+			(buf, (void *)pool.gamma.vaddr, 3*256))
+			return -EFAULT;
+		out_be32(&(dr.diu_reg->gamma), pool.gamma.paddr);
+		break;
 	default:
 		printk(KERN_ERR "Unknown ioctl command (0x%08X)\n", cmd);
 		return -ENOIOCTLCMD;
@@ -1141,7 +1494,11 @@ static int fsl_diu_release(struct fb_info *info, int user)
 static struct fb_ops fsl_diu_ops = {
 	.owner = THIS_MODULE,
 	.fb_check_var = fsl_diu_check_var,
+#ifndef CONFIG_FRAMEBUFFER_CONSOLE
 	.fb_set_par = fsl_diu_set_par,
+#else
+	.fb_set_par = fsl_diu_set_par_fbc,
+#endif
 	.fb_setcolreg = fsl_diu_setcolreg,
 	.fb_blank = fsl_diu_blank,
 	.fb_pan_display = fsl_diu_pan_display,
@@ -1164,7 +1521,8 @@ static int init_fbinfo(struct fb_info *info)
 	info->pseudo_palette = &mfbi->pseudo_palette;
 
 	/* Allocate colormap */
-	fb_alloc_cmap(&info->cmap, 16, 0);
+	fb_alloc_cmap(&info->cmap, 256, 0);
+	fb_set_cmap(&info->cmap, info);
 	return 0;
 }
 
@@ -1252,10 +1610,58 @@ static void uninstall_fb(struct fb_info *info)
 	mfbi->registered = 0;
 }
 
+static void do_pending_buffer_flips(void)
+{
+	int i;
+	struct mfb_info *mfbi;
+	struct diu_ad *ad;
+
+	for (i = 0; i < ARRAY_SIZE(diu_data->fsl_diu_info); i++) {
+		mfbi = (struct mfb_info *)(diu_data->fsl_diu_info[i]->par);
+		ad = mfbi->ad;
+		if (ad && mfbi->vsync.addr) {
+			ad->addr = cpu_to_le32(mfbi->vsync.addr);
+			mfbi->vsync.addr = 0;
+		}
+	}
+}
+
+void fsl_diu_flip(unsigned long paddr)
+{
+	struct mfb_info *mfbi =
+	(struct mfb_info *)(diu_data->fsl_diu_info[0]->par);
+	struct diu_ad *ad = mfbi->ad;
+
+	if (ad) {
+#ifdef CONFIG_FSL_DIU_FLIP_ON_VSYNC
+		mfbi->vsync.addr = paddr;
+#else
+		ad->addr = cpu_to_le32(paddr);
+#endif
+	}
+}
+EXPORT_SYMBOL(fsl_diu_flip);
+
+void fsl_diu_flipn(int fbnum, unsigned long paddr, int now)
+{
+	struct mfb_info *mfbi =
+		(struct mfb_info *)(diu_data->fsl_diu_info[fbnum]->par);
+	struct diu_ad *ad = mfbi->ad;
+
+	if (ad) {
+		if (now)
+			ad->addr = cpu_to_le32(paddr);
+		else
+			mfbi->vsync.addr = paddr;
+	}
+}
+EXPORT_SYMBOL(fsl_diu_flipn);
+
 static irqreturn_t fsl_diu_isr(int irq, void *dev_id)
 {
 	struct diu *hw = dr.diu_reg;
 	unsigned int status = in_be32(&hw->int_status);
+	struct mfb_info *mfbi;
 
 	if (status) {
 		/* This is the workaround for underrun */
@@ -1265,16 +1671,21 @@ static irqreturn_t fsl_diu_isr(int irq, void *dev_id)
 			udelay(1);
 			out_be32(&hw->diu_mode, 1);
 		}
-#if defined(CONFIG_NOT_COHERENT_CACHE)
 		else if (status & INT_VSYNC) {
+#if defined(CONFIG_NOT_COHERENT_CACHE)
 			unsigned int i;
 			for (i = 0; i < coherence_data_size;
 				i += d_cache_line_size)
 				__asm__ __volatile__ (
 					"dcbz 0, %[input]"
 				::[input]"r"(&coherence_data[i]));
-		}
 #endif
+			mfbi = (struct mfb_info *)
+			((diu_data->fsl_diu_info[0])->par);
+			mfbi->vsync.count++;
+			do_pending_buffer_flips();
+			wake_up_interruptible(&mfbi->vsync.wait);
+		}
 		return IRQ_HANDLED;
 	}
 	return IRQ_NONE;
@@ -1319,7 +1730,58 @@ static void free_irq_local(int irq)
 	free_irq(irq, NULL);
 }
 
+int fsl_diu_register_client(struct notifier_block *nb)
+{
+	unsigned long flags;
+	int ret;
+	struct diu *hw = dr.diu_reg;
+
+	ret = atomic_notifier_chain_register(&fsl_diu_notifier_list, nb);
+	spin_lock_irqsave(&fsl_diu_notifier_list.lock, flags);
+	/* Enable interrupt in case client has registered */
+	if (fsl_diu_notifier_list.head != NULL) {
+		unsigned long status;
+		unsigned long ints = INT_PARERR;
+
+#if !defined(CONFIG_NOT_COHERENT_CACHE)
+		ints |= INT_VSYNC;
+#endif
+		if (dr.mode == MFB_MODE2 || dr.mode == MFB_MODE3)
+			ints |= INT_VSYNC_WB;
+
+		/* Read to clear the status */
+		status = in_be32(&(hw->int_status));
+
+		/* Enable EOF, parameter error, and optional
+		 * write back interrupt
+		 */
+		out_be32(&(hw->int_mask), ints);
+	}
+	spin_unlock_irqrestore(&fsl_diu_notifier_list.lock, flags);
+
+	return ret;
+}
+EXPORT_SYMBOL(fsl_diu_register_client);
+
+int fsl_diu_unregister_client(struct notifier_block *nb)
+{
+	unsigned long flags;
+	int ret;
+	struct diu *hw = dr.diu_reg;
+
+	ret = atomic_notifier_chain_unregister(&fsl_diu_notifier_list, nb);
+	spin_lock_irqsave(&fsl_diu_notifier_list.lock, flags);
+	/* Mask interrupt in case no client registered */
+	if (fsl_diu_notifier_list.head == NULL)
+		out_be32(&(hw->int_mask), 0x1f);
+	spin_unlock_irqrestore(&fsl_diu_notifier_list.lock, flags);
+
+	return ret;
+}
+EXPORT_SYMBOL(fsl_diu_unregister_client);
+
 #ifdef CONFIG_PM
+struct diu reg;
 /*
  * Power management hooks. Note that we won't be called from IRQ context,
  * unlike the blank functions above, so we may sleep.
@@ -1327,6 +1789,9 @@ static void free_irq_local(int irq)
 static int fsl_diu_suspend(struct of_device *ofdev, pm_message_t state)
 {
 	struct fsl_diu_data *machine_data;
+	struct diu *hw = dr.diu_reg;
+
+	memcpy(&reg, hw, sizeof(struct diu));
 
 	machine_data = dev_get_drvdata(&ofdev->dev);
 	disable_lcdc(machine_data->fsl_diu_info[0]);
@@ -1337,6 +1802,9 @@ static int fsl_diu_suspend(struct of_device *ofdev, pm_message_t state)
 static int fsl_diu_resume(struct of_device *ofdev)
 {
 	struct fsl_diu_data *machine_data;
+	struct diu *hw = dr.diu_reg;
+
+	memcpy(hw, &reg, sizeof(struct diu));
 
 	machine_data = dev_get_drvdata(&ofdev->dev);
 	enable_lcdc(machine_data->fsl_diu_info[0]);
@@ -1396,6 +1864,7 @@ static ssize_t store_monitor(struct device *device,
 
 	old_monitor_port = machine_data->monitor_port;
 	machine_data->monitor_port = diu_ops.set_sysfs_monitor_port(val);
+	monitor_port = machine_data->monitor_port;
 
 	if (old_monitor_port != machine_data->monitor_port) {
 		/* All AOIs need adjust pixel format
@@ -1487,8 +1956,14 @@ static int __devinit fsl_diu_probe(struct of_device *ofdev,
 	}
 
 	/* For performance, cursor bitmap buffer aligns to 32-byte boundary */
-	if (allocate_buf(&ofdev->dev, &pool.cursor, MAX_CURS * MAX_CURS * 2,
+	if (allocate_buf(&ofdev->dev, &pool.cursor, MAX_CURS * MAX_CURS * 4,
 			 32)) {
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	/* Get memory for pallete table */
+	if (allocate_buf(&ofdev->dev, &pool.pallete, 256 * 4, 32)) {
 		ret = -ENOMEM;
 		goto error;
 	}
@@ -1504,7 +1979,7 @@ static int __devinit fsl_diu_probe(struct of_device *ofdev,
 		goto error;
 	}
 	machine_data->dummy_ad->addr = cpu_to_le32(dummy_ad_addr);
-	machine_data->dummy_ad->pix_fmt = 0x88882317;
+	machine_data->dummy_ad->pix_fmt = 0x88883316;
 	machine_data->dummy_ad->src_size_g_alpha = cpu_to_le32((4 << 12) | 4);
 	machine_data->dummy_ad->aoi_size = cpu_to_le32((4 << 16) |  2);
 	machine_data->dummy_ad->offset_xyi = 0;
@@ -1537,6 +2012,10 @@ static int __devinit fsl_diu_probe(struct of_device *ofdev,
 	}
 
 	sysfs_attr_init(&machine_data->dev_attr.attr);
+
+	mfbi = (struct mfb_info *)machine_data->fsl_diu_info[0]->par;
+	init_waitqueue_head(&mfbi->vsync.wait);
+
 	machine_data->dev_attr.attr.name = "monitor";
 	machine_data->dev_attr.attr.mode = S_IRUGO|S_IWUSR;
 	machine_data->dev_attr.show = show_monitor;
@@ -1550,6 +2029,7 @@ static int __devinit fsl_diu_probe(struct of_device *ofdev,
 	}
 
 	dev_set_drvdata(&ofdev->dev, machine_data);
+	diu_data = machine_data;
 	return 0;
 
 error:
@@ -1622,6 +2102,9 @@ static int __init fsl_diu_setup(char *options)
 		if (!strncmp(opt, "monitor=", 8)) {
 			if (!strict_strtoul(opt + 8, 10, &val) && (val <= 2))
 				monitor_port = val;
+		} else if (!strncmp(opt, "hwcursor=", 9)) {
+			if (!strict_strtoul(opt + 9, 10, &val))
+				hwcursor = val;
 		} else if (!strncmp(opt, "bpp=", 4)) {
 			if (!strict_strtoul(opt + 4, 10, &val))
 				default_bpp = val;
@@ -1743,4 +2226,6 @@ MODULE_PARM_DESC(bpp, "Specify bit-per-pixel if not specified mode");
 module_param_named(monitor, monitor_port, int, 0);
 MODULE_PARM_DESC(monitor,
 	"Specify the monitor port (0, 1 or 2) if supported by the platform");
-
+module_param(hwcursor, int, 0644);
+MODULE_PARM_DESC(hwcursor, "Enable hardware cursor "
+			"(1=enable, 0=disable, default=1)");

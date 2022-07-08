@@ -217,6 +217,16 @@ void note_interrupt(unsigned int irq, struct irq_desc *desc,
 		    irqreturn_t action_ret)
 {
 	if (unlikely(action_ret != IRQ_HANDLED)) {
+#ifdef CONFIG_SONOS_FILLMORE
+		static int not_handled = 0;
+		/* This checks for a timer interrupt (irq == ATH_CPU_IRQ_TIMER == 7)
+		 * that is not handled.  This is unexpected and it is not certain
+		 * that it will occur */
+		if (irq == 7 && !not_handled) {
+			printk(KERN_ERR "SONOS unhandled timer IRQ #%d\n", irq);
+			not_handled++;
+		}
+#endif	// CONFIG_SONOS_FILLMORE
 		/*
 		 * If we are seeing only the odd spurious IRQ caused by
 		 * bus asynchronicity then don't eventually trigger an error,

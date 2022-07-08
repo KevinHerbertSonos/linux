@@ -715,6 +715,9 @@ static void neigh_periodic_work(struct work_struct *work)
 				neigh_rand_reach_time(p->base_reachable_time);
 	}
 
+	if (atomic_read(&tbl->entries) < tbl->gc_thresh1)
+		goto out;
+
 	for (i = 0 ; i <= tbl->hash_mask; i++) {
 		np = &tbl->hash_buckets[i];
 
@@ -754,6 +757,7 @@ next_elt:
 		cond_resched();
 		write_lock_bh(&tbl->lock);
 	}
+out:
 	/* Cycle through all hash buckets every base_reachable_time/2 ticks.
 	 * ARP entry timeouts range from 1/2 base_reachable_time to 3/2
 	 * base_reachable_time.

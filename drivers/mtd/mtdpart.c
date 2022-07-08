@@ -148,6 +148,16 @@ static int part_get_fact_prot_info(struct mtd_info *mtd, struct otp_info *buf,
 	return part->master->get_fact_prot_info(part->master, buf, len);
 }
 
+#ifdef CONFIG_MTD_NAND_SONOS_VNB_MAPPING
+static int part_set_last_block(struct mtd_info *mtd, loff_t ofs)
+{
+	struct mtd_part *part = PART(mtd);
+	if (ofs >= mtd->size)
+		return -EROFS;
+	return part->master->set_last_block(part->master, ofs + part->offset);
+}
+#endif
+
 static int part_write(struct mtd_info *mtd, loff_t to, size_t len,
 		size_t *retlen, const u_char *buf)
 {
@@ -406,6 +416,13 @@ static struct mtd_part *add_one_partition(struct mtd_info *master,
 		slave->mtd.block_isbad = part_block_isbad;
 	if (master->block_markbad)
 		slave->mtd.block_markbad = part_block_markbad;
+	if (master->read_special)
+		slave->mtd.read_special = master->read_special;
+	slave->mtd.devid = master->devid;
+#ifdef CONFIG_MTD_NAND_SONOS_VNB_MAPPING
+	if (master->set_last_block)
+		slave->mtd.set_last_block = part_set_last_block;
+#endif
 	slave->mtd.erase = part_erase;
 	slave->master = master;
 	slave->offset = part->offset;
@@ -577,7 +594,7 @@ int parse_mtd_partitions(struct mtd_info *master, const char **types,
 {
 	struct mtd_part_parser *parser;
 	int ret = 0;
-
+    printk("parse_mtd_partitions.\n");
 	for ( ; ret <= 0 && *types; types++) {
 		parser = get_partition_parser(*types);
 		if (!parser && !request_module("%s", *types))

@@ -23,6 +23,7 @@
 #define _CIFSPDU_H
 
 #include <net/sock.h>
+#include <asm/unaligned.h>
 #include "smbfsctl.h"
 
 #ifdef CONFIG_CIFS_WEAK_PW_HASH
@@ -131,9 +132,20 @@
 #define CIFS_CRYPTO_KEY_SIZE (8)
 
 /*
+ * Size of the ntlm client response
+ */
+#define CIFS_AUTH_RESP_SIZE (24)
+
+/*
  * Size of the session key (crypto key encrypted with the password
  */
-#define CIFS_SESS_KEY_SIZE (24)
+#define CIFS_SESS_KEY_SIZE (16)
+
+#define CIFS_CLIENT_CHALLENGE_SIZE (8)
+#define CIFS_SERVER_CHALLENGE_SIZE (8)
+#define CIFS_HMAC_MD5_HASH_SIZE (16)
+#define CIFS_CPHTXT_SIZE (16)
+#define CIFS_NTHASH_SIZE (16)
 
 /*
  * Maximum user name length
@@ -411,14 +423,34 @@ struct smb_hdr {
 	__u16 Tid;
 	__le16 Pid;
 	__u16 Uid;
-	__u16 Mid;
+	__le16 Mid;
 	__u8 WordCount;
 } __attribute__((packed));
-/* given a pointer to an smb_hdr retrieve the value of byte count */
-#define BCC(smb_var) (*(__u16 *)((char *)(smb_var) + sizeof(struct smb_hdr) + (2 * (smb_var)->WordCount)))
-#define BCC_LE(smb_var) (*(__le16 *)((char *)(smb_var) + sizeof(struct smb_hdr) + (2 * (smb_var)->WordCount)))
+
+/* given a pointer to an smb_hdr retrieve a char pointer to the byte count */
+#define BCC(smb_var) ((unsigned char *)(smb_var) + sizeof(struct smb_hdr) + \
+			 (2 * (smb_var)->WordCount))
+
 /* given a pointer to an smb_hdr retrieve the pointer to the byte area */
-#define pByteArea(smb_var) ((unsigned char *)(smb_var) + sizeof(struct smb_hdr) + (2 * (smb_var)->WordCount) + 2)
+#define pByteArea(smb_var) (BCC(smb_var) + 2)
+
+/* get the unconverted ByteCount for a SMB packet and return it */
+static inline __u16
+get_bcc(struct smb_hdr *hdr)
+{
+	__le16 *bc_ptr = (__le16 *)BCC(hdr);
+
+	return get_unaligned_le16(bc_ptr);
+}
+
+/* set the ByteCount for a SMB packet in little-endian */
+static inline void
+put_bcc(__u16 count, struct smb_hdr *hdr)
+{
+	__le16 *bc_ptr = (__le16 *)BCC(hdr);
+
+	put_unaligned_le16(count, bc_ptr);
+}
 
 /*
  * Computer Name Length (since Netbios name was length 16 with last byte 0x20)
@@ -663,7 +695,6 @@ struct ntlmv2_resp {
 	__le64  time;
 	__u64  client_chal; /* random */
 	__u32  reserved2;
-	struct ntlmssp2_name names[2];
 	/* array of name entries could follow ending in minimum 4 byte struct */
 } __attribute__((packed));
 

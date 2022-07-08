@@ -34,7 +34,11 @@ pdev_fixup_irq(struct pci_dev *dev,
 
 	pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
 	/* Cope with illegal. */
+#ifdef CONFIG_SONOS_FILLMORE
+	if (pin == 0 || pin > 4)
+#else
 	if (pin > 4)
+#endif
 		pin = 1;
 
 	if (pin != 0) {

@@ -2,6 +2,7 @@
  *  linux/drivers/mmc/host/sdhci.c - Secure Digital Host Controller Interface driver
  *
  *  Copyright (C) 2005-2008 Pierre Ossman, All Rights Reserved.
+ *  Copyright (C) 2009-2010 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -179,10 +180,22 @@ static void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios);
 
 static void sdhci_init(struct sdhci_host *host, int soft)
 {
+	u32 ctrl;
+
 	if (soft)
 		sdhci_reset(host, SDHCI_RESET_CMD|SDHCI_RESET_DATA);
 	else
 		sdhci_reset(host, SDHCI_RESET_ALL);
+
+	/* Enable cache snooping, if DMA is not broken */
+	if (!(host->quirks & SDHCI_QUIRK_BROKEN_DMA))
+		sdhci_writel(host, SDHCI_CACHE_SNOOP, SDHCI_HOST_DMA_CONTROL);
+
+	if (host->quirks & SDHCI_QUIRK_SET_AHB2MAG_IRQ_BYPASS) {
+		ctrl = sdhci_readl(host, SDHCI_HOST_DMA_CONTROL);
+		ctrl |= SDHCI_AHB2MAG_IRQ_BYPASS;
+		sdhci_writel(host, ctrl, SDHCI_HOST_DMA_CONTROL);
+	}
 
 	sdhci_clear_set_irqs(host, SDHCI_INT_ALL_MASK,
 		SDHCI_INT_BUS_POWER | SDHCI_INT_DATA_END_BIT |
@@ -817,8 +830,12 @@ static void sdhci_set_transfer_mode(struct sdhci_host *host,
 	WARN_ON(!host->data);
 
 	mode = SDHCI_TRNS_BLK_CNT_EN;
-	if (data->blocks > 1)
-		mode |= SDHCI_TRNS_MULTI;
+	if (data->blocks > 1) {
+		if (host->quirks & SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12)
+			mode |= SDHCI_TRNS_MULTI | SDHCI_TRNS_ACMD12;
+		else
+			mode |= SDHCI_TRNS_MULTI;
+	}
 	if (data->flags & MMC_DATA_READ)
 		mode |= SDHCI_TRNS_READ;
 	if (host->flags & SDHCI_REQ_USE_DMA)
@@ -939,6 +956,9 @@ static void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 		flags |= SDHCI_CMD_INDEX;
 	if (cmd->data)
 		flags |= SDHCI_CMD_DATA;
+
+	if (host->mrq->data && (cmd == host->mrq->data->stop))
+		flags = flags | SDHCI_CMD_ABORT;
 
 	sdhci_writew(host, SDHCI_MAKE_CMD(cmd->opcode, flags), SDHCI_COMMAND);
 }
@@ -1108,6 +1128,11 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 #ifndef SDHCI_USE_LEDS_CLASS
 	sdhci_activate_led(host);
 #endif
+	if (host->quirks & SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12)
+		if (mrq->stop) {
+			mrq->data->stop = NULL;
+			mrq->stop = NULL;
+		}
 
 	host->mrq = mrq;
 
@@ -1206,6 +1231,24 @@ static int sdhci_get_ro(struct mmc_host *mmc)
 	return !(present & SDHCI_WRITE_PROTECT);
 }
 
+static int sdhci_get_cd(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	unsigned long flags;
+	int present;
+
+	spin_lock_irqsave(&host->lock, flags);
+
+	if (host->flags & SDHCI_DEVICE_DEAD)
+		present = 0;
+	else
+		present = sdhci_readl(host, SDHCI_PRESENT_STATE);
+
+	spin_unlock_irqrestore(&host->lock, flags);
+
+	return (present & SDHCI_CARD_PRESENT);
+}
+
 static void sdhci_enable_sdio_irq(struct mmc_host *mmc, int enable)
 {
 	struct sdhci_host *host;
@@ -1232,6 +1275,7 @@ static const struct mmc_host_ops sdhci_ops = {
 	.request	= sdhci_request,
 	.set_ios	= sdhci_set_ios,
 	.get_ro		= sdhci_get_ro,
+	.get_cd		= sdhci_get_cd,
 	.enable_sdio_irq = sdhci_enable_sdio_irq,
 };
 

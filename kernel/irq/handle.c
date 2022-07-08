@@ -370,6 +370,13 @@ irqreturn_t handle_IRQ_event(unsigned int irq, struct irqaction *action)
 	irqreturn_t ret, retval = IRQ_NONE;
 	unsigned int status = 0;
 
+#ifdef CONFIG_SONOS_FILLMORE
+	/* Fillmore timer interrupt races setting up the struct
+         * When the setup loses just give up */
+	if (!action || !action->handler)
+		return retval;
+#endif	// CONFIG_SONOS_FILLMORE
+
 	do {
 		trace_irq_handler_entry(irq, action);
 		ret = action->handler(irq, action->dev_id);

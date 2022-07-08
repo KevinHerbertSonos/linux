@@ -24,6 +24,7 @@
 
 #define MTD_INODE_FS_MAGIC 0x11307854
 static struct vfsmount *mtd_inode_mnt __read_mostly;
+int vnb_writePhysical(struct mtd_info *pVirtualMtd, loff_t to, size_t len, u_char *buf);
 
 /*
  * Data structure to hold the pointer to the mtd device as well
@@ -826,6 +827,108 @@ static int mtd_ioctl(struct file *file, u_int cmd, u_long arg)
 		file->f_pos = 0;
 		break;
 	}
+#ifdef CONFIG_SONOS
+       case MEMREADSPECIAL:
+        {
+                struct mtd_special_info rsi;
+                void *b;
+                if (copy_from_user(&rsi, (void *)arg, sizeof(rsi)))
+                        return -EFAULT;
+                if (!mtd->read_special)
+                        return -EOPNOTSUPP;
+                b=kmalloc(rsi.datalen,GFP_KERNEL);
+                if (!b) return -ENOMEM;
+                if ((rsi.preop_cmdlen>8)||(rsi.addrlen>8)) {
+                        ret = -EFAULT;
+                        goto readscrub;
+                }
+                ret=mtd->read_special(mtd,&rsi,b);
+                if (ret) {
+                        goto readscrub;
+                }
+                ret=(access_ok(VERIFY_WRITE,(char *)rsi.databuf,rsi.datalen))?0:(-EFAULT);
+                if (ret) {
+                        goto readscrub;
+                }
+                if (copy_to_user((void *)rsi.databuf,b,rsi.datalen)) {
+                        ret=-EFAULT;
+                        goto readscrub;
+                }
+                ret=0;
+readscrub:
+                memset((void *)b,0,rsi.datalen);
+                kfree(b);
+                memset((void *)&rsi,0,sizeof(rsi));
+                return ret;
+                break;
+        }
+	case MEMGETDEVID:
+	{
+		if (copy_to_user((void *)arg,&(mtd->devid), sizeof(u_int32_t))) return -EFAULT;
+		return 0;
+	}
+#endif	// CONFIG_SONOS
+#ifdef CONFIG_MTD_NAND_SONOS_VNB_MAPPING
+	case MTDSETLASTBLOCK:
+	{
+		ret = mtd->set_last_block(mtd, file->f_pos);
+		break;
+	}
+    case MTDWRITEPHYSICAL:
+    {
+		struct mtd_write_physical wrphys;
+		void __user *datap = (void __user *)arg;
+		char *kbuf;
+		int count, error=0, pass=0;
+		u32 cplen;
+
+		/* assume a block can be allocated */
+		if (mtd->erasesize > MAX_KMALLOC_SIZE) {
+			printk("%s: erasesize (0x%08x) larger than max kmalloc (0x%08x)\n", __func__,
+				   mtd->erasesize, MAX_KMALLOC_SIZE);
+			return -EFAULT;
+		}
+ 
+		if (copy_from_user(&wrphys, argp, sizeof(wrphys))) {
+			printk("copy_from_user error: struct\n");
+			return -EFAULT;
+		}
+		
+		kbuf = kmalloc(mtd->erasesize, GFP_KERNEL);
+		if (kbuf == NULL) {
+			printk("MTD write physical alloc error\n");
+			return -ENOMEM;
+		}
+       
+		datap = (void __user *)(wrphys.dataptr);
+		count = 0;
+		while (count < wrphys.length) {
+			memset(kbuf, 0xff, mtd->erasesize);
+			if ((wrphys.length - count) > mtd->erasesize) {
+				cplen = mtd->erasesize;
+			}
+			else {
+				cplen = wrphys.length - count;
+			}
+			if (copy_from_user(kbuf, datap, cplen)) {
+				printk("copy_from_user error: count %x, len %x\n", count, wrphys.length);
+				ret = -1;
+				break;
+			}
+			error = vnb_writePhysical(mtd, wrphys.start+count, mtd->erasesize, kbuf);
+			if (error) {
+				ret = error;
+				break;
+			}
+          
+			pass++;
+			count += cplen;
+			datap += cplen;
+		}
+		kfree(kbuf);
+		break;
+    }
+#endif
 
 	default:
 		ret = -ENOTTY;

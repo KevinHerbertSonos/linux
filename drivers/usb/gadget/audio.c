@@ -34,7 +34,11 @@
 #include "epautoconf.c"
 
 #include "u_audio.c"
+#ifdef CONFIG_MACH_QCA955x
+#include "f_audio_basic.c"
+#else
 #include "f_audio.c"
+#endif
 
 /*-------------------------------------------------------------------------*/
 
@@ -63,8 +67,13 @@ static struct usb_device_descriptor device_desc = {
 	 * we support.  (As does bNumConfigurations.)  These values can
 	 * also be overridden by module parameters.
 	 */
+#ifdef CONFIG_MACH_QCA955x
+	.idVendor =		__constant_cpu_to_le16(0),
+	.idProduct =		__constant_cpu_to_le16(0),
+#else
 	.idVendor =		__constant_cpu_to_le16(AUDIO_VENDOR_NUM),
 	.idProduct =		__constant_cpu_to_le16(AUDIO_PRODUCT_NUM),
+#endif
 	/* .bcdDevice = f(hardware) */
 	/* .iManufacturer = DYNAMIC */
 	/* .iProduct = DYNAMIC */

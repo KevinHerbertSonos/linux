@@ -83,7 +83,6 @@ extern struct cifsFileInfo *find_writable_file(struct cifsInodeInfo *);
 extern struct cifsFileInfo *find_readable_file(struct cifsInodeInfo *);
 #endif
 extern unsigned int smbCalcSize(struct smb_hdr *ptr);
-extern unsigned int smbCalcSize_LE(struct smb_hdr *ptr);
 extern int decode_negTokenInit(unsigned char *security_blob, int length,
 			struct TCP_Server_Info *server);
 extern int cifs_convert_address(char *src, void *dst);
@@ -359,15 +358,16 @@ extern int cifs_sign_smb(struct smb_hdr *, struct TCP_Server_Info *, __u32 *);
 extern int cifs_sign_smb2(struct kvec *iov, int n_vec, struct TCP_Server_Info *,
 			  __u32 *);
 extern int cifs_verify_signature(struct smb_hdr *,
-				 const struct mac_key *mac_key,
+				 struct TCP_Server_Info *server,
 				__u32 expected_sequence_number);
-extern int cifs_calculate_mac_key(struct mac_key *key, const char *rn,
-				 const char *pass);
-extern int CalcNTLMv2_partial_mac_key(struct cifsSesInfo *,
+extern int SMBNTencrypt(unsigned char *, unsigned char *, unsigned char *,
 			const struct nls_table *);
-extern void CalcNTLMv2_response(const struct cifsSesInfo *, char *);
-extern void setup_ntlmv2_rsp(struct cifsSesInfo *, char *,
-			     const struct nls_table *);
+extern int setup_ntlm_response(struct cifsSesInfo *, const struct nls_table *);
+extern int setup_ntlmv2_rsp(struct cifsSesInfo *, const struct nls_table *);
+extern int cifs_crypto_shash_allocate(struct TCP_Server_Info *);
+extern void cifs_crypto_shash_release(struct TCP_Server_Info *);
+extern int calc_seckey(struct cifsSesInfo *);
+
 #ifdef CONFIG_CIFS_WEAK_PW_HASH
 extern void calc_lanman_hash(const char *password, const char *cryptkey,
 				bool encrypt, char *lnm_session_key);
@@ -407,4 +407,12 @@ extern int CIFSSMBSetPosixACL(const int xid, struct cifsTconInfo *tcon,
 extern int CIFSGetExtAttr(const int xid, struct cifsTconInfo *tcon,
 			const int netfid, __u64 *pExtAttrBits, __u64 *pMask);
 extern void cifs_autodisable_serverino(struct cifs_sb_info *cifs_sb);
+extern int mdfour(unsigned char *, unsigned char *, int);
+extern int E_md4hash(const unsigned char *passwd, unsigned char *p16,
+			const struct nls_table *codepage);
+extern void SMBencrypt(unsigned char *passwd, const unsigned char *c8,
+			unsigned char *p24);
+extern void E_P16(unsigned char *p14, unsigned char *p16);
+extern void E_P24(unsigned char *p21, const unsigned char *c8,
+			unsigned char *p24);
 #endif			/* _CIFSPROTO_H */

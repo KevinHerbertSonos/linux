@@ -398,4 +398,11 @@ config ATM_SOLOS
 	help
 	  Support for the Solos multiport ADSL2+ card.
 
+config ATM_UCC
+	bool "Freescale QUICC ENGINE UCC ATM driver"
+	depends on QUICC_ENGINE
+	select UCC_FAST
+	select UPC
+	default y
+
 endif # ATM

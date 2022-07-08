@@ -4,7 +4,7 @@
  * Author Xianghua Xiao (x.xiao@freescale.com)
  * Roy Zang <tie-fei.zang@freescale.com>
  * 	- Add PCI/PCI Exprees support
- * Copyright 2007 Freescale Semiconductor Inc.
+ * Copyright 2007-2010 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -79,7 +79,8 @@ void __init mpc85xx_ds_pic_init(void)
 		return;
 	}
 
-	if (of_flat_dt_is_compatible(root, "fsl,MPC8572DS-CAMP")) {
+	if (of_flat_dt_is_compatible(root, "fsl,MPC8572DS-CAMP") ||
+		of_flat_dt_is_compatible(root, "fsl,P2020DS-CAMP")) {
 		mpic = mpic_alloc(np, r.start,
 			MPIC_PRIMARY |
 			MPIC_BIG_ENDIAN | MPIC_BROKEN_FRR_NIRQS,
@@ -147,6 +148,54 @@ static int mpc85xx_exclude_device(struct pci_controller *hose,
 }
 #endif	/* CONFIG_PCI */
 
+#ifdef CONFIG_PCI
+/*Host/agent status can be read from porbmsr in the global utilities*/
+static int get_mpc85xx_ds_host_agent(void)
+{
+	struct device_node *np;
+	void __iomem *gur_regs;
+	u32 host_agent = 7;
+
+	np = of_find_compatible_node(NULL, NULL, "fsl,mpc8548-guts");
+	if (np == NULL) {
+		printk(KERN_ERR "Could not find global-utilities node\n");
+		return host_agent;
+	}
+
+	gur_regs = of_iomap(np, 0);
+	of_node_put(np);
+	if (!gur_regs) {
+		printk(KERN_ERR "Failed to map global-utilities register space\n");
+		return host_agent;
+	}
+	host_agent = (in_be32(gur_regs + 4) & 0x00070000) >> 16 ;
+
+	iounmap(gur_regs);
+
+	return host_agent;
+}
+
+/*
+ * To judge if the PCI(e) controller is host/agent mode through
+ * the PORBMSR register.
+ *     0: agent mode
+ *     1: host mode
+ */
+static bool mpc85xx_ds_pci_is_host(u32 host_agent, resource_size_t res)
+{
+	switch (res & 0xfffff) {
+	case 0xa000:    /* PCIe1 */
+		return host_agent & 0x2;
+		break;
+	case 0x9000:    /* PCIe2 */
+		return host_agent & 0x1;
+		break;
+	default:
+		return true;
+	}
+}
+#endif
+
 /*
  * Setup the architecture
  */
@@ -158,6 +207,7 @@ static void __init mpc85xx_ds_setup_arch(void)
 #ifdef CONFIG_PCI
 	struct device_node *np;
 	struct pci_controller *hose;
+	u32 host_agent;
 #endif
 	dma_addr_t max = 0xffffffff;
 
@@ -165,12 +215,15 @@ static void __init mpc85xx_ds_setup_arch(void)
 		ppc_md.progress("mpc85xx_ds_setup_arch()", 0);
 
 #ifdef CONFIG_PCI
+	host_agent = get_mpc85xx_ds_host_agent();
 	for_each_node_by_type(np, "pci") {
 		if (of_device_is_compatible(np, "fsl,mpc8540-pci") ||
 		    of_device_is_compatible(np, "fsl,mpc8548-pcie") ||
 		    of_device_is_compatible(np, "fsl,p2020-pcie")) {
 			struct resource rsrc;
 			of_address_to_resource(np, 0, &rsrc);
+			if (!mpc85xx_ds_pci_is_host(host_agent, rsrc.start))
+				continue;
 			if ((rsrc.start & 0xfffff) == primary_phb_addr)
 				fsl_add_bridge(np, 1);
 			else
@@ -200,6 +253,32 @@ static void __init mpc85xx_ds_setup_arch(void)
 	printk("MPC85xx DS board from Freescale Semiconductor\n");
 }
 
+#ifdef CONFIG_P2020DS_EVENT_IRQ
+static irqreturn_t event_isr(int irq, void *dev_id)
+{
+
+	printk(KERN_INFO "MPC85xxDS: Event button been pushed.\n");
+	return IRQ_HANDLED;
+}
+
+static int __init p2020ds_ngpixis_init(void)
+{
+	int event_irq, ret;
+	struct device_node *np;
+
+	np = of_find_compatible_node(NULL, NULL, "fsl,p2020ds-fpga");
+	if (np) {
+		event_irq = irq_of_parse_and_map(np, 0);
+		ret = request_irq(event_irq, event_isr, 0, "event", NULL);
+		if (ret)
+			printk(KERN_ERR "Can't request board event int\n");
+		of_node_put(np);
+	}
+	return 0;
+}
+machine_device_initcall(p2020_ds, p2020ds_ngpixis_init);
+#endif
+
 /*
  * Called very early, device-tree isn't unflattened
  */
@@ -222,6 +301,8 @@ static struct of_device_id __initdata mpc85xxds_ids[] = {
 	{ .compatible = "soc", },
 	{ .compatible = "simple-bus", },
 	{ .compatible = "gianfar", },
+	{ .compatible = "fsl,mpc8572-guts", },
+	{ .compatible = "fsl,rapidio-delta", },
 	{},
 };
 

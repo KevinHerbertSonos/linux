@@ -20,6 +20,8 @@
  *		Andi Kleen	:	slabified it.
  *		Robert Olsson	:	Removed skb_head_pool
  *
+ *	Copyright 2009-2010 Freescale Semiconductor, Inc.
+ *
  *	NOTE:
  *		The __skb_ routines should be called with interrupts
  *	disabled, or you better be *real* sure that the operation is atomic
@@ -69,6 +71,10 @@
 #include <trace/events/skb.h>
 
 #include "kmap_skb.h"
+
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+extern int gfar_recycle_skb(struct sk_buff *skb);
+#endif
 
 static struct kmem_cache *skbuff_head_cache __read_mostly;
 static struct kmem_cache *skbuff_fclone_cache __read_mostly;
@@ -425,6 +431,10 @@ static void skb_release_all(struct sk_buff *skb)
 
 void __kfree_skb(struct sk_buff *skb)
 {
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	if (gfar_recycle_skb(skb))
+		return;
+#endif
 	skb_release_all(skb);
 	kfree_skbmem(skb);
 }
@@ -537,6 +547,9 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 	new->ipvs_property	= old->ipvs_property;
 #endif
 	new->protocol		= old->protocol;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	new->skb_owner		= NULL;
+#endif
 	new->mark		= old->mark;
 	new->skb_iif		= old->skb_iif;
 	__nf_copy(new, old);
@@ -574,6 +587,10 @@ static struct sk_buff *__skb_clone(struct sk_buff *n, struct sk_buff *skb)
 	n->cloned = 1;
 	n->nohdr = 0;
 	n->destructor = NULL;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	n->skb_owner = NULL;
+	skb->skb_owner = NULL;
+#endif
 	C(tail);
 	C(end);
 	C(head);

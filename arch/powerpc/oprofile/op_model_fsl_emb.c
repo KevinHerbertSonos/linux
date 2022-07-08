@@ -115,24 +115,34 @@ static void init_pmc_stop(int ctr)
 {
 	u32 pmlca = (PMLCA_FC | PMLCA_FCS | PMLCA_FCU |
 			PMLCA_FCM1 | PMLCA_FCM0);
+#ifdef CONFIG_E500
 	u32 pmlcb = 0;
+#endif
 
 	switch (ctr) {
 		case 0:
 			mtpmr(PMRN_PMLCA0, pmlca);
+#ifdef CONFIG_E500
 			mtpmr(PMRN_PMLCB0, pmlcb);
+#endif
 			break;
 		case 1:
 			mtpmr(PMRN_PMLCA1, pmlca);
+#ifdef CONFIG_E500
 			mtpmr(PMRN_PMLCB1, pmlcb);
+#endif
 			break;
 		case 2:
 			mtpmr(PMRN_PMLCA2, pmlca);
+#ifdef CONFIG_E500
 			mtpmr(PMRN_PMLCB2, pmlcb);
+#endif
 			break;
 		case 3:
 			mtpmr(PMRN_PMLCA3, pmlca);
+#ifdef CONFIG_E500
 			mtpmr(PMRN_PMLCB3, pmlcb);
+#endif
 			break;
 		default:
 			panic("Bad ctr number!\n");

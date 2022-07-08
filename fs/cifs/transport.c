@@ -543,7 +543,7 @@ SendReceive2(const unsigned int xid, struct cifsSesInfo *ses,
 		    (ses->server->secMode & (SECMODE_SIGN_REQUIRED |
 					     SECMODE_SIGN_ENABLED))) {
 			rc = cifs_verify_signature(midQ->resp_buf,
-						&ses->server->mac_signing_key,
+						ses->server,
 						midQ->sequence_number+1);
 			if (rc) {
 				cERROR(1, "Unexpected SMB signature");
@@ -555,12 +555,6 @@ SendReceive2(const unsigned int xid, struct cifsSesInfo *ses,
 		rc = map_smb_to_linux_error(midQ->resp_buf,
 					    flags & CIFS_LOG_ERROR);
 
-		/* convert ByteCount if necessary */
-		if (receive_len >= sizeof(struct smb_hdr) - 4
-		    /* do not count RFC1001 header */  +
-		    (2 * midQ->resp_buf->WordCount) + 2 /* bcc */ )
-			BCC(midQ->resp_buf) =
-				le16_to_cpu(BCC_LE(midQ->resp_buf));
 		if ((flags & CIFS_NO_RESP) == 0)
 			midQ->resp_buf = NULL;  /* mark it so buf will
 						   not be freed by
@@ -731,7 +725,7 @@ SendReceive(const unsigned int xid, struct cifsSesInfo *ses,
 		    (ses->server->secMode & (SECMODE_SIGN_REQUIRED |
 					     SECMODE_SIGN_ENABLED))) {
 			rc = cifs_verify_signature(out_buf,
-						&ses->server->mac_signing_key,
+						ses->server,
 						midQ->sequence_number+1);
 			if (rc) {
 				cERROR(1, "Unexpected SMB signature");
@@ -743,12 +737,6 @@ SendReceive(const unsigned int xid, struct cifsSesInfo *ses,
 
 		/* BB special case reconnect tid and uid here? */
 		rc = map_smb_to_linux_error(out_buf, 0 /* no log */ );
-
-		/* convert ByteCount if necessary */
-		if (receive_len >= sizeof(struct smb_hdr) - 4
-		    /* do not count RFC1001 header */  +
-		    (2 * out_buf->WordCount) + 2 /* bcc */ )
-			BCC(out_buf) = le16_to_cpu(BCC_LE(out_buf));
 	} else {
 		rc = -EIO;
 		cERROR(1, "Bad MID state?");
@@ -981,7 +969,7 @@ SendReceiveBlockingLock(const unsigned int xid, struct cifsTconInfo *tcon,
 	    (ses->server->secMode & (SECMODE_SIGN_REQUIRED |
 				     SECMODE_SIGN_ENABLED))) {
 		rc = cifs_verify_signature(out_buf,
-					   &ses->server->mac_signing_key,
+					   ses->server,
 					   midQ->sequence_number+1);
 		if (rc) {
 			cERROR(1, "Unexpected SMB signature");
@@ -993,12 +981,6 @@ SendReceiveBlockingLock(const unsigned int xid, struct cifsTconInfo *tcon,
 
 	/* BB special case reconnect tid and uid here? */
 	rc = map_smb_to_linux_error(out_buf, 0 /* no log */ );
-
-	/* convert ByteCount if necessary */
-	if (receive_len >= sizeof(struct smb_hdr) - 4
-	    /* do not count RFC1001 header */  +
-	    (2 * out_buf->WordCount) + 2 /* bcc */ )
-		BCC(out_buf) = le16_to_cpu(BCC_LE(out_buf));
 
 out:
 	DeleteMidQEntry(midQ);

@@ -30,6 +30,8 @@
  *     This is a compressed table of upper and lower case conversion.
  *
  */
+#ifndef _CIFS_UNICODE_H
+#define _CIFS_UNICODE_H
 
 #include <asm/byteorder.h>
 #include <linux/types.h>
@@ -318,14 +320,14 @@ UniToupper(register wchar_t uc)
 /*
  * UniStrupr:  Upper case a unicode string
  */
-static inline wchar_t *
-UniStrupr(register wchar_t *upin)
+static inline __le16 *
+UniStrupr(register __le16 *upin)
 {
-	register wchar_t *up;
+	register __le16 *up;
 
 	up = upin;
 	while (*up) {		/* For all characters */
-		*up = UniToupper(*up);
+		*up = cpu_to_le16(UniToupper(le16_to_cpu(*up)));
 		up++;
 	}
 	return upin;		/* Return input pointer */
@@ -374,3 +376,5 @@ UniStrlwr(register wchar_t *upin)
 }
 
 #endif
+
+#endif /* _CIFS_UNICODE_H */

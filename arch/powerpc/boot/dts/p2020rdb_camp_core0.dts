@@ -6,7 +6,7 @@
  * This dts file allows core0 to have memory, l2, i2c, spi, gpio, dma1, usb,
  * eth1, eth2, sdhc, crypto, global-util, pci0.
  *
- * Copyright 2009 Freescale Semiconductor Inc.
+ * Copyright 2009-2010 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -41,6 +41,12 @@
 
 	memory {
 		device_type = "memory";
+	};
+
+	l2sram@fff00000 {
+		device_type = "memory";
+		compatible = "fsl,l2sram";
+		reg = <0x0 0xfff00000 0 0x10000>;
 	};
 
 	soc@ffe00000 {
@@ -113,6 +119,7 @@
 			reg = <0x7000 0x1000>;
 			interrupts = <59 0x2>;
 			interrupt-parent = <&mpic>;
+			espi,num-ss-bits = <4>;
 			mode = "cpu";
 
 			fsl_m25p80@0 {
@@ -121,9 +128,7 @@
 				compatible = "fsl,espi-flash";
 				reg = <0>;
 				linux,modalias = "fsl_m25p80";
-				modal = "s25sl128b";
-				spi-max-frequency = <50000000>;
-				mode = <0>;
+				spi-max-frequency = <40000000>;
 
 				partition@0 {
 					/* 512KB for u-boot Bootloader Image */
@@ -295,6 +300,7 @@
 			reg = <0x2e000 0x1000>;
 			interrupts = <72 0x2>;
 			interrupt-parent = <&mpic>;
+			fsl,sdhci-adjust-timeout;
 			/* Filled in by U-Boot */
 			clock-frequency = <0>;
 		};
@@ -309,6 +315,8 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0xbfe>;
 			fsl,descriptor-types-mask = <0x3ab0ebf>;
+			fsl,multi-host-mode = "secondary";
+			fsl,channel-remap = <0x3>;
 		};
 
 		mpic: pic@40000 {
@@ -320,7 +328,7 @@
 			device_type = "open-pic";
 			protected-sources = <
 			42 76 77 78 79 /* serial1 , dma2 */
-			29 30 34 26 /* enet0, pci1 */
+			29 30 34 26 45/* enet0, pci1 */
 			0xe0 0xe1 0xe2 0xe3 /* msi */
 			0xe4 0xe5 0xe6 0xe7
 			>;
@@ -334,6 +342,7 @@
 	};
 
 	pci0: pcie@ffe09000 {
+		cell-index = <1>;
 		compatible = "fsl,mpc8548-pcie";
 		device_type = "pci";
 		#interrupt-cells = <1>;
@@ -346,6 +355,14 @@
 		clock-frequency = <33333333>;
 		interrupt-parent = <&mpic>;
 		interrupts = <25 2>;
+		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
+		interrupt-map = <
+			/* IDSEL 0x0 */
+			0000 0x0 0x0 0x1 &mpic 0x4 0x1
+			0000 0x0 0x0 0x2 &mpic 0x5 0x1
+			0000 0x0 0x0 0x3 &mpic 0x6 0x1
+			0000 0x0 0x0 0x4 &mpic 0x7 0x1
+			>;
 		pcie@0 {
 			reg = <0x0 0x0 0x0 0x0 0x0>;
 			#size-cells = <2>;

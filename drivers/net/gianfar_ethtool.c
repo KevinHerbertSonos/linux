@@ -9,7 +9,7 @@
  *  Maintainer: Kumar Gala
  *  Modifier: Sandeep Gopalpet <sandeep.kumar@freescale.com>
  *
- *  Copyright 2003-2006, 2008-2009 Freescale Semiconductor, Inc.
+ *  Copyright 2003-2006, 2008-2010 Freescale Semiconductor, Inc.
  *
  *  This software may be used and distributed according to
  *  the terms of the GNU Public License, Version 2, incorporated herein
@@ -37,6 +37,7 @@
 #include <linux/ethtool.h>
 #include <linux/mii.h>
 #include <linux/phy.h>
+#include <asm/of_device.h>
 
 #include "gianfar.h"
 
@@ -56,6 +57,13 @@ static void gfar_gdrvinfo(struct net_device *dev, struct ethtool_drvinfo *drvinf
 
 static char stat_gstrings[][ETH_GSTRING_LEN] = {
 	"rx-dropped-by-kernel",
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	"skb-recycled-frames-new",
+	"skb-recycled-frames-free",
+#endif
+#ifdef CONFIG_NET_GIANFAR_FP
+	"rx-fast-path",
+#endif
 	"rx-large-frame-errors",
 	"rx-short-frame-errors",
 	"rx-non-octet-errors",
@@ -420,7 +428,8 @@ static int gfar_scoalesce(struct net_device *dev, struct ethtool_coalesce *cvals
 			gfar_usecs2ticks(priv, cvals->tx_coalesce_usecs));
 	}
 
-	gfar_configure_coalescing(priv, 0xFF, 0xFF);
+	gfar_configure_tx_coalescing(priv, 0xFF);
+	gfar_configure_rx_coalescing(priv, 0xFF);
 
 	return 0;
 }
@@ -437,9 +446,9 @@ static void gfar_gringparam(struct net_device *dev, struct ethtool_ringparam *rv
 	tx_queue = priv->tx_queue[0];
 	rx_queue = priv->rx_queue[0];
 
-	rvals->rx_max_pending = GFAR_RX_MAX_RING_SIZE;
-	rvals->rx_mini_max_pending = GFAR_RX_MAX_RING_SIZE;
-	rvals->rx_jumbo_max_pending = GFAR_RX_MAX_RING_SIZE;
+	rvals->rx_max_pending = 0;
+	rvals->rx_mini_max_pending = 0;
+	rvals->rx_jumbo_max_pending = 0;
 	rvals->tx_max_pending = GFAR_TX_MAX_RING_SIZE;
 
 	/* Values changeable by the user.  The valid values are
@@ -458,9 +467,11 @@ static void gfar_gringparam(struct net_device *dev, struct ethtool_ringparam *rv
 static int gfar_sringparam(struct net_device *dev, struct ethtool_ringparam *rvals)
 {
 	struct gfar_private *priv = netdev_priv(dev);
+	unsigned int old_tx_ringparam[MAX_TX_QS];
+	unsigned int old_rx_ringparam[MAX_RX_QS];
 	int err = 0, i = 0;
 
-	if (rvals->rx_pending > GFAR_RX_MAX_RING_SIZE)
+	if (rvals->rx_pending < GFAR_MIN_RING_SIZE)
 		return -EINVAL;
 
 	if (!is_power_of_2(rvals->rx_pending)) {
@@ -469,6 +480,8 @@ static int gfar_sringparam(struct net_device *dev, struct ethtool_ringparam *rva
 		return -EINVAL;
 	}
 
+	if (rvals->rx_pending < GFAR_MIN_RING_SIZE)
+		return -EINVAL;
 	if (rvals->tx_pending > GFAR_TX_MAX_RING_SIZE)
 		return -EINVAL;
 
@@ -504,9 +517,12 @@ static int gfar_sringparam(struct net_device *dev, struct ethtool_ringparam *rva
 
 	/* Change the size */
 	for (i = 0; i < priv->num_rx_queues; i++) {
+		old_rx_ringparam[i] = priv->rx_queue[i]->rx_ring_size;
+		old_tx_ringparam[i] = priv->tx_queue[i]->tx_ring_size;
 		priv->rx_queue[i]->rx_ring_size = rvals->rx_pending;
 		priv->tx_queue[i]->tx_ring_size = rvals->tx_pending;
-		priv->tx_queue[i]->num_txbdfree = priv->tx_queue[i]->tx_ring_size;
+		priv->tx_queue[i]->num_txbdfree = priv->tx_queue[i]->
+							tx_ring_size;
 	}
 
 	/* Rebuild the rings with the new size */
@@ -514,6 +530,18 @@ static int gfar_sringparam(struct net_device *dev, struct ethtool_ringparam *rva
 		err = startup_gfar(dev);
 		netif_tx_wake_all_queues(dev);
 	}
+	/* fallback to original setting */
+	if (err) {
+		for (i = 0; i < priv->num_rx_queues; i++) {
+			priv->rx_queue[i]->rx_ring_size = old_rx_ringparam[i];
+			priv->tx_queue[i]->tx_ring_size = old_tx_ringparam[i];
+			priv->tx_queue[i]->num_txbdfree =
+				priv->tx_queue[i]->tx_ring_size;
+		}
+		BUG_ON(startup_gfar(dev));
+		netif_tx_wake_all_queues(dev);
+	}
+
 	return err;
 }
 
@@ -615,11 +643,17 @@ static void gfar_get_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 {
 	struct gfar_private *priv = netdev_priv(dev);
 
+	wol->supported = 0;
+	wol->wolopts = 0;
+
 	if (priv->device_flags & FSL_GIANFAR_DEV_HAS_MAGIC_PACKET) {
-		wol->supported = WAKE_MAGIC;
-		wol->wolopts = priv->wol_en ? WAKE_MAGIC : 0;
-	} else {
 		wol->supported = wol->wolopts = 0;
+		wol->supported |= WAKE_MAGIC;
+		wol->wolopts |= priv->wol_en ? WAKE_MAGIC : 0;
+	}
+	if (priv->device_flags & FSL_GIANFAR_DEV_HAS_ARP_PACKET) {
+		wol->supported |= WAKE_ARP;
+		wol->wolopts |= priv->wol_en ? WAKE_ARP : 0;
 	}
 }
 
@@ -629,15 +663,21 @@ static int gfar_set_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 	unsigned long flags;
 
 	if (!(priv->device_flags & FSL_GIANFAR_DEV_HAS_MAGIC_PACKET) &&
-	    wol->wolopts != 0)
-		return -EINVAL;
-
-	if (wol->wolopts & ~WAKE_MAGIC)
+	    !(priv->device_flags & FSL_GIANFAR_DEV_HAS_ARP_PACKET))
 		return -EINVAL;
 
 	spin_lock_irqsave(&priv->bflock, flags);
-	priv->wol_en = wol->wolopts & WAKE_MAGIC ? 1 : 0;
-	device_set_wakeup_enable(&dev->dev, priv->wol_en);
+	if (wol->wolopts & WAKE_MAGIC) {
+		priv->wol_en = 1;
+		priv->wol_opts = GIANFAR_WOL_MAGIC;
+	} else if (wol->wolopts & WAKE_ARP) {
+		priv->wol_en = 1;
+		priv->wol_opts = GIANFAR_WOL_ARP;
+	} else {
+		priv->wol_en = 0;
+		priv->wol_opts = 0;
+	}
+	device_set_wakeup_enable(&priv->ofdev->dev, priv->wol_en);
 	spin_unlock_irqrestore(&priv->bflock, flags);
 
 	return 0;
@@ -900,6 +940,7 @@ const struct ethtool_ops gfar_ethtool_ops = {
 	.set_sg = ethtool_op_set_sg,
 	.get_msglevel = gfar_get_msglevel,
 	.set_msglevel = gfar_set_msglevel,
+	.set_tso = ethtool_op_set_tso,
 #ifdef CONFIG_PM
 	.get_wol = gfar_get_wol,
 	.set_wol = gfar_set_wol,

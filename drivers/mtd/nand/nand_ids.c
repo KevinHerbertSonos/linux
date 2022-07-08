@@ -63,6 +63,7 @@ struct nand_flash_dev nand_flash_ids[] = {
 	{"NAND 128MiB 1,8V 16-bit",	0x49, 512, 128, 0x4000, NAND_BUSWIDTH_16},
 	{"NAND 128MiB 3,3V 16-bit",	0x74, 512, 128, 0x4000, NAND_BUSWIDTH_16},
 	{"NAND 128MiB 3,3V 16-bit",	0x59, 512, 128, 0x4000, NAND_BUSWIDTH_16},
+	{"NAND 128MiB 3,3V 8-bit",	0xf1, 2048, 128, 0x20000, 0}, // Winbond & Spansion
 
 	{"NAND 256MiB 3,3V 8-bit",	0x71, 512, 256, 0x4000, 0},
 
@@ -140,7 +141,8 @@ struct nand_manufacturers nand_manuf_ids[] = {
 	{NAND_MFR_STMICRO, "ST Micro"},
 	{NAND_MFR_HYNIX, "Hynix"},
 	{NAND_MFR_MICRON, "Micron"},
-	{NAND_MFR_AMD, "AMD"},
+	{NAND_MFR_AMD, "AMD/Spansion"},
+	{NAND_MFR_WINBOND, "Winbond"},
 	{0x0, "Unknown"}
 };
 

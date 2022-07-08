@@ -2,6 +2,7 @@
  * originally based on the dummy device.
  *
  * Copyright 1999, Thomas Davis, tadavis@lbl.gov.
+ * Copyright 2009-2010 Freescale Semiconductor, Inc.
  * Licensed under the GPL. Based on dummy.c, and eql.c devices.
  *
  * bonding.c: an Ethernet Bonding driver
@@ -4394,6 +4395,14 @@ out:
 	return NETDEV_TX_OK;
 }
 
+#ifdef CONFIG_NET_GIANFAR_FP
+static int bond_accept_fastpath(struct net_device *bond_dev,
+				struct dst_entry *dst)
+{
+	return -1;
+}
+#endif
+
 /*------------------------- Device initialization ---------------------------*/
 
 static void bond_set_xmit_hash_policy(struct bonding *bond)
@@ -4508,6 +4517,9 @@ static const struct net_device_ops bond_netdev_ops = {
 	.ndo_vlan_rx_register	= bond_vlan_rx_register,
 	.ndo_vlan_rx_add_vid 	= bond_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid	= bond_vlan_rx_kill_vid,
+#ifdef CONFIG_NET_GIANFAR_FP
+	.ndo_accept_fastpath	= bond_accept_fastpath,
+#endif
 #ifdef CONFIG_NET_POLL_CONTROLLER
 	.ndo_netpoll_cleanup	= bond_netpoll_cleanup,
 	.ndo_poll_controller	= bond_poll_controller,
@@ -4544,6 +4556,9 @@ static void bond_setup(struct net_device *bond_dev)
 
 	bond_dev->destructor = bond_destructor;
 
+#ifdef CONFIG_NET_GIANFAR_FP
+	bond_dev->accept_fastpath = bond_accept_fastpath;
+#endif
 	/* Initialize the device options */
 	bond_dev->tx_queue_len = 0;
 	bond_dev->flags |= IFF_MASTER|IFF_MULTICAST;

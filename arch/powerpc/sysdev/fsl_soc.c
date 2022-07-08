@@ -3,6 +3,8 @@
  *
  * Maintained by Kumar Gala (see MAINTAINERS for contact information)
  *
+ * Copyright (C) 2009-2010 Freescale Semiconductor, Inc.
+ *
  * 2006 (c) MontaVista Software, Inc.
  * Vitaly Bordug <vbordug@ru.mvista.com>
  *
@@ -30,7 +32,7 @@
 #include <linux/fsl_devices.h>
 #include <linux/fs_enet_pd.h>
 #include <linux/fs_uart_pd.h>
-
+#include <linux/bootmem.h>
 #include <asm/system.h>
 #include <asm/atomic.h>
 #include <asm/io.h>
@@ -191,7 +193,12 @@ static int __init of_add_fixed_phys(void)
 		if (!fixed_link)
 			continue;
 
+#ifdef CONFIG_MV88E6020_PHY
+		/* don't declare the link up until the PHYs indicate it is */
+		status.link = 0;
+#else
 		status.link = 1;
+#endif
 		status.duplex = fixed_link[1];
 		status.speed = fixed_link[2];
 		status.pause = fixed_link[3];
@@ -230,7 +237,7 @@ static int __init fsl_usb_of_init(void)
 	struct device_node *np;
 	unsigned int i = 0;
 	struct platform_device *usb_dev_mph = NULL, *usb_dev_dr_host = NULL,
-		*usb_dev_dr_client = NULL;
+		*usb_dev_dr_client = NULL, *usb_dev_dr_otg = NULL;
 	int ret;
 
 	for_each_compatible_node(np, NULL, "fsl-usb2-mph") {
@@ -277,6 +284,7 @@ static int __init fsl_usb_of_init(void)
 		if (ret)
 			goto unreg_mph;
 		i++;
+		usb_dev_mph = NULL;
 	}
 
 	for_each_compatible_node(np, NULL, "fsl-usb2-dr") {
@@ -316,6 +324,12 @@ static int __init fsl_usb_of_init(void)
 			}
 		} else if (prop && !strcmp(prop, "otg")) {
 			usb_data.operating_mode = FSL_USB2_DR_OTG;
+			usb_dev_dr_otg = platform_device_register_simple(
+					"fsl-usb2-otg", i, r, 2);
+			if (IS_ERR(usb_dev_dr_otg)) {
+				ret = PTR_ERR(usb_dev_dr_otg);
+				goto err;
+			}
 			usb_dev_dr_host = platform_device_register_simple(
 					"fsl-ehci", i, r, 2);
 			if (IS_ERR(usb_dev_dr_host)) {
@@ -345,6 +359,16 @@ static int __init fsl_usb_of_init(void)
 						fsl_usb2_platform_data))))
 				goto unreg_dr;
 		}
+		if (usb_dev_dr_otg) {
+			usb_dev_dr_otg->dev.coherent_dma_mask = 0xffffffffUL;
+			usb_dev_dr_otg->dev.dma_mask =
+				&usb_dev_dr_otg->dev.coherent_dma_mask;
+			ret = platform_device_add_data(usb_dev_dr_otg,
+					&usb_data,
+					sizeof(struct fsl_usb2_platform_data));
+			if (ret)
+				goto unreg_dr;
+		}
 		if (usb_dev_dr_client) {
 			usb_dev_dr_client->dev.coherent_dma_mask = 0xffffffffUL;
 			usb_dev_dr_client->dev.dma_mask = &usb_dev_dr_client->
@@ -355,6 +379,8 @@ static int __init fsl_usb_of_init(void)
 				goto unreg_dr;
 		}
 		i++;
+		usb_dev_dr_host = NULL;
+		usb_dev_dr_client = NULL;
 	}
 	return 0;
 
@@ -363,6 +389,8 @@ unreg_dr:
 		platform_device_unregister(usb_dev_dr_host);
 	if (usb_dev_dr_client)
 		platform_device_unregister(usb_dev_dr_client);
+	if (usb_dev_dr_otg)
+		platform_device_unregister(usb_dev_dr_otg);
 unreg_mph:
 	if (usb_dev_mph)
 		platform_device_unregister(usb_dev_mph);
@@ -409,3 +437,96 @@ void fsl_rstcr_restart(char *cmd)
 struct platform_diu_data_ops diu_ops;
 EXPORT_SYMBOL(diu_ops);
 #endif
+#ifdef CONFIG_FSL_PME8572
+
+static const char *pme_intrs[] = { "ctrl", "ch0", "ch1", "ch2", "ch3" };
+static int __init pme_of_init(void)
+{
+	struct device_node *np;
+	unsigned int i;
+	struct platform_device *pme_dev;
+	int ret = 0;
+
+	for (np = NULL, i = 0;
+		(np = of_find_compatible_node(np, "pme", "pme8572")) != NULL;
+		i++) {
+		/* reg-space + 5 interrupt lines = 6 resources */
+		struct resource r[6];
+		int k;
+		/* Current driver only supports a single PME node. Catch it. */
+		if (i != 0) {
+			printk(KERN_ERR "fsl_soc.c: multiple PME nodes "
+			"unsupported\n");
+			goto err;
+		}
+
+		memset(r, 0, sizeof(r));
+		ret = of_address_to_resource(np, 0, &r[0]);
+		if (ret)
+			goto err;
+
+		for (k = 0; k < 5; k++) {
+			r[k + 1].name = pme_intrs[k];
+			of_irq_to_resource(np, k, &r[k + 1]);
+		}
+
+		pme_dev = platform_device_register_simple("fsl-pme",
+							i, &r[0], 6);
+		if (IS_ERR(pme_dev)) {
+			ret = PTR_ERR(pme_dev);
+			goto err;
+	}
+	}
+err:
+	return ret;
+}
+arch_initcall(pme_of_init);
+
+/* Contiguous memory carved out by platform code, this needs early "bootmem" */
+static int __pme_8572_num_pages;
+static void *__pme_8572_mem;
+static struct resource fsl_pme_8572_res = {
+	.name = "fsl_pme_8572_pages",
+	.start = 0,
+	.end = 0,
+	.flags = IORESOURCE_MEM | IORESOURCE_BUSY
+};
+
+static int __init pme_setup(char *str)
+{
+	int val;
+	if (get_option(&str, &val)) {
+		int err;
+		__pme_8572_mem = alloc_bootmem_low_pages(val << PAGE_SHIFT);
+		if (!__pme_8572_mem) {
+			printk(KERN_CRIT "fsl_pme_8572_pages: "
+				"allocation of %d pages failed\n", val);
+			return -ENOMEM;
+		}
+		 __pme_8572_num_pages = val;
+		fsl_pme_8572_res.start = (resource_size_t)__pme_8572_mem;
+		fsl_pme_8572_res.end = fsl_pme_8572_res.start +
+						(val << PAGE_SHIFT);
+		err = request_resource(&iomem_resource, &fsl_pme_8572_res);
+		if (err) {
+			panic("fsl_pme_8572_pages: resource failure");
+			return err;
+		}
+		printk(KERN_INFO "fsl_pme_8572_pages: %d pages at %p\n",
+				val, __pme_8572_mem);
+	}
+	return 1;
+}
+int fsl_pme_8572_num_pages(void)
+{
+	return __pme_8572_num_pages;
+}
+EXPORT_SYMBOL(fsl_pme_8572_num_pages);
+void *fsl_pme_8572_mem(void)
+{
+	return __pme_8572_mem;
+}
+EXPORT_SYMBOL(fsl_pme_8572_mem);
+__setup("fsl_pme_8572_pages=", pme_setup);
+
+#endif /* CONFIG_FSL_PME8572 */

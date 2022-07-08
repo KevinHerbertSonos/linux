@@ -16,3 +16,16 @@ obj-$(CONFIG_SBC834x)		+= sbc834x.o
 obj-$(CONFIG_MPC837x_RDB)	+= mpc837x_rdb.o
 obj-$(CONFIG_ASP834x)		+= asp834x.o
 obj-$(CONFIG_KMETER1)		+= kmeter1.o
+obj-$(CONFIG_SONOS)     	+= dtb-wrapper.o
+
+# Force dependency (incbin is bad)
+$(obj)/dtb-wrapper.o : arch/powerpc/boot/fenway.dtb
+
+
+ifeq ($(DIAGS),1)
+arch/powerpc/boot/fenway.dtb : arch/powerpc/boot/dts/fenway_diag.dts
+	scripts/dtc/dtc -I dts -O dtb -R 8 -S 20000 arch/powerpc/boot/dts/fenway_diag.dts > arch/powerpc/boot/fenway.dtb
+else
+arch/powerpc/boot/fenway.dtb : arch/powerpc/boot/dts/fenway.dts
+	scripts/dtc/dtc -I dts -O dtb -R 8 -S 20000 arch/powerpc/boot/dts/fenway.dts > arch/powerpc/boot/fenway.dtb
+endif

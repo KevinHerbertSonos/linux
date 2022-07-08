@@ -36,12 +36,18 @@ obj-$(CONFIG_VMXNET3) += vmxnet3/
 
 gianfar_driver-objs := gianfar.o \
 		gianfar_ethtool.o \
-		gianfar_sysfs.o
+		gianfar_sysfs.o \
+		gianfar_1588.o
 
 obj-$(CONFIG_UCC_GETH) += ucc_geth_driver.o
 ucc_geth_driver-objs := ucc_geth.o ucc_geth_ethtool.o
 
 obj-$(CONFIG_FSL_PQ_MDIO) += fsl_pq_mdio.o
+
+ifeq ($(CONFIG_FSL_SOC_BOOKE),y)
+  obj-$(CONFIG_BOARDNET) += fsl_pci_veth/
+  obj-$(CONFIG_CARDNET) += fsl_pci_veth/
+endif
 
 #
 # link order important here

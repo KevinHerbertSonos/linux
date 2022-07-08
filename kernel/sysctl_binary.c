@@ -180,7 +180,7 @@ static const struct bin_table bin_net_core_table[] = {
 	{ CTL_INT,	NET_CORE_RMEM_DEFAULT,	"rmem_default" },
 	/* NET_CORE_DESTROY_DELAY unused */
 	{ CTL_INT,	NET_CORE_MAX_BACKLOG,	"netdev_max_backlog" },
-	/* NET_CORE_FASTROUTE unused */
+	{ CTL_INT,	NET_CORE_FASTROUTE,	"netdev_fastroute" },
 	{ CTL_INT,	NET_CORE_MSG_COST,	"message_cost" },
 	{ CTL_INT,	NET_CORE_MSG_BURST,	"message_burst" },
 	{ CTL_INT,	NET_CORE_OPTMEM_MAX,	"optmem_max" },

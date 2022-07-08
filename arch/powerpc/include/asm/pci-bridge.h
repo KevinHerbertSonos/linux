@@ -124,6 +124,7 @@ struct pci_controller {
 #define PPC_INDIRECT_TYPE_NO_PCIE_LINK		0x00000008
 #define PPC_INDIRECT_TYPE_BIG_ENDIAN		0x00000010
 #define PPC_INDIRECT_TYPE_BROKEN_MRM		0x00000020
+#define PPC_INDIRECT_TYPE_MPC83XX_PCIE		0x00000020
 	u32 indirect_type;
 	/* Currently, we limit ourselves to 1 IO range and 3 mem
 	 * ranges since the common pci_bus structure can't handle more

@@ -199,11 +199,15 @@ config CRYPTO_DEV_HIFN_795X_RNG
 	  Select this option if you want to enable the random number generator
 	  on the HIFN 795x crypto adapters.
 
+source drivers/crypto/caam/Kconfig
+
 config CRYPTO_DEV_TALITOS
 	tristate "Talitos Freescale Security Engine (SEC)"
 	select CRYPTO_ALGAPI
 	select CRYPTO_AUTHENC
 	select HW_RANDOM
+	select DMA_ENGINE
+	select ASYNC_XOR
 	depends on FSL_SOC
 	help
 	  Say 'Y' here to use the Freescale Security Engine (SEC)
@@ -242,5 +246,30 @@ config CRYPTO_DEV_OMAP_SHAM
 	help
 	  OMAP processors have SHA1/MD5 hw accelerator. Select this if you
 	  want to use the OMAP module for SHA1/MD5 algorithms.
+
+config CRYPTO_DEV_EXTENS_T23X
+	tristate "Extensible Driver (t23x) for Talitos 2.x/3.x (EXPERIMENTAL)"
+        depends on (PPC_83xx || PPC_85xx || PPC_86xx) && !CRYPTO_DEV_TALITOS
+        default m
+        help
+          Extensible Crypto Driver for PowerQUICC devices containing the
+          SEC 2.x/3.x accelerator core.
+
+          Builds the Resource Manager component (t23xrm), which manages
+          the hardware and enables sharing between APIs
+
+config CRYPTO_DEV_EXTENS_T23X_RMTEST
+        tristate "t23x Resource Manager testing module (EXPERIMENTAL)"
+        depends on CRYPTO_DEV_EXTENS_T23X
+        help
+          Test module (t23xtest) to verify installation of t23x Resource
+          Manager and accelerator hardware under it's control
+
+config CRYPTO_DEV_EXTENS_T23X_SEC2
+        tristate "t23x SEC2 Legacy Device Interface (EXPERIMENTAL)"
+        depends on CRYPTO_DEV_EXTENS_T23X
+        help
+          SEC2 Legacy Driver Interface (t23xsec2) component intended to
+          allow migration of applications dependent on the legacy driver
 
 endif # CRYPTO_HW

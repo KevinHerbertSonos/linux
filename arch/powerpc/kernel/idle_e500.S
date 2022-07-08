@@ -59,7 +59,7 @@ END_FTR_SECTION_IFSET(CPU_FTR_L2CSR|CPU_FTR_CAN_NAP)
 1:
 	/* Go to NAP or DOZE now */
 	mfspr	r4,SPRN_HID0
-	rlwinm	r4,r4,0,~(HID0_DOZE|HID0_NAP|HID0_SLEEP)
+	/*rlwinm	r4,r4,0,~(HID0_DOZE|HID0_NAP|HID0_SLEEP)*/
 	or	r4,r4,r3
 	isync
 	mtspr	SPRN_HID0,r4

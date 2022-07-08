@@ -26,6 +26,9 @@
 #include <linux/memblock.h>
 #include <linux/log2.h>
 #include <linux/slab.h>
+#include <linux/interrupt.h>
+#include <linux/of.h>
+#include <linux/of_platform.h>
 
 #include <asm/io.h>
 #include <asm/prom.h>
@@ -42,8 +45,14 @@ static void __init quirk_fsl_pcie_header(struct pci_dev *dev)
 	if (!pci_find_capability(dev, PCI_CAP_ID_EXP))
 		return;
 
-	dev->class = PCI_CLASS_BRIDGE_PCI << 8;
-	fsl_pcie_bus_fixup = 1;
+	/*
+	 * We should only fix the PCIE when it's configured as RC.
+	 * When configured as EP, the header type is NORMAL
+	 */
+	if (dev->hdr_type == PCI_HEADER_TYPE_BRIDGE) {
+		dev->class = PCI_CLASS_BRIDGE_PCI << 8;
+		fsl_pcie_bus_fixup = 1;
+	}
 	return;
 }
 
@@ -102,7 +111,9 @@ static void __init setup_pci_atmu(struct pci_controller *hose,
 	int i, j, n, mem_log, win_idx = 2;
 	u64 mem, sz, paddr_hi = 0;
 	u64 paddr_lo = ULLONG_MAX;
+#if !defined(CONFIG_SONOS_LIMELIGHT)
 	u32 pcicsrbar = 0, pcicsrbar_sz;
+#endif
 	u32 piwar = PIWAR_EN | PIWAR_PF | PIWAR_TGI_LOCAL |
 			PIWAR_READ_SNOOP | PIWAR_WRITE_SNOOP;
 	char *name = hose->dn->full_name;
@@ -173,6 +184,14 @@ static void __init setup_pci_atmu(struct pci_controller *hose,
 		return ;
 	}
 
+#if !defined(CONFIG_SONOS_LIMELIGHT)
+	// XXX BT on limelight this doesn't work properly because PEXIWAR0
+	// XXX gets zeroed out above.  I could fix that but it's silly -
+	// XXX The intended purpose of this window is to allow access to the
+	// XXX memory-mapped system register space from the PCIe bus.  That
+	// XXX might be important with the controller in endpoint mode but
+	// XXX for "ordinary" peripherals, which is all we have, with the
+	// XXX controller in root complex mode, it's just silly.
 	/* setup PCSRBAR/PEXCSRBAR */
 	early_write_config_dword(hose, 0, 0, PCI_BASE_ADDRESS_0, 0xffffffff);
 	early_read_config_dword(hose, 0, 0, PCI_BASE_ADDRESS_0, &pcicsrbar_sz);
@@ -188,6 +207,10 @@ static void __init setup_pci_atmu(struct pci_controller *hose,
 	paddr_lo = min(paddr_lo, (u64)pcicsrbar);
 
 	pr_info("%s: PCICSRBAR @ 0x%x\n", name, pcicsrbar);
+#else
+	early_write_config_dword(hose, 0, 0, PCI_BASE_ADDRESS_0, 0); //XXX
+	win_idx = 1; // XXX BT on the P1014 operation of inbound window 0 seems to be ...  funny.
+#endif //!CONFIG_SONOS_LIMELIGHT
 
 	/* Setup inbound mem window */
 	mem = memblock_end_of_DRAM();
@@ -204,7 +227,7 @@ static void __init setup_pci_atmu(struct pci_controller *hose,
 			mem_log++;
 		}
 
-		piwar |= (mem_log - 1);
+		piwar |= ((mem_log - 1) & PIWAR_SZ_MASK);
 
 		/* Setup inbound memory window */
 		out_be32(&pci->piw[win_idx].pitar,  0x00000000);
@@ -259,6 +282,13 @@ static void __init setup_pci_atmu(struct pci_controller *hose,
 			(u64)hose->dma_window_size);
 	}
 
+#ifdef CONFIG_SONOS_FENWAY
+	/* Setup 2G inbound Memory Window @ 1 */
+	out_be32(&pci->piw[2].pitar, 0x00000000);
+	out_be32(&pci->piw[2].piwbar,0x00000000);
+	out_be32(&pci->piw[2].piwar, PIWAR_2G);
+#endif
+
 	iounmap(pci);
 }
 
@@ -309,6 +339,340 @@ void fsl_pcibios_fixup_bus(struct pci_bus *bus)
 		}
 	}
 }
+
+#define PDRV_NAME	"fsl-pci"
+
+/* Bit fields in the PEX_INT_STAT register*/
+	/* reserved 0-15 */
+#define PEX_INT_STAT_INTM			0x00008000
+#define PEX_INT_STAT_INTE			0x00004000
+	/* reserved 18-23 */
+#define PEX_INT_STAT_GROUP			0x000000C0
+	/* reserved 27-31 */
+
+/* Bit fields in the PEX_PME_MES_DR register */
+	/* reserved 0-15 */
+#define PEX_PME_MES_DR_PTO			0x00008000
+	/* reserved 17 */
+#define PEX_PME_MES_DR_ENL23			0x00002000
+#define PEX_PME_MES_DR_EXL23			0x00001000
+	/* reserved 20 */
+#define PEX_PME_MES_DR_HRD			0x00000400
+#define PEX_PME_MES_DR_LDD			0x00000200
+#define PEX_PME_MES_DR_AILDD			0x00000100
+#define PEX_PME_MES_DR_LUD			0x00000080
+	/* reserved 25-31*/
+
+/* Bit fields in the PEX_ERR_DR register */
+#define PEX_ERR_DR_ME				0x80000000
+	/* reserved 1-7 */
+#define PEX_ERR_DR_PCT				0x00800000
+#define PEX_ERR_DR_PAT				0x00400000
+#define PEX_ERR_DR_PCAC				0x00200000
+#define PEX_ERR_DR_PNM				0x00100000
+#define PEX_ERR_DR_CDNSC			0x00080000
+#define PEX_ERR_DR_CRSNC			0x00040000
+#define PEX_ERR_DR_ICCA				0x00020000
+#define PEX_ERR_DR_IACA				0x00010000
+#define PEX_ERR_DR_CRST				0x00008000
+#define PEX_ERR_DR_MIS				0x00004000
+#define PEX_ERR_DR_IOIS				0x00002000
+#define PEX_ERR_DR_CIS				0x00001000
+#define PEX_ERR_DR_CIEP				0x00000800
+#define PEX_ERR_DR_IOIEP			0x00000400
+#define PEX_ERR_DR_OAC				0x00000200
+#define PEX_ERR_DR_IOIA				0x00000100
+#define PEX_ERR_DR_IMBA				0x00000080
+#define PEX_ERR_DR_IIOBA			0x00000040
+#define PEX_ERR_DR_LDDE				0x00000020
+	/* reserved 27-31 */
+
+#define PEX_ERR_CAP_STAT_ECV			0x00000001
+
+/* Address offsets of the PCIe configuration space fields */
+#define PCIE_CFG_STATUS				0x0006
+#define PCIE_CFG_2ND_STATUS			0x001e
+#define PCIE_CFG_DEVICE_STATUS			0x0056
+#define PCIE_CFG_UNCORRECTABLE_ERR_STATUS	0x0104
+#define PCIE_CFG_UNCORRECTABLE_ERR_SEVERE	0x010c
+#define PCIE_CFG_CORRECTABLE_ERR_STATUS		0x0110
+#define PCIE_CFG_ROOT_ERROR_STATUS		0x0130
+
+struct fsl_pci_dev {
+	char *name;
+	unsigned int err_irq;
+	struct pci_dev *pdev;
+	struct device *dev;
+	struct ccsr_pci __iomem *regs;
+};
+
+static void _fsl_pci_get_pex_pme_mes_dr(struct fsl_pci_dev *fsl_dev)
+{
+	__be32 pex_pme_mes_dr = in_be32(&fsl_dev->regs->pex_pme_mes_dr);
+	pr_debug(PDRV_NAME": pex_pme_mes_dr=%08x", pex_pme_mes_dr);
+
+	if (pex_pme_mes_dr & PEX_PME_MES_DR_PTO)
+		dev_err(fsl_dev->dev, "PME turn off\n");
+	if (pex_pme_mes_dr & PEX_PME_MES_DR_ENL23)
+		dev_err(fsl_dev->dev, "Entered L2/L3 ready state\n");
+	if (pex_pme_mes_dr & PEX_PME_MES_DR_EXL23)
+		dev_err(fsl_dev->dev, "Exited L2/L3 ready state\n");
+	if (pex_pme_mes_dr & PEX_PME_MES_DR_HRD)
+		dev_err(fsl_dev->dev, "Hot reset detected\n");
+	if (pex_pme_mes_dr & PEX_PME_MES_DR_LDD) {
+		dev_err(fsl_dev->dev, "Link down detected\n");
+		printk(KERN_WARNING "WARNING: Link down detected can be due to an uncalibrated Atheros device that has no external regulator.\n");
+	}
+	if (pex_pme_mes_dr & PEX_PME_MES_DR_AILDD)
+		dev_err(fsl_dev->dev, "Ack-timeout induced link down detected\n");
+	if (pex_pme_mes_dr & PEX_PME_MES_DR_LUD)
+		dev_err(fsl_dev->dev, "Link up detected\n");
+
+	/* Clear error */
+	out_be32(&fsl_dev->regs->pex_pme_mes_dr, pex_pme_mes_dr);
+}
+
+static void _fsl_pci_get_pex_err_dr(struct fsl_pci_dev *fsl_dev)
+{
+	__be32 pex_err_dr = in_be32(&fsl_dev->regs->pex_err_dr);
+	pr_debug(PDRV_NAME": pex_err_dr=%08x", pex_err_dr);
+
+	if (pex_err_dr & PEX_ERR_DR_PCT)
+		dev_err(fsl_dev->dev, "PCIe completion time-out\n");
+	if (pex_err_dr & PEX_ERR_DR_PAT)
+		dev_err(fsl_dev->dev, "PCIe ACK time-out\n");
+	if (pex_err_dr & PEX_ERR_DR_PCAC)
+		dev_err(fsl_dev->dev, "PCIe completer abort\n");
+	if (pex_err_dr & PEX_ERR_DR_PNM)
+		dev_err(fsl_dev->dev, "PCIe no map\n");
+	if (pex_err_dr & PEX_ERR_DR_CDNSC)
+		dev_err(fsl_dev->dev, "Completion with data not successful\n");
+	if (pex_err_dr & PEX_ERR_DR_CRSNC)
+		dev_err(fsl_dev->dev, "CRS non configuration\n");
+	if (pex_err_dr & PEX_ERR_DR_ICCA)
+		dev_err(fsl_dev->dev, "Invalid PEX_CONFIG_ADDR/PEX_CONFIG_DATA configuration access\n");
+	if (pex_err_dr & PEX_ERR_DR_IACA)
+		dev_err(fsl_dev->dev, "Invalid ATMU configuration access\n");
+	if (pex_err_dr & PEX_ERR_DR_CRST)
+		dev_err(fsl_dev->dev, "CRS threshold\n");
+	if (pex_err_dr & PEX_ERR_DR_MIS)
+		dev_err(fsl_dev->dev, "Message invalid size\n");
+	if (pex_err_dr & PEX_ERR_DR_IOIS)
+		dev_err(fsl_dev->dev, "I/O invalid size\n");
+	if (pex_err_dr & PEX_ERR_DR_CIS)
+		dev_err(fsl_dev->dev, "Configuration invalid size\n");
+	if (pex_err_dr & PEX_ERR_DR_CIEP)
+		dev_err(fsl_dev->dev, "Configuration invalid EP\n");
+	if (pex_err_dr & PEX_ERR_DR_IOIEP)
+		dev_err(fsl_dev->dev, "I/O invalid EP\n");
+	if (pex_err_dr & PEX_ERR_DR_OAC)
+		dev_err(fsl_dev->dev, "Outbound ATMU crossing\n");
+	if (pex_err_dr & PEX_ERR_DR_IOIA)
+		dev_err(fsl_dev->dev, "I/O invalid address\n");
+	if (pex_err_dr & PEX_ERR_DR_IMBA)
+		dev_err(fsl_dev->dev, "Invalid memory base address\n");
+	if (pex_err_dr & PEX_ERR_DR_IIOBA)
+		dev_err(fsl_dev->dev, "Invalid I/O base address\n");
+
+	/* Clear error */
+	out_be32(&fsl_dev->regs->pex_err_dr, pex_err_dr);
+}
+
+static void _fsl_pci_get_pci_config_error(struct fsl_pci_dev *fsl_dev)
+{
+	u16 val16;
+	u32 val32;
+	dev_err(fsl_dev->dev, "Interrupt from PCIe group register\n");
+
+	pci_read_config_word(fsl_dev->pdev, PCIE_CFG_STATUS, &val16);
+	dev_err(fsl_dev->dev, "PCIe Status               = %04x\n", val16);
+	pci_write_config_word(fsl_dev->pdev, PCIE_CFG_STATUS, val16);
+
+	pci_read_config_word(fsl_dev->pdev, PCIE_CFG_2ND_STATUS, &val16);
+	dev_err(fsl_dev->dev, "PCIe 2nd Status           = %04x\n", val16);
+	pci_write_config_word(fsl_dev->pdev, PCIE_CFG_2ND_STATUS, val16);
+
+	pci_read_config_word(fsl_dev->pdev, PCIE_CFG_DEVICE_STATUS, &val16);
+	dev_err(fsl_dev->dev, "PCIe Device Status        = %04x\n", val16);
+	pci_write_config_word(fsl_dev->pdev, PCIE_CFG_DEVICE_STATUS, val16);
+
+	pci_read_config_dword(fsl_dev->pdev, PCIE_CFG_UNCORRECTABLE_ERR_STATUS, &val32);
+	dev_err(fsl_dev->dev, "PCIe Uncorrectable Status = %08x\n", val32);
+	pci_write_config_dword(fsl_dev->pdev, PCIE_CFG_UNCORRECTABLE_ERR_STATUS, val32);
+
+	pci_read_config_dword(fsl_dev->pdev, PCIE_CFG_CORRECTABLE_ERR_STATUS, &val32);
+	dev_err(fsl_dev->dev, "PCIe Correctable Status   = %08x\n", val32);
+	pci_write_config_dword(fsl_dev->pdev, PCIE_CFG_CORRECTABLE_ERR_STATUS, val32);
+
+	pci_read_config_dword(fsl_dev->pdev, PCIE_CFG_ROOT_ERROR_STATUS, &val32);
+	dev_err(fsl_dev->dev, "PCIe Root Error Status    = %08x\n", val32);
+	pci_write_config_dword(fsl_dev->pdev, PCIE_CFG_ROOT_ERROR_STATUS, val32);
+}
+
+static void _fsl_pci_get_pex_err_cap(struct fsl_pci_dev *fsl_dev)
+{
+	/* Dump the 4 Error Capture registers */
+	dev_err(fsl_dev->dev, "PCIe Error Capture\n");
+	dev_err(fsl_dev->dev, "pex_err_cap_stat   = %08x\n", in_be32(&fsl_dev->regs->pex_err_cap_stat));
+	dev_err(fsl_dev->dev, "pex_err_cap_r[0-3] = %08x %08x %08x %08x\n",
+		in_be32(&fsl_dev->regs->pex_err_cap_r0),
+		in_be32(&fsl_dev->regs->pex_err_cap_r1),
+		in_be32(&fsl_dev->regs->pex_err_cap_r2),
+		in_be32(&fsl_dev->regs->pex_err_cap_r3));
+
+	/* Clear error and capture registers */
+	out_be32(&fsl_dev->regs->pex_err_cap_stat, PEX_ERR_CAP_STAT_ECV);
+}
+
+static irqreturn_t fsl_pci_error_irq(int irqno, void *data)
+{
+	struct fsl_pci_dev *fsl_dev = (struct fsl_pci_dev *)data;
+	__be32 pex_int_stat = in_be32(&fsl_dev->regs->pex_int_stat);
+	__be32 pex_err_cap_stat = in_be32(&fsl_dev->regs->pex_err_cap_stat);
+	irqreturn_t ret = IRQ_NONE;
+
+	pr_debug("%s %s: %s error interrupt (irq=%d pex_int_stat=%08x)\n",
+		dev_driver_string(fsl_dev->dev), dev_name(fsl_dev->dev), fsl_dev->name, irqno, pex_int_stat);
+
+	/* Sanity check */
+	if (irqno != fsl_dev->err_irq) {
+		dev_err(fsl_dev->dev, "Servicing unrecognized interrupt %d (registered %d)\n", irqno, fsl_dev->err_irq);
+		return IRQ_NONE;
+	}
+
+#if 0
+	/* Display all registers */
+	pex_int_stat = PEX_INT_STAT_INTM | PEX_INT_STAT_INTE | PEX_INT_STAT_GROUP;
+	pex_err_cap_stat = PEX_ERR_CAP_STAT_ECV;
+#endif
+
+	if (pex_int_stat & PEX_INT_STAT_INTM) {
+		_fsl_pci_get_pex_pme_mes_dr(fsl_dev);
+		ret = IRQ_HANDLED;
+	}
+
+	if (pex_int_stat & PEX_INT_STAT_INTE) {
+		_fsl_pci_get_pex_err_dr(fsl_dev);
+		ret = IRQ_HANDLED;
+	}
+
+	if (pex_int_stat & PEX_INT_STAT_GROUP) {
+		_fsl_pci_get_pci_config_error(fsl_dev);
+		ret = IRQ_HANDLED;
+	}
+
+	if (pex_err_cap_stat & PEX_ERR_CAP_STAT_ECV) {
+		_fsl_pci_get_pex_err_cap(fsl_dev);
+	}
+
+	return ret;
+}
+
+static void _fsl_pci_clear_regs(struct fsl_pci_dev *fsl_dev)
+{
+	/* Disable Invalid PEX_CONFIG_ADDR/PEX_CONFIG_DATA configuration access errors (ICCA) */
+	out_be32(&fsl_dev->regs->pex_err_disr, PEX_ERR_DR_ICCA);
+
+	/* Clear PME/message and error detect */
+	out_be32(&fsl_dev->regs->pex_pme_mes_dr, 0xffffffff);
+	out_be32(&fsl_dev->regs->pex_err_dr, 0xffffffff);
+
+	/* Set ECV bit to reset error capture */
+	out_be32(&fsl_dev->regs->pex_err_cap_stat, PEX_ERR_CAP_STAT_ECV);
+
+	/* Clear PCI config statuses and errors */
+	pci_write_config_word(fsl_dev->pdev, PCIE_CFG_STATUS, 0xff00);
+	pci_write_config_word(fsl_dev->pdev, PCIE_CFG_2ND_STATUS, 0xff00);
+	pci_write_config_word(fsl_dev->pdev, PCIE_CFG_DEVICE_STATUS, 0x000f);
+	pci_write_config_dword(fsl_dev->pdev, PCIE_CFG_UNCORRECTABLE_ERR_STATUS, 0xffffffff);
+	pci_write_config_dword(fsl_dev->pdev, PCIE_CFG_CORRECTABLE_ERR_STATUS, 0xffffffff);
+	pci_write_config_dword(fsl_dev->pdev, PCIE_CFG_ROOT_ERROR_STATUS, 0x0000007f);
+}
+
+static int __devinit fsl_pci_probe(struct pci_dev *pdev,
+				   const struct pci_device_id *dev_id)
+{
+	struct fsl_pci_dev *fsl_dev;
+	struct device_node *host_node;
+
+	dev_info(&(pdev->dev), "Freescale Integrated PCIe Bridge\n");
+
+	/* Allocate private device structure */
+	fsl_dev = kmalloc(sizeof(struct fsl_pci_dev), GFP_KERNEL);
+	if (fsl_dev == NULL) {
+		dev_err(&(pdev->dev), "allocation failure\n");
+		return -ENOMEM;
+	}
+	fsl_dev->pdev = pdev;
+	fsl_dev->dev = &(pdev->dev);
+	fsl_dev->err_irq = NO_IRQ;
+	fsl_dev->regs = NULL;
+
+	/* The PCI bridge device itself is not useful.  The error interrupts
+	 * and registers are owned by the host-side controller device which
+	 * is the parent of the bridge in the DTS table. */
+	if (pdev->dev.of_node == NULL) {
+		dev_err(fsl_dev->dev, "no OF node\n");
+		goto error;
+	}
+	if (pdev->dev.of_node->parent == NULL) {
+		dev_err(fsl_dev->dev, "OF node has no parent\n");
+		goto error;
+	}
+	host_node = pdev->dev.of_node->parent;
+	fsl_dev->name = host_node->full_name;
+	pr_debug(PDRV_NAME": name=%s\n", fsl_dev->name);
+
+	/* IO map the host registers */
+	fsl_dev->regs = of_iomap(host_node, 0);
+	pr_debug(PDRV_NAME": regs=%p\n", fsl_dev->regs);
+
+	/* Cleanup registers before registering the ISR */
+	_fsl_pci_clear_regs(fsl_dev);
+
+	/* Register the error interrupt */
+	fsl_dev->err_irq = irq_of_parse_and_map(host_node, 0);
+	if (fsl_dev->err_irq == NO_IRQ) {
+		dev_err(fsl_dev->dev, "failed to get irq resource\n");
+		goto error;
+	}
+	pr_debug(PDRV_NAME": irq=%d\n", fsl_dev->err_irq);
+
+	if (request_irq(fsl_dev->err_irq, fsl_pci_error_irq, IRQF_SHARED, PDRV_NAME, fsl_dev) != 0) {
+		dev_err(fsl_dev->dev, "failed to install irq %d\n", fsl_dev->err_irq);
+		goto error;
+	}
+
+	return 0;
+error:
+	if (fsl_dev->err_irq != NO_IRQ) {
+		irq_dispose_mapping(fsl_dev->err_irq);
+	}
+	if (fsl_dev->regs) {
+		iounmap(fsl_dev->regs);
+	}
+	kfree(fsl_dev);
+	return -ENODEV;
+}
+
+static struct pci_device_id fsl_pci_tbl[] = {
+	{ PCI_DEVICE(PCI_VENDOR_ID_FREESCALE, 0x012b) },
+	{ 0, }
+};
+
+static struct pci_driver fsl_pci_driver = {
+	.name     = PDRV_NAME,
+	.id_table = fsl_pci_tbl,
+	.probe    = fsl_pci_probe,
+};
+
+static int fsl_pci_init(void)
+{
+	pr_debug(PDRV_NAME": init\n");
+	return pci_register_driver(&fsl_pci_driver);
+}
+
+module_init(fsl_pci_init);
 
 int __init fsl_add_bridge(struct device_node *dev, int is_primary)
 {
@@ -590,6 +954,24 @@ err0:
 	return ret;
 
 }
+
+#ifdef CONFIG_SONOS_FENWAY
+int mpc83xx_exclude_device(struct pci_controller *hose,
+		u_char bus, u_char devfn)
+{
+	struct pci_bus *pci_bus;
+	if (hose->indirect_type & PPC_INDIRECT_TYPE_MPC83XX_PCIE) {
+		pci_bus = pci_find_bus(hose->global_number, bus);
+		if ((bus == hose->first_busno) ||
+				(pci_bus->primary == hose->first_busno)) {
+			if (devfn & 0xf8)
+				return PCIBIOS_DEVICE_NOT_FOUND;
+		}
+	}
+
+	return PCIBIOS_SUCCESSFUL;
+}
+#endif	// CONFIG_SONOS_FENWAY
 
 int __init mpc83xx_add_bridge(struct device_node *dev)
 {

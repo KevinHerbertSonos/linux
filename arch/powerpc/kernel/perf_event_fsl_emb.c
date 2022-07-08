@@ -127,6 +127,7 @@ static void write_pmlca(int idx, unsigned long val)
 	isync();
 }
 
+#ifdef CONFIG_E500
 /*
  * Write one local control B register
  */
@@ -151,6 +152,7 @@ static void write_pmlcb(int idx, unsigned long val)
 
 	isync();
 }
+#endif	// CONFIG_E500
 
 static void fsl_emb_pmu_read(struct perf_event *event)
 {
@@ -304,7 +306,9 @@ static int fsl_emb_pmu_enable(struct perf_event *event)
 	write_pmc(i, val);
 	perf_event_update_userpage(event);
 
+#ifdef CONFIG_E500
 	write_pmlcb(i, event->hw.config >> 32);
+#endif
 	write_pmlca(i, event->hw.config_base);
 
 	ret = 0;
@@ -329,7 +333,9 @@ static void fsl_emb_pmu_disable(struct perf_event *event)
 	WARN_ON(event != cpuhw->event[event->hw.idx]);
 
 	write_pmlca(i, 0);
+#ifdef CONFIG_E500
 	write_pmlcb(i, 0);
+#endif
 	write_pmc(i, 0);
 
 	cpuhw->event[i] = NULL;

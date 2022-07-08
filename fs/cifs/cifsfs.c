@@ -52,7 +52,7 @@
 int cifsFYI = 0;
 int cifsERROR = 1;
 int traceSMB = 0;
-unsigned int oplockEnabled = 1;
+unsigned int oplockEnabled = 0;
 unsigned int experimEnabled = 0;
 unsigned int linuxExtEnabled = 1;
 unsigned int lookupCacheEnabled = 1;

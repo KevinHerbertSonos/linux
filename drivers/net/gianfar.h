@@ -9,7 +9,7 @@
  * Maintainer: Kumar Gala
  * Modifier: Sandeep Gopalpet <sandeep.kumar@freescale.com>
  *
- * Copyright 2002-2009 Freescale Semiconductor, Inc.
+ * Copyright 2002-2010 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -47,8 +47,17 @@
 #include <linux/workqueue.h>
 #include <linux/ethtool.h>
 
+#ifdef CONFIG_GIANFAR_L2SRAM
+#include <asm/fsl_85xx_cache_sram.h>
+#define ALIGNMENT 0x20
+#endif
+
 /* The maximum number of packets to be handled in one call of gfar_poll */
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+#define GFAR_DEV_WEIGHT 16
+#else
 #define GFAR_DEV_WEIGHT 64
+#endif
 
 /* Length for FCB */
 #define GMAC_FCB_LEN 8
@@ -70,7 +79,7 @@
 #define PHY_INIT_TIMEOUT 100000
 #define GFAR_PHY_CHANGE_TIME 2
 
-#define DEVICE_NAME "%s: Gianfar Ethernet Controller Version 1.2, "
+#define DEVICE_NAME "%s: Gianfar Ethernet Controller Version 1.4-skbr1.1.5, "
 #define DRV_NAME "gfar-enet"
 extern const char gfar_driver_name[];
 extern const char gfar_driver_version[];
@@ -83,17 +92,25 @@ extern const char gfar_driver_version[];
 #define MAXGROUPS 0x2
 
 /* These need to be powers of 2 for this driver */
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+#define DEFAULT_TX_RING_SIZE	128
+#define DEFAULT_RX_RING_SIZE	128
+#else
 #define DEFAULT_TX_RING_SIZE	256
 #define DEFAULT_RX_RING_SIZE	256
+#endif
+#define DEFAULT_WK_RING_SIZE	16
 
-#define GFAR_RX_MAX_RING_SIZE   256
-#define GFAR_TX_MAX_RING_SIZE   256
+
+#define GFAR_TX_MAX_RING_SIZE   65536
+#define GFAR_MIN_RING_SIZE	4
 
 #define GFAR_MAX_FIFO_THRESHOLD 511
 #define GFAR_MAX_FIFO_STARVE	511
 #define GFAR_MAX_FIFO_STARVE_OFF 511
 
 #define DEFAULT_RX_BUFFER_SIZE  1536
+#define DEFAULT_WK_BUFFER_SIZE	2048
 #define TX_RING_MOD_MASK(size) (size-1)
 #define RX_RING_MOD_MASK(size) (size-1)
 #define JUMBO_BUFFER_SIZE 9728
@@ -105,6 +122,37 @@ extern const char gfar_driver_version[];
 #define DEFAULT_BD_STASH 1
 #define DEFAULT_STASH_LENGTH	96
 #define DEFAULT_STASH_INDEX	0
+
+#define PTP_GET_RX_TIMESTAMP_SYNC	SIOCDEVPRIVATE
+#define PTP_GET_RX_TIMESTAMP_DEL_REQ	(SIOCDEVPRIVATE + 1)
+#define PTP_GET_RX_TIMESTAMP_FOLLOWUP	(SIOCDEVPRIVATE + 2)
+#define PTP_GET_RX_TIMESTAMP_DEL_RESP	(SIOCDEVPRIVATE + 3)
+#define PTP_GET_TX_TIMESTAMP		(SIOCDEVPRIVATE + 4)
+#define PTP_SET_CNT			(SIOCDEVPRIVATE + 5)
+#define PTP_GET_CNT			(SIOCDEVPRIVATE + 6)
+#define PTP_SET_FIPER_ALARM		(SIOCDEVPRIVATE + 7)
+#define PTP_ADJ_ADDEND			(SIOCDEVPRIVATE + 9)
+#define PTP_GET_ADDEND			(SIOCDEVPRIVATE + 10)
+#define PTP_GET_RX_TIMESTAMP_PDELAY_REQ	(SIOCDEVPRIVATE + 11)
+#define PTP_GET_RX_TIMESTAMP_PDELAY_RESP	(SIOCDEVPRIVATE + 12)
+#define PTP_CLEANUP_TIMESTAMP_BUFFERS	(SIOCDEVPRIVATE + 13)
+#define DEFAULT_PTP_RX_BUF_SZ		2000
+#define GFAR_PTP_CTRL_SYNC		0x0
+#define GFAR_PTP_CTRL_DEL_REQ		0x1
+#define GFAR_PTP_CTRL_FOLLOWUP		0x2
+#define GFAR_PTP_CTRL_DEL_RESP		0x3
+#define GFAR_PTP_CTRL_ALL_OTHER		0x5
+#define GFAR_PTP_MSG_TYPE_PDREQ		0x02
+#define GFAR_PTP_MSG_TYPE_PDRESP	0x03
+#define GFAR_PTP_DOMAIN_DLFT		0xe0000181
+#define GFAR_PTP_PKT_TYPE_OFFS		0x1f
+#define GFAR_PTP_PROTOCOL_OFFS		0x20
+#define GFAR_PTP_MULTI_ADDR_OFFS	0x26
+#define GFAR_PTP_PORT_OFFS		0x2C
+#define GFAR_PTP_MSG_TYPE_OFFS		0x32
+#define GFAR_PTP_SEQ_ID_OFFS		0x50
+#define GFAR_PTP_CTRL_OFFS		0x52
+#define GFAR_PACKET_TYPE_UDP		0x11
 
 /* The number of Exact Match registers */
 #define GFAR_EM_NUM	15
@@ -124,8 +172,13 @@ extern const char gfar_driver_version[];
 #define GFAR_10_TIME    25600
 
 #define DEFAULT_TX_COALESCE 1
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+#define DEFAULT_TXCOUNT	22
+#define DEFAULT_TXTIME	64
+#else
 #define DEFAULT_TXCOUNT	16
 #define DEFAULT_TXTIME	21
+#endif
 
 #define DEFAULT_RXTIME	21
 
@@ -200,6 +253,9 @@ extern const char gfar_driver_version[];
 #define TR47WT_WT6_MASK		0x0000FF00
 #define TR47WT_WT7_MASK		0x000000FF
 
+#define WRRS_TR03WT		0xFFFFFFFF
+#define WRRS_TR47WT		0xFFFFFFFF
+
 /* Rqueue control */
 #define RQUEUE_EX0		0x00800000
 #define RQUEUE_EX1		0x00400000
@@ -221,10 +277,21 @@ extern const char gfar_driver_version[];
 #define RQUEUE_EN7		0x00000001
 #define RQUEUE_EN_ALL		0x000000FF
 
+/* Wake-On-Lan options */
+#define GIANFAR_WOL_PHY		(1 << 0)
+#define GIANFAR_WOL_UCAST	(1 << 1)
+#define GIANFAR_WOL_MCAST	(1 << 2)
+#define GIANFAR_WOL_BCAST	(1 << 3)
+#define GIANFAR_WOL_ARP		(1 << 4)
+#define GIANFAR_WOL_MAGIC	(1 << 5)
+
 /* Init to do tx snooping for buffers and descriptors */
 #define DMACTRL_INIT_SETTINGS   0x000000c3
 #define DMACTRL_GRS             0x00000010
 #define DMACTRL_GTS             0x00000008
+
+#define TSTAT_TXF_MASK_ALL	0x0000FF00
+#define TSTAT_TXF0_MASK		0x00008000
 
 #define TSTAT_CLEAR_THALT_ALL	0xFF000000
 #define TSTAT_CLEAR_THALT	0x80000000
@@ -262,15 +329,20 @@ extern const char gfar_driver_version[];
 
 #define next_bd(bdp, base, ring_size) skip_bd(bdp, 1, base, ring_size)
 
-#define RCTRL_TS_ENABLE 	0x01000000
+#define RCTRL_TS_ENABLE		0x01000000
+#define RCTRL_PADB_SIZE		(0x8 << 16)
 #define RCTRL_PAL_MASK		0x001f0000
 #define RCTRL_VLEX		0x00002000
 #define RCTRL_FILREN		0x00001000
+#define RCTRL_FSQEN		0x00000800
 #define RCTRL_GHTX		0x00000400
 #define RCTRL_IPCSEN		0x00000200
 #define RCTRL_TUCSEN		0x00000100
 #define RCTRL_PRSDEP_MASK	0x000000c0
 #define RCTRL_PRSDEP_INIT	0x000000c0
+#define RCTRL_PRSDEP_L2	0x00000040
+#define RCTRL_PRSDEP_L2L3	0x00000080
+#define RCTRL_PRSDEP_L2L3L4	0x000000c0
 #define RCTRL_PROM		0x00000008
 #define RCTRL_EMEN		0x00000002
 #define RCTRL_REQ_PARSER	(RCTRL_VLEX | RCTRL_IPCSEN | \
@@ -283,6 +355,8 @@ extern const char gfar_driver_version[];
 
 
 #define RSTAT_CLEAR_RHALT       0x00800000
+#define RSTAT_RXF_ALL_MASK	0x000000FF
+#define RSTAT_RXF0_MASK		0x00000080
 
 #define TCTRL_IPCSEN		0x00004000
 #define TCTRL_TUCSEN		0x00002000
@@ -315,18 +389,20 @@ extern const char gfar_driver_version[];
 #define IEVENT_MAG		0x00000800
 #define IEVENT_GRSC		0x00000100
 #define IEVENT_RXF0		0x00000080
+#define IEVENT_FGPI		0x00000010
 #define IEVENT_FIR		0x00000008
 #define IEVENT_FIQ		0x00000004
 #define IEVENT_DPE		0x00000002
 #define IEVENT_PERR		0x00000001
-#define IEVENT_RX_MASK          (IEVENT_RXB0 | IEVENT_RXF0 | IEVENT_BSY)
+#define IEVENT_RX_MASK          (IEVENT_RXB0 | IEVENT_RXF0 | \
+					IEVENT_FGPI | IEVENT_BSY)
 #define IEVENT_TX_MASK          (IEVENT_TXB | IEVENT_TXF)
 #define IEVENT_RTX_MASK         (IEVENT_RX_MASK | IEVENT_TX_MASK)
 #define IEVENT_ERR_MASK         \
 (IEVENT_RXC | IEVENT_BSY | IEVENT_EBERR | IEVENT_MSRO | \
  IEVENT_BABT | IEVENT_TXC | IEVENT_TXE | IEVENT_LC \
- | IEVENT_CRL | IEVENT_XFUN | IEVENT_DPE | IEVENT_PERR \
- | IEVENT_MAG | IEVENT_BABR)
+ | IEVENT_CRL | IEVENT_XFUN | IEVENT_FIR | IEVENT_FIQ \
+ | IEVENT_DPE | IEVENT_PERR | IEVENT_MAG | IEVENT_BABR)
 
 #define IMASK_INIT_CLEAR	0x00000000
 #define IMASK_BABR              0x80000000
@@ -347,17 +423,26 @@ extern const char gfar_driver_version[];
 #define IMASK_MAG		0x00000800
 #define IMASK_GRSC              0x00000100
 #define IMASK_RXFEN0		0x00000080
+#define IMASK_FGPI		0x00000010
 #define IMASK_FIR		0x00000008
 #define IMASK_FIQ		0x00000004
 #define IMASK_DPE		0x00000002
 #define IMASK_PERR		0x00000001
+#define IMASK_RX_DISABLED (~(IMASK_RXFEN0 | IMASK_BSY))
 #define IMASK_DEFAULT  (IMASK_TXEEN | IMASK_TXFEN | IMASK_TXBEN | \
 		IMASK_RXFEN0 | IMASK_BSY | IMASK_EBERR | IMASK_BABR | \
-		IMASK_XFUN | IMASK_RXC | IMASK_BABT | IMASK_DPE \
-		| IMASK_PERR)
-#define IMASK_RTX_DISABLED ((~(IMASK_RXFEN0 | IMASK_TXFEN | IMASK_BSY)) \
-			   & IMASK_DEFAULT)
+		IMASK_XFUN | IMASK_RXC | IMASK_BABT | IMASK_FGPI | \
+		IMASK_FIR | IMASK_FIQ | IMASK_DPE | IMASK_PERR | IMASK_RXB0)
+#define IMASK_RTX_DISABLED ((~(IMASK_RXFEN0 | IMASK_RXB0 | IMASK_BSY | \
+				IMASK_TXFEN)) & IMASK_DEFAULT)
 
+#ifdef CONFIG_GIANFAR_TXNAPI
+#define IMASK_DEFAULT_TX	(IMASK_TXFEN | IMASK_TXBEN)
+#define IMASK_DEFAULT_RX	(IMASK_RXFEN0 | IMASK_RXB0 | IMASK_BSY)
+
+#define IMASK_TX_DISABLED	((~IMASK_DEFAULT_TX) \
+				& IMASK_DEFAULT)
+#endif
 /* Fifo management */
 #define FIFO_TX_THR_MASK	0x01ff
 #define FIFO_TX_STARVE_MASK	0x01ff
@@ -507,6 +592,7 @@ extern const char gfar_driver_version[];
 #define RXBD_OVERRUN		0x0002
 #define RXBD_TRUNCATED		0x0001
 #define RXBD_STATS		0x01ff
+#define RXBD_CLEAN              0x3000
 #define RXBD_ERR		(RXBD_LARGE | RXBD_SHORT | RXBD_NONOCTET 	\
 				| RXBD_CRCERR | RXBD_OVERRUN			\
 				| RXBD_TRUNCATED)
@@ -524,7 +610,25 @@ extern const char gfar_driver_version[];
 #define RXFCB_PERR_MASK		0x000c
 #define RXFCB_PERR_BADL3	0x0008
 
+/* 1588 Module Registers bits */
+#define TMR_CTRL_ENABLE		0x00000004
+#define TMR_CTRL_RTC_CLK	0x00000003
+#define TMR_CTRL_EXT_CLK	0x00000000
+#define TMR_CTRL_SYS_CLK	0x00000001
+#define TMR_ADD_VAL		CONFIG_GFAR_PTP_TMR_ADD
+#define TMR_CTRL_TCLK_MASK	0x03ff0000
+#define TMR_PTPD_MAX_FREQ	0x80000
+#define TMR_CTRL_FIPER_START	0x10000000
+#define TMR_FIPER1		1000000000
+/*Alarm to traigger at 15sec boundary */
+#define TMR_ALARM1_L	0xD964B800
+#define TMR_ALARM1_H	0x00000045
+#define TMR_PRSC	0x2
+#define TMR_SEC		1000000000
+
 #define GFAR_INT_NAME_MAX	IFNAMSIZ + 4
+
+#define GIANFAR_WOL_MAGIC       (1 << 5)
 
 struct txbd8
 {
@@ -540,7 +644,7 @@ struct txbd8
 
 struct txfcb {
 	u8	flags;
-	u8	ptp;    /* Flag to enable tx timestamping */
+	u8	ptp;	/* Least significant bit for enabling Tx Timestamping */
 	u8	l4os;	/* Level 4 Header Offset */
 	u8	l3os; 	/* Level 3 Header Offset */
 	u16	phcs;	/* Pseudo-header Checksum */
@@ -627,6 +731,13 @@ struct rmon_mib
 
 struct gfar_extra_stats {
 	u64 kernel_dropped;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	u64 rx_skbr;
+	u64 rx_skbr_free;
+#endif
+#ifdef CONFIG_NET_GIANFAR_FP
+	u64 rx_fast;
+#endif
 	u64 rx_large;
 	u64 rx_short;
 	u64 rx_nonoctet;
@@ -655,6 +766,41 @@ struct gfar_stats {
 	u64 rmon[GFAR_RMON_LEN];
 };
 
+/* IEEE-1588 Timer Controller Registers */
+struct gfar_regs_1588 {
+	u32	tmr_ctrl;	/* 0x.e00 - Timer Control Register */
+	u32	tmr_tevent;	/* 0x.e04 - Timer stamp event register */
+	u32	tmr_temask;	/* 0x.e08 - Timer event mask register */
+	u32	tmr_pevent;	/* 0x.e0c - Timer stamp event register */
+	u32	tmr_pemask;	/* 0x.e10 - Timer event mask register */
+	u32	tmr_stat;	/* 0x.e14 - Timer stamp status register */
+	u32	tmr_cnt_h;	/* 0x.e18 - Timer counter high register */
+	u32	tmr_cnt_l;	/* 0x.e1c - Timer counter low register */
+	u32	tmr_add;	/* 0x.e20 - Timer dirft compensation*/
+					/*addend register */
+	u32	tmr_acc;	/* 0x.e24 - Timer accumulator register */
+	u32	tmr_prsc;	/* 0x.e28 - Timer prescale register */
+	u8	res24a[4];	/* 0x.e2c - 0x.e2f reserved */
+	u32	tmr_off_h;	/* 0x.e30 - Timer offset high register */
+	u32	tmr_off_l;	/* 0x.e34 - Timer offset low register */
+	u8	res24b[8];	/* 0x.e38 - 0x.e3f reserved */
+	u32	tmr_alarm1_h;	/* 0x.e40 - Timer alarm 1 high register */
+	u32	tmr_alarm1_l;	/* 0x.e44 - Timer alarm 1 low register */
+	u32	tmr_alarm2_h;	/* 0x.e48 - Timer alarm 2 high register */
+	u32	tmr_alarm2_l;	/* 0x.e4c - Timer alarm 2 low register */
+	u8	res24c[48];	/* 0x.e50 - 0x.e7f reserved */
+	u32	tmr_fiper1;	/* 0x.e80 - Timer fixed period register 1 */
+	u32	tmr_fiper2;	/* 0x.e84 - Timer fixed period register 2 */
+	u32	tmr_fiper3;	/* 0x.e88 - Timer fixed period register 3 */
+	u8	res24d[20];	/* 0x.e8c - 0x.ebf reserved */
+	u32	tmr_etts1_h;	/* 0x.ea0 - Timer stamp high of*/
+					/*general purpose external trigger 1*/
+	u32	tmr_etts1_l;	/* 0x.ea4 - Timer stamp low of*/
+					/*general purpose external trigger 1*/
+	u32	tmr_etts2_h;	/* 0x.ea8 - Timer stamp high of*/
+					/*general purpose external trigger 2 */
+	u32	tmr_etts2_l;	/* 0x.eac - Timer stamp low of*/
+};
 
 struct gfar {
 	u32	tsec_id;	/* 0x.000 - Controller ID register */
@@ -728,7 +874,15 @@ struct gfar {
 	u32	tbase6;		/* 0x.234 - TxBD Base Address of ring 6 */
 	u8	res10g[4];
 	u32	tbase7;		/* 0x.23c - TxBD Base Address of ring 7 */
-	u8	res10[192];
+	u8	res10h[64];
+	u32	tmr_txts1_id;	/* 0x.280 Tx time stamp identification*/
+	u32	tmr_txts2_id;	/* 0x.284 Tx time stamp Identification*/
+	u8	res10i[56];
+	u32	tmr_txts1_h;	/* 0x.2c0 Tx time stamp high*/
+	u32	tmr_txts1_l;	/* 0x.2c4 Tx Time Stamp low*/
+	u32	tmr_txts2_h;	/* 0x.2c8 Tx time stamp high*/
+	u32	tmr_txts2_l;	/*0x.2cc  Tx Time Stamp low */
+	u8	res10j[48];
 	u32	rctrl;		/* 0x.300 - Receive Control Register */
 	u32	rstat;		/* 0x.304 - Receive Status Register */
 	u8	res12[8];
@@ -779,7 +933,10 @@ struct gfar {
 	u32	rbase6;		/* 0x.434 - RxBD base address of ring 6 */
 	u8	res17g[4];
 	u32	rbase7;		/* 0x.43c - RxBD base address of ring 7 */
-	u8	res17[192];
+	u8	res17h[128];
+	u32	tmr_rxts_h;	/* 0x.4c0 Rx Time Stamp high*/
+	u32	tmr_rxts_l;	/* 0x.4c4 Rx Time Stamp low */
+	u8	res17i[56];
 	u32	maccfg1;	/* 0x.500 - MAC Configuration 1 Register */
 	u32	maccfg2;	/* 0x.504 - MAC Configuration 2 Register */
 	u32	ipgifg;		/* 0x.508 - Inter Packet Gap/Inter Frame Gap Register */
@@ -848,7 +1005,8 @@ struct gfar {
 	u8	res23c[248];
 	u32	attr;		/* 0x.bf8 - Attributes Register */
 	u32	attreli;	/* 0x.bfc - Attributes Extract Length and Extract Index Register */
-	u8	res24[688];
+	u8	res24[512];
+	struct gfar_regs_1588 regs_1588;
 	u32	isrg0;		/* 0x.eb0 - Interrupt steering group 0 register */
 	u32	isrg1;		/* 0x.eb4 - Interrupt steering group 1 register */
 	u32	isrg2;		/* 0x.eb8 - Interrupt steering group 2 register */
@@ -874,6 +1032,48 @@ struct gfar {
 	u8	res27[208];
 };
 
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+#define GFAR_DEFAULT_RECYCLE_MAX 64
+#define GFAR_DEFAULT_RECYCLE_TRUESIZE (SKB_DATA_ALIGN(DEFAULT_RX_BUFFER_SIZE \
+		+ RXBUF_ALIGNMENT + NET_SKB_PAD) + sizeof(struct sk_buff))
+
+/* Socket buffer recycling handler for Gianfar driver. This structure has own
+ * spinlock to prevent simultaneous access. The member recycle_queue holds
+ * top of recyclable socket buffer which are owned by this interface.
+ * Maximu size of recyclable buffers are defined by recycle_max, and
+ * current size of list is recycle_count.
+ */
+struct gfar_skb_handler {
+	/* Lock for buffer recycling queue */
+	spinlock_t	lock;
+	short int	recycle_max;
+	short int	recycle_count;
+	short int	recycle_enable;
+	struct sk_buff *recycle_queue;
+};
+
+extern void gfar_free_recycle_queue(struct gfar_skb_handler *sh,
+		int lock_flag);
+#endif
+
+/* Structure for PTP Time Stamp */
+struct gfar_ptp_time {
+	u32	high;
+	u32	low;
+};
+
+struct gfar_ptp_data_t {
+	int	key;
+	struct	gfar_ptp_time	item;
+};
+
+struct gfar_ptp_circular_t {
+	int	front;
+	int	end;
+	int	size;
+	struct	gfar_ptp_data_t *data_buf;
+};
+
 /* Flags related to gianfar device features */
 #define FSL_GIANFAR_DEV_HAS_GIGABIT		0x00000001
 #define FSL_GIANFAR_DEV_HAS_COALESCE		0x00000002
@@ -886,7 +1086,7 @@ struct gfar {
 #define FSL_GIANFAR_DEV_HAS_MAGIC_PACKET	0x00000100
 #define FSL_GIANFAR_DEV_HAS_BD_STASHING		0x00000200
 #define FSL_GIANFAR_DEV_HAS_BUF_STASHING	0x00000400
-#define FSL_GIANFAR_DEV_HAS_TIMER		0x00000800
+#define FSL_GIANFAR_DEV_HAS_ARP_PACKET		0x00001000
 
 #if (MAXGROUPS == 2)
 #define DEFAULT_MAPPING 	0xAA
@@ -946,6 +1146,9 @@ struct gfar_priv_tx_q {
 	unsigned long txic;
 	unsigned short txcount;
 	unsigned short txtime;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	struct gfar_skb_handler *local_sh; /*per_cpu*/
+#endif
 };
 
 /*
@@ -986,6 +1189,11 @@ struct gfar_priv_rx_q {
 	/* RX Coalescing values */
 	unsigned char rxcoalescing;
 	unsigned long rxic;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	unsigned int rx_skbuff_truesize;
+	struct gfar_skb_handler skb_handler;
+	struct gfar_skb_handler *local_sh; /*per_cpu*/
+#endif
 };
 
 /**
@@ -1004,7 +1212,12 @@ struct gfar_priv_rx_q {
 
 struct gfar_priv_grp {
 	spinlock_t grplock __attribute__ ((aligned (SMP_CACHE_BYTES)));
+#ifdef CONFIG_GIANFAR_TXNAPI
+	struct napi_struct napi_tx;
+	struct napi_struct napi_rx;
+#else
 	struct	napi_struct napi;
+#endif
 	struct gfar_private *priv;
 	struct gfar __iomem *regs;
 	unsigned int grp_id;
@@ -1061,10 +1274,21 @@ struct gfar_private {
 
 	u32 cur_filer_idx;
 
-	struct sk_buff_head rx_recycle;
+	/* wake up ring */
+	struct rxbd8 *wk_bd_base;
+	struct rxbd8 *cur_wk;
+
+	/* wake up ring parameters */
+	unsigned int wk_ring_size;
+	unsigned int wk_buffer_size;
+
+	/* wake up buffer */
+	unsigned long wk_buf_vaddr;
+	unsigned long wk_buf_paddr;
+	unsigned long wk_buf_align_vaddr;
+	unsigned long wk_buf_align_paddr;
 
 	struct vlan_group *vlgrp;
-
 
 	/* Hash registers and their width */
 	u32 __iomem *hash_regs[16];
@@ -1095,17 +1319,40 @@ struct gfar_private {
 	int oldspeed;
 	int oldduplex;
 	int oldlink;
+#if defined(CONFIG_SONOS) || defined(__SONOS_LINUX__)
+	int do_notify;
+#endif
 
 	uint32_t msg_enable;
 
 	struct work_struct reset_task;
 
+	u8 ip_addr[4];
+	int wol_opts;
+
 	/* Network Statistics */
 	struct gfar_extra_stats extra_stats;
+	struct gfar_ptp_circular_t rx_time_sync;
+	struct gfar_ptp_circular_t rx_time_del_req;
 
-	/* HW time stamping enabled flag */
-	int hwts_rx_en;
-	int hwts_tx_en;
+	/* 1588 stuff */
+	struct gfar_ptp_circular_t rx_time_pdel_req;
+	struct gfar_ptp_circular_t rx_time_pdel_resp;
+	struct gfar_regs_1588 __iomem *ptimer;
+	struct resource timer_resource;
+	uint32_t ptimer_present;
+
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	unsigned int skbuff_truesize;
+	struct gfar_skb_handler skb_handler;
+#endif
+};
+
+struct gfar_ptp_attr_t {
+	u32 tclk_period;
+	u32 nominal_freq;
+	u32 sysclock_freq;
+	u32 freq_div_ratioo;
 };
 
 extern unsigned int ftp_rqfpr[MAX_FILER_IDX + 1];
@@ -1121,6 +1368,16 @@ static inline u32 gfar_read(volatile unsigned __iomem *addr)
 static inline void gfar_write(volatile unsigned __iomem *addr, u32 val)
 {
 	out_be32(addr, val);
+}
+
+static inline void gfar_read_filer(struct gfar_private *priv,
+		unsigned int far, u32 *fcr, u32 *fpr)
+{
+	struct gfar __iomem *regs = priv->gfargrp[0].regs;
+
+	gfar_write(&regs->rqfar, far);
+	*fcr = gfar_read(&regs->rqfcr);
+	*fpr = gfar_read(&regs->rqfpr);
 }
 
 static inline void gfar_write_filer(struct gfar_private *priv,
@@ -1141,12 +1398,25 @@ extern irqreturn_t gfar_receive(int irq, void *dev_id);
 extern int startup_gfar(struct net_device *dev);
 extern void stop_gfar(struct net_device *dev);
 extern void gfar_halt(struct net_device *dev);
+extern void gfar_1588_start(struct net_device *dev);
+extern void gfar_1588_stop(struct net_device *dev);
+extern int gfar_ptp_init(struct gfar_private *priv);
+extern void gfar_ptp_cleanup(struct gfar_private *priv);
+extern int gfar_ptp_do_txstamp(struct sk_buff *skb);
+extern void pmuxcr_guts_write(void);
+extern void gfar_ptp_store_rxstamp(struct net_device *dev, struct sk_buff *skb);
+extern int gfar_ioctl_1588(struct net_device *dev, struct ifreq *ifr, int cmd);
 extern void gfar_phy_test(struct mii_bus *bus, struct phy_device *phydev,
 		int enable, u32 regnum, u32 read);
-extern void gfar_configure_coalescing(struct gfar_private *priv,
-		unsigned long tx_mask, unsigned long rx_mask);
+extern void gfar_configure_tx_coalescing(struct gfar_private *priv,
+					long unsigned int tx_mask);
+extern void gfar_configure_rx_coalescing(struct gfar_private *priv,
+					long unsigned int rx_mask);
 void gfar_init_sysfs(struct net_device *dev);
 
 extern const struct ethtool_ops gfar_ethtool_ops;
 
+#ifdef CONFIG_NET_GIANFAR_FP
+extern int netdev_fastroute;
+#endif
 #endif /* __GIANFAR_H */

@@ -16,12 +16,17 @@
  *   the GNU Lesser General Public License for more details.
  *
  */
+#ifndef _CIFS_GLOB_H
+#define _CIFS_GLOB_H
+
 #include <linux/in.h>
 #include <linux/in6.h>
 #include <linux/slab.h>
 #include <linux/slow-work.h>
 #include "cifs_fs_sb.h"
 #include "cifsacl.h"
+#include <crypto/internal/hash.h>
+
 /*
  * The sizes of various internal tables and strings
  */
@@ -34,7 +39,7 @@
 #define MAX_SHARE_SIZE  64	/* used to be 20, this should still be enough */
 #define MAX_USERNAME_SIZE 32	/* 32 is to allow for 15 char names + null
 				   termination then *2 for unicode versions */
-#define MAX_PASSWORD_SIZE 16
+#define MAX_PASSWORD_SIZE 512  /* max for windows seems to be 256 wide chars */
 
 #define CIFS_MIN_RCV_POOL 4
 
@@ -71,7 +76,7 @@
  * CIFS vfs client Status information (based on what we know.)
  */
 
- /* associated with each tcp and smb session */
+/* associated with each tcp and smb session */
 enum statusEnum {
 	CifsNew = 0,
 	CifsGood,
@@ -95,16 +100,31 @@ enum protocolEnum {
 	/* Netbios frames protocol not supported at this time */
 };
 
-struct mac_key {
+struct session_key {
 	unsigned int len;
-	union {
-		char ntlm[CIFS_SESS_KEY_SIZE + 16];
-		char krb5[CIFS_SESS_KEY_SIZE + 16]; /* BB: length correct? */
-		struct {
-			char key[16];
-			struct ntlmv2_resp resp;
-		} ntlmv2;
-	} data;
+	char *response;
+};
+
+/* crypto security descriptor definition */
+struct sdesc {
+	struct shash_desc shash;
+	char ctx[];
+};
+
+/* crypto hashing related structure/fields, not specific to a sec mech */
+struct cifs_secmech {
+	struct crypto_shash *hmacmd5; /* hmac-md5 hash function */
+	struct crypto_shash *md5; /* md5 hash function */
+	struct sdesc *sdeschmacmd5;  /* ctxt to generate ntlmv2 hash, CR1 */
+	struct sdesc *sdescmd5; /* ctxt to generate cifs/smb signature */
+};
+
+/* per smb session structure/fields */
+struct ntlmssp_auth {
+	__u32 client_flags; /* sent by client in type 1 ntlmsssp exchange */
+	__u32 server_flags; /* sent by server in type 2 ntlmssp exchange */
+	unsigned char ciphertext[CIFS_CPHTXT_SIZE]; /* sent to server */
+	char cryptkey[CIFS_CRYPTO_KEY_SIZE]; /* used by ntlmssp */
 };
 
 struct cifs_cred {
@@ -142,7 +162,6 @@ struct TCP_Server_Info {
 	struct list_head pending_mid_q;
 	void *Server_NlsInfo;	/* BB - placeholder for future NLS info  */
 	unsigned short server_codepage;	/* codepage for the server    */
-	unsigned long ip_address;	/* IP addr for the server if known */
 	enum protocolEnum protocolType;
 	char versionMajor;
 	char versionMinor;
@@ -176,33 +195,24 @@ struct TCP_Server_Info {
 	/* (returned on Negotiate */
 	int capabilities; /* allow selective disabling of caps by smb sess */
 	int timeAdj;  /* Adjust for difference in server time zone in sec */
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	long timeOff;  /* adjustment from our time to server in sec */
+#endif
 	__u16 CurrentMid;         /* multiplex id - rotating counter */
-	char cryptKey[CIFS_CRYPTO_KEY_SIZE];
+	char cryptkey[CIFS_CRYPTO_KEY_SIZE]; /* used by ntlm, ntlmv2 etc */
 	/* 16th byte of RFC1001 workstation name is always null */
 	char workstation_RFC1001_name[RFC1001_NAME_LEN_WITH_NULL];
 	__u32 sequence_number; /* needed for CIFS PDU signature */
-	struct mac_key mac_signing_key;
-	char ntlmv2_hash[16];
+	struct session_key session_key;
 	unsigned long lstrp; /* when we got last response from this server */
 	u16 dialect; /* dialect index that server chose */
+	struct cifs_secmech secmech; /* crypto sec mech functs, descriptors */
 	/* extended security flavors that server supports */
 	bool	sec_kerberos;		/* supports plain Kerberos */
 	bool	sec_mskerberos;		/* supports legacy MS Kerberos */
 	bool	sec_kerberosu2u;	/* supports U2U Kerberos */
 	bool	sec_ntlmssp;		/* supports NTLMSSP */
-};
-
-/*
- * The following is our shortcut to user information.  We surface the uid,
- * and name. We always get the password on the fly in case it
- * has changed. We also hang a list of sessions owned by this user off here.
- */
-struct cifsUidInfo {
-	struct list_head userList;
-	struct list_head sessionList; /* SMB sessions for this user */
-	uid_t linux_uid;
-	char user[MAX_USERNAME_SIZE + 1];	/* ascii name of user */
-	/* BB may need ptr or callback for PAM or WinBind info */
+	bool session_estab; /* mark when very first sess is established */
 };
 
 /*
@@ -212,9 +222,6 @@ struct cifsSesInfo {
 	struct list_head smb_ses_list;
 	struct list_head tcon_list;
 	struct mutex session_mutex;
-#if 0
-	struct cifsUidInfo *uidInfo;	/* pointer to user info */
-#endif
 	struct TCP_Server_Info *server;	/* pointer to server info */
 	int ses_count;		/* reference counter */
 	enum statusEnum status;
@@ -233,6 +240,11 @@ struct cifsSesInfo {
 	char userName[MAX_USERNAME_SIZE + 1];
 	char *domainName;
 	char *password;
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	long timeOff;  /* session-specific adjustment of our time to server in sec */
+#endif
+	struct session_key auth_key;
+	struct ntlmssp_auth *ntlmssp; /* ciphertext, flags, server challenge */
 	bool need_reconnect:1; /* connection reset, uid now invalid */
 };
 /* no more than one of the following three session flags may be set */
@@ -733,3 +745,7 @@ GLOBAL_EXTERN unsigned int cifs_min_small;  /* min size of small buf pool */
 GLOBAL_EXTERN unsigned int cifs_max_pending; /* MAX requests at once to server*/
 
 extern const struct slow_work_ops cifs_oplock_break_ops;
+
+
+
+#endif	/* _CIFS_GLOB_H */

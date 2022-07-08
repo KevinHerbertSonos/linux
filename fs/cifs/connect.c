@@ -52,8 +52,6 @@
 #define CIFS_PORT 445
 #define RFC1001_PORT 139
 
-extern void SMBNTencrypt(unsigned char *passwd, unsigned char *c8,
-			 unsigned char *p24);
 
 extern mempool_t *cifs_req_poolp;
 
@@ -64,8 +62,8 @@ struct smb_vol {
 	char *UNC;
 	char *UNCip;
 	char *iocharset;  /* local code page for mapping to and from Unicode */
-	char source_rfc1001_name[16]; /* netbios name of client */
-	char target_rfc1001_name[16]; /* netbios name of server for Win9x/ME */
+	char source_rfc1001_name[RFC1001_NAME_LEN_WITH_NULL]; /* clnt nb name */
+	char target_rfc1001_name[RFC1001_NAME_LEN_WITH_NULL]; /* srvr nb name */
 	uid_t linux_uid;
 	gid_t linux_gid;
 	mode_t file_mode;
@@ -163,6 +161,11 @@ cifs_reconnect(struct TCP_Server_Info *server)
 		sock_release(server->ssocket);
 		server->ssocket = NULL;
 	}
+	server->sequence_number = 0;
+	server->session_estab = false;
+	kfree(server->session_key.response);
+	server->session_key.response = NULL;
+	server->session_key.len = 0;
 
 	spin_lock(&GlobalMid_Lock);
 	list_for_each(tmp, &server->pending_mid_q) {
@@ -195,7 +198,6 @@ cifs_reconnect(struct TCP_Server_Info *server)
 			spin_lock(&GlobalMid_Lock);
 			if (server->tcpStatus != CifsExiting)
 				server->tcpStatus = CifsGood;
-			server->sequence_number = 0;
 			spin_unlock(&GlobalMid_Lock);
 	/*		atomic_set(&server->inFlight,0);*/
 			wake_up(&server->response_q);
@@ -300,9 +302,9 @@ static int coalesce_t2(struct smb_hdr *psecond, struct smb_hdr *pTargetSMB)
 	memcpy(data_area_of_target, data_area_of_buf2, total_in_buf2);
 	total_in_buf += total_in_buf2;
 	pSMBt->t2_rsp.DataCount = cpu_to_le16(total_in_buf);
-	byte_count = le16_to_cpu(BCC_LE(pTargetSMB));
+	byte_count = get_bcc(pTargetSMB);
 	byte_count += total_in_buf2;
-	BCC_LE(pTargetSMB) = cpu_to_le16(byte_count);
+	put_bcc(byte_count, pTargetSMB);
 
 	byte_count = pTargetSMB->smb_buf_length;
 	byte_count += total_in_buf2;
@@ -397,7 +399,9 @@ incomplete_rcv:
 			cFYI(1, "call to reconnect done");
 			csocket = server->ssocket;
 			continue;
-		} else if ((length == -ERESTARTSYS) || (length == -EAGAIN)) {
+		} else if (length == -ERESTARTSYS ||
+			   length == -EAGAIN ||
+			   length == -EINTR) {
 			msleep(1); /* minimum sleep to prevent looping
 				allowing socket to clear and app threads to set
 				tcpStatus CifsNeedReconnect if server hung */
@@ -519,8 +523,7 @@ incomplete_rcv:
 		     total_read += length) {
 			length = kernel_recvmsg(csocket, &smb_msg, &iov, 1,
 						pdu_length - total_read, 0);
-			if ((server->tcpStatus == CifsExiting) ||
-			    (length == -EINTR)) {
+			if (server->tcpStatus == CifsExiting) {
 				/* then will exit */
 				reconnect = 2;
 				break;
@@ -531,8 +534,9 @@ incomplete_rcv:
 				/* Now we will reread sock */
 				reconnect = 1;
 				break;
-			} else if ((length == -ERESTARTSYS) ||
-				   (length == -EAGAIN)) {
+			} else if (length == -ERESTARTSYS ||
+				   length == -EAGAIN ||
+				   length == -EINTR) {
 				msleep(1); /* minimum sleep to prevent looping,
 					      allowing socket to clear and app
 					      threads to set tcpStatus
@@ -801,8 +805,7 @@ static int
 cifs_parse_mount_options(char *options, const char *devname,
 			 struct smb_vol *vol)
 {
-	char *value;
-	char *data;
+	char *value, *data, *end;
 	unsigned int  temp_len, i, j;
 	char separator[2];
 	short int override_uid = -1;
@@ -840,11 +843,18 @@ cifs_parse_mount_options(char *options, const char *devname,
 	/* default is always to request posix paths. */
 	vol->posix_paths = 1;
 	/* default to using server inode numbers where available */
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	/* Sonos: The default value for vol->server_ino in our
+	   other implementations is 0, not 1. */
+	vol->server_ino = 0;
+#else
 	vol->server_ino = 1;
+#endif
 
 	if (!options)
 		return 1;
 
+	end = options + strlen(options);
 	if (strncmp(options, "sep=", 4) == 0) {
 		if (options[4] != 0) {
 			separator[0] = options[4];
@@ -909,6 +919,7 @@ cifs_parse_mount_options(char *options, const char *devname,
 			the only illegal character in a password is null */
 
 			if ((value[temp_len] == 0) &&
+				(value + temp_len < end) &&
 			    (value[temp_len+1] == separator[0])) {
 				/* reinsert comma */
 				value[temp_len] = separator[0];
@@ -987,7 +998,7 @@ cifs_parse_mount_options(char *options, const char *devname,
 				return 1;
 			} else if (strnicmp(value, "krb5", 4) == 0) {
 				vol->secFlg |= CIFSSEC_MAY_KRB5;
-#ifdef CONFIG_CIFS_EXPERIMENTAL
+#if defined(CONFIG_CIFS_EXPERIMENTAL) || defined(CONFIG_CIFS_NTLMSSP_SONOS)
 			} else if (strnicmp(value, "ntlmsspi", 8) == 0) {
 				vol->secFlg |= CIFSSEC_MAY_NTLMSSP |
 					CIFSSEC_MUST_SIGN;
@@ -1460,6 +1471,12 @@ cifs_put_tcp_session(struct TCP_Server_Info *server)
 	server->tcpStatus = CifsExiting;
 	spin_unlock(&GlobalMid_Lock);
 
+	cifs_crypto_shash_release(server);
+
+	kfree(server->session_key.response);
+	server->session_key.response = NULL;
+	server->session_key.len = 0;
+
 	task = xchg(&server->tsk, NULL);
 	if (task)
 		force_sig(SIGKILL, task);
@@ -1509,10 +1526,16 @@ cifs_get_tcp_session(struct smb_vol *volume_info)
 		goto out_err;
 	}
 
+	rc = cifs_crypto_shash_allocate(tcp_ses);
+	if (rc) {
+		cERROR(1, "could not setup hash structures rc %d", rc);
+		goto out_err;
+	}
+
 	tcp_ses->hostname = extract_hostname(volume_info->UNC);
 	if (IS_ERR(tcp_ses->hostname)) {
 		rc = PTR_ERR(tcp_ses->hostname);
-		goto out_err;
+		goto out_err_crypto_release;
 	}
 
 	tcp_ses->noblocksnd = volume_info->noblocksnd;
@@ -1527,6 +1550,7 @@ cifs_get_tcp_session(struct smb_vol *volume_info)
 		volume_info->source_rfc1001_name, RFC1001_NAME_LEN_WITH_NULL);
 	memcpy(tcp_ses->server_RFC1001_name,
 		volume_info->target_rfc1001_name, RFC1001_NAME_LEN_WITH_NULL);
+	tcp_ses->session_estab = false;
 	tcp_ses->sequence_number = 0;
 	INIT_LIST_HEAD(&tcp_ses->tcp_ses_list);
 	INIT_LIST_HEAD(&tcp_ses->smb_ses_list);
@@ -1555,7 +1579,7 @@ cifs_get_tcp_session(struct smb_vol *volume_info)
 	}
 	if (rc < 0) {
 		cERROR(1, "Error connecting to socket. Aborting operation");
-		goto out_err;
+		goto out_err_crypto_release;
 	}
 
 	/*
@@ -1569,7 +1593,7 @@ cifs_get_tcp_session(struct smb_vol *volume_info)
 		rc = PTR_ERR(tcp_ses->tsk);
 		cERROR(1, "error %d create cifsd thread", rc);
 		module_put(THIS_MODULE);
-		goto out_err;
+		goto out_err_crypto_release;
 	}
 
 	/* thread spawned, put it on the list */
@@ -1578,6 +1602,9 @@ cifs_get_tcp_session(struct smb_vol *volume_info)
 	write_unlock(&cifs_tcp_ses_lock);
 
 	return tcp_ses;
+
+out_err_crypto_release:
+	cifs_crypto_shash_release(tcp_ses);
 
 out_err:
 	if (tcp_ses) {
@@ -1647,9 +1674,6 @@ cifs_get_smb_ses(struct TCP_Server_Info *server, struct smb_vol *volume_info)
 	if (ses) {
 		cFYI(1, "Existing smb sess found (status=%d)", ses->status);
 
-		/* existing SMB ses has a server reference already */
-		cifs_put_tcp_session(server);
-
 		mutex_lock(&ses->session_mutex);
 		rc = cifs_negotiate_protocol(xid, ses);
 		if (rc) {
@@ -1672,6 +1696,9 @@ cifs_get_smb_ses(struct TCP_Server_Info *server, struct smb_vol *volume_info)
 			}
 		}
 		mutex_unlock(&ses->session_mutex);
+
+		/* existing SMB ses has a server reference already */
+		cifs_put_tcp_session(server);
 		FreeXid(xid);
 		return ses;
 	}
@@ -2295,6 +2322,14 @@ void reset_cifs_unix_caps(int xid, struct cifsTconInfo *tcon,
 
 		}
 	}
+	else {
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+		/* Sonos: Turn off UNIX extensions if negoation failed, but do
+		   not fail the mount */
+		tcon->unix_ext = 0;
+		cFYI(1, "could not negotiate unix ext, continuing");
+#endif
+	}
 }
 
 static void
@@ -2614,7 +2649,7 @@ remote_path_check:
 			goto mount_fail_check;
 		}
 		rc = is_path_accessible(xid, tcon, cifs_sb, full_path);
-		if (rc != -EREMOTE) {
+		if (rc != 0 && rc != -EREMOTE) {
 			kfree(full_path);
 			goto mount_fail_check;
 		}
@@ -2750,7 +2785,7 @@ CIFSTCon(unsigned int xid, struct cifsSesInfo *ses,
 		bcc_ptr++;              /* skip password */
 		/* already aligned so no need to do it below */
 	} else {
-		pSMB->PasswordLength = cpu_to_le16(CIFS_SESS_KEY_SIZE);
+		pSMB->PasswordLength = cpu_to_le16(CIFS_AUTH_RESP_SIZE);
 		/* BB FIXME add code to fail this if NTLMv2 or Kerberos
 		   specified as required (when that support is added to
 		   the vfs in the future) as only NTLM or the much
@@ -2760,16 +2795,16 @@ CIFSTCon(unsigned int xid, struct cifsSesInfo *ses,
 #ifdef CONFIG_CIFS_WEAK_PW_HASH
 		if ((global_secflags & CIFSSEC_MAY_LANMAN) &&
 		    (ses->server->secType == LANMAN))
-			calc_lanman_hash(tcon->password, ses->server->cryptKey,
+			calc_lanman_hash(tcon->password, ses->server->cryptkey,
 					 ses->server->secMode &
 					    SECMODE_PW_ENCRYPT ? true : false,
 					 bcc_ptr);
 		else
 #endif /* CIFS_WEAK_PW_HASH */
-		SMBNTencrypt(tcon->password, ses->server->cryptKey,
-			     bcc_ptr);
+		rc = SMBNTencrypt(tcon->password, ses->server->cryptkey,
+					bcc_ptr, nls_codepage);
 
-		bcc_ptr += CIFS_SESS_KEY_SIZE;
+		bcc_ptr += CIFS_AUTH_RESP_SIZE;
 		if (ses->capabilities & CAP_UNICODE) {
 			/* must align unicode strings */
 			*bcc_ptr = 0; /* null byte password */
@@ -2817,7 +2852,7 @@ CIFSTCon(unsigned int xid, struct cifsSesInfo *ses,
 		tcon->need_reconnect = false;
 		tcon->tid = smb_buffer_response->Tid;
 		bcc_ptr = pByteArea(smb_buffer_response);
-		bytes_left = BCC(smb_buffer_response);
+		bytes_left = get_bcc(smb_buffer_response);
 		length = strnlen(bcc_ptr, bytes_left - 2);
 		if (smb_buffer->Flags2 & SMBFLG2_UNICODE)
 			is_unicode = true;
@@ -2928,16 +2963,36 @@ int cifs_setup_session(unsigned int xid, struct cifsSesInfo *ses,
 	cFYI(1, "Security Mode: 0x%x Capabilities: 0x%x TimeAdjust: %d",
 		 server->secMode, server->capabilities, server->timeAdj);
 
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	ses->timeOff = server->timeOff;
+#endif
+
 	rc = CIFS_SessSetup(xid, ses, nls_info);
 	if (rc) {
 		cERROR(1, "Send error in SessSetup = %d", rc);
 	} else {
+		mutex_lock(&ses->server->srv_mutex);
+		if (!server->session_estab) {
+			server->session_key.response = ses->auth_key.response;
+			server->session_key.len = ses->auth_key.len;
+			server->sequence_number = 0x2;
+			server->session_estab = true;
+			ses->auth_key.response = NULL;
+		}
+		mutex_unlock(&server->srv_mutex);
+
 		cFYI(1, "CIFS Session Established successfully");
 		spin_lock(&GlobalMid_Lock);
 		ses->status = CifsGood;
 		ses->need_reconnect = false;
 		spin_unlock(&GlobalMid_Lock);
 	}
+
+	kfree(ses->auth_key.response);
+	ses->auth_key.response = NULL;
+	ses->auth_key.len = 0;
+	kfree(ses->ntlmssp);
+	ses->ntlmssp = NULL;
 
 	return rc;
 }

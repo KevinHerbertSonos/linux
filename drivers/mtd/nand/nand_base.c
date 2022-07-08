@@ -158,6 +158,11 @@ static void nand_release_device(struct mtd_info *mtd)
 	spin_unlock(&chip->controller->lock);
 }
 
+void nand_release_device_exp(struct mtd_info *mtd)
+{
+	nand_release_device(mtd);
+}
+
 /**
  * nand_read_byte - [DEFAULT] read one byte from the chip
  * @mtd:	MTD device structure
@@ -796,6 +801,11 @@ nand_get_device(struct nand_chip *chip, struct mtd_info *mtd, int new_state)
 	schedule();
 	remove_wait_queue(wq, &wait);
 	goto retry;
+}
+
+int nand_get_device_exp(struct nand_chip *chip, struct mtd_info *mtd, int new_state)
+{
+	return nand_get_device(chip, mtd, new_state);
 }
 
 /**
@@ -1551,7 +1561,11 @@ static int nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 	if (mtd->ecc_stats.failed - stats.failed)
 		return -EBADMSG;
 
-	return  mtd->ecc_stats.corrected - stats.corrected ? -EUCLEAN : 0;
+	/* AJ: Removing this. This just aborts reads even when the ECC is successful.
+		Assuming this has to do with software ecc in some way.
+		return  mtd->ecc_stats.corrected - stats.corrected ? -EUCLEAN : 0;
+	*/
+	return 0;
 }
 
 /**
@@ -2070,8 +2084,10 @@ static int nand_write_page(struct mtd_info *mtd, struct nand_chip *chip,
 	/* Send command to read back the data */
 	chip->cmdfunc(mtd, NAND_CMD_READ0, 0, page);
 
-	if (chip->verify_buf(mtd, buf, mtd->writesize))
+	if (chip->verify_buf(mtd, buf, mtd->writesize)) {
+		printk(KERN_NOTICE "%s: verify_buf failed\n", __func__);
 		return -EIO;
+	}
 #endif
 	return 0;
 }
@@ -2169,8 +2185,11 @@ static int nand_do_write_ops(struct mtd_info *mtd, loff_t to,
 	chip->select_chip(mtd, chipnr);
 
 	/* Check, if it is write protected */
-	if (nand_check_wp(mtd))
+	if (nand_check_wp(mtd)) {
+		printk(KERN_NOTICE "%s: Attempt to write to "
+				"write protected NAND\n", __func__);
 		return -EIO;
+	}
 
 	realpage = (int)(to >> chip->page_shift);
 	page = realpage & chip->pagemask;
@@ -2782,6 +2801,15 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 {
 	int i, dev_id, maf_idx;
 	u8 id_data[8];
+#ifdef CONFIG_SONOS_FENWAY
+	int num_id_bytes =5;
+#endif
+#if defined(CONFIG_SONOS_LIMELIGHT)
+	int num_id_bytes =8;
+#endif
+#ifdef CONFIG_SONOS_FILLMORE
+	int num_id_bytes =5;
+#endif
 
 	/* Select the device */
 	chip->select_chip(mtd, 0);
@@ -2809,7 +2837,7 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 
 	/* Read entire ID string */
 
-	for (i = 0; i < 8; i++)
+	for (i = 0; i < num_id_bytes; i++)
 		id_data[i] = chip->read_byte(mtd);
 
 	if (id_data[0] != *maf_id || id_data[1] != dev_id) {
@@ -2842,6 +2870,7 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 		/* The 4th id byte is the important one */
 		extid = id_data[3];
 
+#if defined(CONFIG_SONOS_LIMELIGHT)
 		/*
 		 * Field definitions are in the following datasheets:
 		 * Old style (4,5 byte ID): Samsung K9GAG08U0M (p.32)
@@ -2864,6 +2893,7 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 				(((extid >> 1) & 0x04) | (extid & 0x03));
 			busw = 0;
 		} else {
+#endif	// CONFIG_SONOS_LIMELIGHT
 			/* Calc pagesize */
 			mtd->writesize = 1024 << (extid & 0x03);
 			extid >>= 2;
@@ -2876,7 +2906,9 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 			extid >>= 2;
 			/* Get buswidth information */
 			busw = (extid & 0x01) ? NAND_BUSWIDTH_16 : 0;
+#if defined(CONFIG_SONOS_LIMELIGHT)
 		}
+#endif	// CONFIG_SONOS_LIMELIGHT
 	} else {
 		/*
 		 * Old devices have chip data hardcoded in the device id table
@@ -2958,6 +2990,7 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 	if (mtd->writesize > 512 && chip->cmdfunc == nand_command)
 		chip->cmdfunc = nand_command_lp;
 
+	mtd->devid = (*maf_id << 8) | dev_id;
 	printk(KERN_INFO "NAND device: Manufacturer ID:"
 	       " 0x%02x, Chip ID: 0x%02x (%s %s)\n", *maf_id, dev_id,
 	       nand_manuf_ids[maf_idx].name, type->name);

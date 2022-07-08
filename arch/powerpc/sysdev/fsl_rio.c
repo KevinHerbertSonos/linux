@@ -10,7 +10,7 @@
  * - Added Port-Write message handling
  * - Added Machine Check exception handling
  *
- * Copyright (C) 2007, 2008 Freescale Semiconductor, Inc.
+ * Copyright (C) 2007, 2008-2010 Freescale Semiconductor, Inc.
  * Zhang Wei <wei.zhang@freescale.com>
  *
  * Copyright 2005 MontaVista Software, Inc.
@@ -240,14 +240,16 @@ struct rio_priv {
 
 static void __iomem *rio_regs_win;
 
+#ifdef CONFIG_E500
 static int (*saved_mcheck_exception)(struct pt_regs *regs);
 
 static int fsl_rio_mcheck_exception(struct pt_regs *regs)
 {
 	const struct exception_table_entry *entry = NULL;
-	unsigned long reason = (mfspr(SPRN_MCSR) & MCSR_MASK);
+	unsigned long reason = mfspr(SPRN_MCSR);
 
-	if (reason & MCSR_BUS_RBERR) {
+	/* covers both e500v1/v2 and e500mc */
+	if (reason & (MCSR_BUS_RBERR | MCSR_LD)) {
 		reason = in_be32((u32 *)(rio_regs_win + RIO_LTLEDCSR));
 		if (reason & (RIO_LTLEDCSR_IER | RIO_LTLEDCSR_PRT)) {
 			/* Check if we are prepared to handle this fault */
@@ -269,6 +271,7 @@ static int fsl_rio_mcheck_exception(struct pt_regs *regs)
 	else
 		return cur_cpu_spec->machine_check(regs);
 }
+#endif
 
 /**
  * fsl_rio_doorbell_send - Send a MPC85xx doorbell message
@@ -292,13 +295,15 @@ static int fsl_rio_doorbell_send(struct rio_mport *mport,
 		out_be16(priv->dbell_win, data);
 		break;
 	case RIO_PHY_SERIAL:
-		/* In the serial version silicons, such as MPC8548, MPC8641,
-		 * below operations is must be.
-		 */
-		out_be32(&priv->msg_regs->odmr, 0x00000000);
+		/* busy wait, replace with spin_event_timeout() later */
+		while (in_be32(&priv->msg_regs->odsr) & 0x4) {
+			cpu_relax();
+		}
+		out_be32(&priv->msg_regs->odsr, 0x1602);
 		out_be32(&priv->msg_regs->odretcr, 0x00000004);
 		out_be32(&priv->msg_regs->oddpr, destid << 16);
-		out_be32(&priv->msg_regs->oddatr, data);
+		out_be32(&priv->msg_regs->oddatr, data | 0x20000000);
+		out_be32(&priv->msg_regs->odmr, 0x00000000);
 		out_be32(&priv->msg_regs->odmr, 0x00000001);
 		break;
 	}
@@ -1517,10 +1522,15 @@ int fsl_rio_setup(struct of_device *dev)
 	fsl_rio_doorbell_init(port);
 	fsl_rio_port_write_init(port);
 
+#ifdef CONFIG_E500
 	saved_mcheck_exception = ppc_md.machine_check_exception;
 	ppc_md.machine_check_exception = fsl_rio_mcheck_exception;
-	/* Ensure that RFXE is set */
-	mtspr(SPRN_HID1, (mfspr(SPRN_HID1) | 0x20000));
+
+#ifndef CONFIG_PPC_E500MC
+	/* Ensure that RFXE is set on e500 v1/v2 */
+	mtspr(SPRN_HID1, (mfspr(SPRN_HID1) | HID1_RFXE));
+#endif /* !PPC_E500MC */
+#endif /* E500 */
 
 	return 0;
 err:

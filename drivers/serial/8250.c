@@ -39,6 +39,9 @@
 #include <linux/nmi.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#ifdef CONFIG_SONOS
+#include "mdp.h"
+#endif
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -55,6 +58,23 @@
  *                is unsafe when used on edge-triggered interrupts.
  */
 static unsigned int share_irqs = SERIAL8250_SHARE_IRQS;
+
+#ifdef CONFIG_SONOS
+extern struct manufacturing_data_page sys_mdp;
+
+static int enable_8250_setup(char *str)
+{
+	int enable_8250;
+
+	if(!str) return 1;
+
+	enable_8250 = memparse(str, &str);
+	sys_mdp.mdp_flags |= MDP_FLAG_CONSOLE_ENABLE;
+
+	return 1;
+}
+__setup("enable_8250=", enable_8250_setup);
+#endif	// CONFIG_SONOS
 
 static unsigned int nr_uarts = CONFIG_SERIAL_8250_RUNTIME_UARTS;
 
@@ -1687,7 +1707,7 @@ static int serial_link_irq_chain(struct uart_8250_port *up)
 
 static void serial_unlink_irq_chain(struct uart_8250_port *up)
 {
-	struct irq_info *i;
+	struct irq_info *i = 0;
 	struct hlist_node *n;
 	struct hlist_head *h;
 
@@ -1702,7 +1722,7 @@ static void serial_unlink_irq_chain(struct uart_8250_port *up)
 	}
 
 	BUG_ON(n == NULL);
-	BUG_ON(i->head == NULL);
+	BUG_ON(i && i->head == NULL);
 
 	if (list_empty(i->head))
 		free_irq(up->port.irq, i);
@@ -2602,6 +2622,10 @@ static void serial8250_config_port(struct uart_port *port, int flags)
 		up->bugs |= UART_BUG_NOMSR;
 #endif
 
+#if defined(CONFIG_AR9100) || defined(CONFIG_MACH_AR7240)
+        up->bugs |= UART_BUG_NOMSR;
+#endif
+
 	if (up->port.type != PORT_UNKNOWN && flags & UART_CONFIG_IRQ)
 		autoconfig_irq(up);
 
@@ -3200,14 +3224,28 @@ static int __init serial8250_init(void)
 	if (nr_uarts > UART_NR)
 		nr_uarts = UART_NR;
 
+#ifdef CONFIG_SONOS
+	printk(KERN_INFO "Serial: 8250/16550 driver, "
+		"%d ports, IRQ sharing %sabled, state=%sabled\n", nr_uarts,
+	        share_irqs ? "en" : "dis", (sys_mdp.mdp_flags & MDP_FLAG_CONSOLE_ENABLE) ? "en" : "dis");
+#else
 	printk(KERN_INFO "Serial: 8250/16550 driver, "
 		"%d ports, IRQ sharing %sabled\n", nr_uarts,
 		share_irqs ? "en" : "dis");
+#endif
+
 
 #ifdef CONFIG_SPARC
 	ret = sunserial_register_minors(&serial8250_reg, UART_NR);
 #else
 	serial8250_reg.nr = UART_NR;
+
+#ifdef CONFIG_SONOS
+	if(!(sys_mdp.mdp_flags & MDP_FLAG_CONSOLE_ENABLE)) {
+		ret = -ENOMEM;
+		goto out;
+	}
+#endif
 	ret = uart_register_driver(&serial8250_reg);
 #endif
 	if (ret)

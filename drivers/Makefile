@@ -113,3 +113,5 @@ obj-$(CONFIG_VLYNQ)		+= vlynq/
 obj-$(CONFIG_STAGING)		+= staging/
 obj-y				+= platform/
 obj-y				+= ieee802154/
+obj-y				+= tdm/
+obj-$(CONFIG_FSL_SWIM_EDC)	+= edc/

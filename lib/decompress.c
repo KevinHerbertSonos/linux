@@ -37,6 +37,7 @@ static const struct compress_format {
 	{ {0x42, 0x5a}, "bzip2", bunzip2 },
 	{ {0x5d, 0x00}, "lzma", unlzma },
 	{ {0x89, 0x4c}, "lzo", unlzo },
+	{ {0x6d, 0x00}, "lzma-openwrt", unlzma },
 	{ {0, 0}, NULL, NULL }
 };
 

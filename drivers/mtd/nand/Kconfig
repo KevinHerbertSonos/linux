@@ -459,11 +459,30 @@ config MTD_NAND_ORION
 config MTD_NAND_FSL_ELBC
 	tristate "NAND support for Freescale eLBC controllers"
 	depends on MTD_NAND && PPC_OF
+	select FSL_LBC
 	help
 	  Various Freescale chips, including the 8313, include a NAND Flash
 	  Controller Module with built-in hardware ECC capabilities.
 	  Enabling this option will enable you to use this to control
 	  external NAND devices.
+
+config MTD_NAND_FSL_IFC
+	tristate "NAND support for Freescale IFC Controller"
+ 	depends on MTD_NAND && PPC_OF
+	help
+		IFC driver for P1010-series SoC.
+
+config MTD_NAND_SONOS_VNB_MAPPING
+	tristate "Support for Sonos nand mapping scheme"
+	depends on SONOS && (MTD_NAND_FSL_IFC || MTD_NAND_FSL_ELBC)
+	help
+		Support for Sonos nand mapping scheme.
+
+config MTD_VNB_PHYSICAL_WRITE
+	tristate "Support to bypass VNB and write directly to NAND flash"
+	depends on SONOS && MTD_NAND_SONOS_VNB_MAPPING && (MTD_NAND_FSL_IFC || MTD_NAND_FSL_ELBC)
+	help
+		Support to bypass VNB and write directly to NAND flash.
 
 config MTD_NAND_FSL_UPM
 	tristate "Support for NAND on Freescale UPM"
@@ -525,5 +544,12 @@ config MTD_NAND_NUC900
 	help
 	  This enables the driver for the NAND Flash on evaluation board based
 	  on w90p910 / NUC9xx.
+
+config MTD_NAND_ATH
+	tristate "Support for NAND on Atheros board"
+	default n
+	depends on MTD_NAND && (MACH_AR934x || MACH_QCA955x)
+	help
+	  Enables support for NAND Flash chip on Atheros board.
 
 endif # MTD_NAND

@@ -20,6 +20,14 @@ config UCC
 	bool
 	default y if UCC_FAST || UCC_SLOW
 
+config UPC
+	bool
+	default n
+	help
+	  This option enable the QE UPC contorller which is
+	  MAC peripheral of QUICC Engine block. Needed by
+	  FUA.
+
 config QE_USB
 	bool
 	default y if USB_GADGET_FSL_QE

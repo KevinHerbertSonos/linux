@@ -39,10 +39,32 @@
 #include <asm/serial.h>
 #include <asm/udbg.h>
 #include <asm/mmu_context.h>
+#include "mdp.h"
 
 #include "setup.h"
 
 #define DBG(fmt...)
+
+#ifdef CONFIG_SONOS
+/* Since our Sonos kernel has a DTB embedded in it, we'll use this structure to
+ * area to pass stuff from U-Boot to the kernel. Add fields to the end so
+ * that older kernels aren't effected. */
+typedef struct _SONOS_BOARD
+{
+#if defined(CONFIG_SONOS_LIMELIGHT)
+   unsigned long magic;
+#define SONOS_BOARD_MAGIC 0x536f6e24
+#endif
+   unsigned long initrd_start;
+   unsigned long initrd_end;
+   unsigned long cmdlineAddr;
+   unsigned long mdpAddr;
+}
+SONOS_BOARD_T;
+
+extern char sonos_dtb_start[];
+char SonosCmdLine[COMMAND_LINE_SIZE];
+#endif
 
 extern void bootx_init(unsigned long r4, unsigned long phys);
 
@@ -123,8 +145,75 @@ notrace void __init machine_init(unsigned long dt_ptr)
 	/* Enable early debugging if any specified (see udbg.h) */
 	udbg_early_init();
 
+#ifdef CONFIG_SONOS
+	/* Build bomb - mdp sizes must be the same for all builds, platforms, controllers */
+	BUILD_BUG_ON(sizeof(struct manufacturing_data_page)!=MDP1_BYTES);
+	BUILD_BUG_ON(sizeof(struct manufacturing_data_page2)!=MDP2_BYTES);
+	BUILD_BUG_ON(sizeof(struct manufacturing_data_page3)!=MDP3_BYTES);
+
+	{
+		SONOS_BOARD_T *sonosBoardData;
+		unsigned long  cmdLineAddr;
+		char *pCmdLineArg;
+
+		sonosBoardData = (SONOS_BOARD_T *)(__va(dt_ptr));
+		cmdLineAddr = sonosBoardData->cmdlineAddr;
+		pCmdLineArg = (char *)(__va(cmdLineAddr));
+		strlcpy(SonosCmdLine, pCmdLineArg, COMMAND_LINE_SIZE);
+		printk("Copied Sonos bootargs, from %p (%08lx) to %p\n", pCmdLineArg, cmdLineAddr, SonosCmdLine);
+
+#ifdef CONFIG_SONOS_FENWAY
+        {
+            char *mdpaddrstr = "mdpaddr=";
+            char *s = strstr(SonosCmdLine, mdpaddrstr);
+            if (s == NULL) {
+                printk("early MDP not available from uboot\n");
+            } else {
+                unsigned long mdpAddr = simple_strtol(s+strlen(mdpaddrstr), NULL, 16);
+                char *pMdp = (char *)(__va(mdpAddr));
+                //printk("reading early MDP from %p (%08lx)\n", pMdp, mdpAddr);
+                memcpy(&sys_mdp, pMdp, sizeof(sys_mdp));
+                printk("MDP: model %x, submodel %x, rev %x\n",
+                       (unsigned)sys_mdp.mdp_model, (unsigned)sys_mdp.mdp_submodel, (unsigned)sys_mdp.mdp_revision);
+            }
+        }
+#endif
+
+#if defined(CONFIG_SONOS_LIMELIGHT)
+		if (sonosBoardData->magic == SONOS_BOARD_MAGIC) {
+			unsigned long  mdpAddr;
+			char *pMdp;
+
+			mdpAddr = sonosBoardData->mdpAddr;
+			pMdp = (char *)(__va(mdpAddr));
+			memcpy(&sys_mdp, pMdp, sizeof(sys_mdp));
+			//printk("Copied Sonos MDP from %p (%08lx) to %p\n", pMdp, mdpAddr, &sys_mdp);
+#endif
+
+			printk("Using internal DTB\n");
+			early_init_devtree(sonos_dtb_start);
+#if defined(CONFIG_SONOS_LIMELIGHT)
+		}
+		else {
+			printk("Using External DTB\n");
+			/* Do some early initialization based on the flat device tree */
+			strcpy(cmd_line, SonosCmdLine);
+			printk("cmd_line=%s.\n", cmd_line);
+			early_init_devtree(__va(dt_ptr));
+			printk("cmd_line=%s.\n", cmd_line);
+			//strcpy(cmd_line, SonosCmdLine);
+		}
+#endif
+#ifdef CONFIG_SONOS_DIAGS
+		/* Always turn on the 8250 console UART and console output */
+		sys_mdp.mdp_flags = MDP_KERNEL_PRINTK_ENABLE | MDP_FLAG_CONSOLE_ENABLE;
+#endif
+	}
+#else
 	/* Do some early initialization based on the flat device tree */
+	printk("Using external DTB\n");
 	early_init_devtree(__va(dt_ptr));
+#endif
 
 	probe_machine();
 
@@ -137,9 +226,20 @@ notrace void __init machine_init(unsigned long dt_ptr)
 #endif
 
 #ifdef CONFIG_E500
-	if (cpu_has_feature(CPU_FTR_CAN_DOZE) ||
-	    cpu_has_feature(CPU_FTR_CAN_NAP))
-		ppc_md.power_save = e500_idle;
+   if (sys_mdp.mdp_model == MDP_MODEL_LIMELIGHT && sys_mdp.mdp_revision < MDP_REVISION_LIMELIGHT_EVT) {
+      printk("Idle power save disabled\n");
+      ppc_md.power_save = 0;
+   }
+   else {
+      if (cpu_has_feature(CPU_FTR_CAN_DOZE) ||
+          cpu_has_feature(CPU_FTR_CAN_NAP)) {
+         ppc_md.power_save = e500_idle;
+         printk("Idle power save enabled\n");
+      }
+      else {
+         printk("Idle power save not enabled\n");
+      }
+   }
 #endif
 	if (ppc_md.progress)
 		ppc_md.progress("id mach(): done", 0x200);
@@ -343,4 +443,13 @@ void __init setup_arch(char **cmdline_p)
 	/* Initialize the MMU context management stuff */
 	mmu_context_init();
 
+	/* Set enough defaults in the mdp to debug the wifi driver */
+#ifdef CONFIG_SONOS_LIMELIGHT
+	sys_mdp.mdp_model    = MDP_MODEL_LIMELIGHT;
+	sys_mdp.mdp_submodel = MDP_SUBMODEL_LIMELIGHT;
+#endif
+#ifdef CONFIG_SONOS_FENWAY
+	sys_mdp.mdp_model    = MDP_MODEL_FENWAY;
+	sys_mdp.mdp_submodel = MDP_SUBMODEL_FENWAY;
+#endif
 }

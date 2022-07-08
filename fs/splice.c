@@ -15,6 +15,7 @@
  * Copyright (C) 2005-2006 Jens Axboe <axboe@kernel.dk>
  * Copyright (C) 2005-2006 Linus Torvalds <torvalds@osdl.org>
  * Copyright (C) 2006 Ingo Molnar <mingo@elte.hu>
+ * Copyright (C) 2010 Freescale Semiconductor, Inc.
  *
  */
 #include <linux/fs.h>
@@ -32,6 +33,12 @@
 #include <linux/security.h>
 #include <linux/gfp.h>
 
+#ifdef CONFIG_SEND_PAGES
+#include <net/tcp.h>
+#include <linux/netdevice.h>
+#include <linux/socket.h>
+extern int is_sock_file(struct file *f);
+#endif /*CONFIG_SEND_PAGES*/
 /*
  * Attempt to steal a page from a pipe buffer. This should perhaps go into
  * a vm helper function, it's already simplified quite a bit by the
@@ -391,7 +398,11 @@ __generic_file_splice_read(struct file *in, loff_t *ppos,
 		this_len = min_t(unsigned long, len, PAGE_CACHE_SIZE - loff);
 		page = spd.pages[page_nr];
 
+#ifdef CONFIG_DELAY_ASYNC_READAHEAD
+		if (!in->f_ra.delay_readahead && PageReadahead(page))
+#else
 		if (PageReadahead(page))
+#endif
 			page_cache_async_readahead(mapping, &in->f_ra, in,
 					page, index, req_pages - page_nr);
 
@@ -685,6 +696,78 @@ err:
 }
 EXPORT_SYMBOL(default_file_splice_read);
 
+#ifdef CONFIG_SEND_PAGES
+static int pipe_to_sendpages(struct pipe_inode_info *pipe,
+			    struct pipe_buffer *buf, struct splice_desc *sd)
+{
+	struct file *file = sd->u.file;
+	int ret, more;
+	int page_index = 0;
+	unsigned int tlen, len, offset;
+	unsigned int curbuf = pipe->curbuf;
+	struct page *pages[PIPE_DEF_BUFFERS];
+	int nrbuf = pipe->nrbufs;
+	int flags;
+	struct socket *sock = file->private_data;
+
+	sd->len = sd->total_len;
+	tlen = 0;
+	offset = buf->offset;
+
+	while (nrbuf) {
+		buf = pipe->bufs + curbuf;
+
+		ret = buf->ops->confirm(pipe, buf);
+		if (ret)
+			break;
+
+		pages[page_index] = buf->page;
+		page_index++;
+		len = (buf->len < sd->len) ? buf->len : sd->len;
+		buf->offset += len;
+		buf->len -= len;
+
+		sd->num_spliced += len;
+		sd->len -= len;
+		sd->pos += len;
+		sd->total_len -= len;
+		tlen += len;
+
+		if (!buf->len) {
+			curbuf = (curbuf + 1) & (PIPE_DEF_BUFFERS - 1);
+			nrbuf--;
+		}
+		if (!sd->total_len)
+			break;
+	}
+
+	more = (sd->flags & SPLICE_F_MORE) || sd->len < sd->total_len;
+	flags = !(file->f_flags & O_NONBLOCK) ? 0 : MSG_DONTWAIT;
+	if (more)
+		flags |= MSG_MORE;
+
+	len = tcp_sendpages(sock, pages, offset, tlen, flags);
+
+	if (!ret)
+		ret = len;
+
+	while (page_index) {
+		page_index--;
+		buf = pipe->bufs + pipe->curbuf;
+		if (!buf->len) {
+			buf->ops->release(pipe, buf);
+			buf->ops = NULL;
+			pipe->curbuf = (pipe->curbuf + 1) & (PIPE_DEF_BUFFERS - 1);
+			pipe->nrbufs--;
+			if (pipe->inode)
+				sd->need_wakeup = true;
+		}
+	}
+
+	return ret;
+}
+#endif/*CONFIG_SEND_PAGES*/
+
 /*
  * Send 'sd->len' bytes to socket from 'sd->file' at position 'sd->pos'
  * using sendpage(). Return the number of bytes sent.
@@ -695,7 +778,17 @@ static int pipe_to_sendpage(struct pipe_inode_info *pipe,
 	struct file *file = sd->u.file;
 	loff_t pos = sd->pos;
 	int ret, more;
+#ifdef CONFIG_SEND_PAGES
+	struct socket *sock = file->private_data;
 
+	if (is_sock_file(file) &&
+		sock->ops->sendpage == tcp_sendpage){
+		struct sock *sk = sock->sk;
+		if ((sk->sk_route_caps & NETIF_F_SG) &&
+			(sk->sk_route_caps & NETIF_F_ALL_CSUM))
+			return pipe_to_sendpages(pipe, buf, sd);
+	}
+#endif
 	ret = buf->ops->confirm(pipe, buf);
 	if (!ret) {
 		more = (sd->flags & SPLICE_F_MORE) || sd->len < sd->total_len;
@@ -818,6 +911,12 @@ int splice_from_pipe_feed(struct pipe_inode_info *pipe, struct splice_desc *sd,
 			sd->len = sd->total_len;
 
 		ret = actor(pipe, buf, sd);
+#ifdef CONFIG_SEND_PAGES
+		if (!sd->total_len)
+			return 0;
+		if (!pipe->nrbufs)
+			break;
+#endif /*CONFIG_SEND_PAGES*/
 		if (ret <= 0) {
 			if (ret == -ENODATA)
 				ret = 0;
@@ -1176,6 +1275,11 @@ ssize_t splice_direct_to_actor(struct file *in, struct splice_desc *sd,
 	umode_t i_mode;
 	size_t len;
 	int i, flags;
+#ifdef CONFIG_DELAY_ASYNC_READAHEAD
+	int nr_pages, index;
+	struct page *pages[PIPE_DEF_BUFFERS];
+	struct address_space *mapping = in->f_mapping;
+#endif
 
 	/*
 	 * We require the input being a regular file, as we don't want to
@@ -1223,6 +1327,12 @@ ssize_t splice_direct_to_actor(struct file *in, struct splice_desc *sd,
 		size_t read_len;
 		loff_t pos = sd->pos, prev_pos = pos;
 
+#ifdef CONFIG_DELAY_ASYNC_READAHEAD
+		/*disable async readahead in file splice read*/
+		if (in->f_op->splice_read == generic_file_splice_read)
+			in->f_ra.delay_readahead = 1;
+#endif /*CONFIG_DELAY_ASYNC_READAHEAD*/
+
 		ret = do_splice_to(in, &pos, pipe, len, flags);
 		if (unlikely(ret <= 0))
 			goto out_release;
@@ -1236,6 +1346,26 @@ ssize_t splice_direct_to_actor(struct file *in, struct splice_desc *sd,
 		 * could get stuck data in the internal pipe:
 		 */
 		ret = actor(pipe, sd);
+
+#ifdef CONFIG_DELAY_ASYNC_READAHEAD
+		/*do async readahead*/
+		if (in->f_ra.delay_readahead) {
+			index = sd->pos >> PAGE_CACHE_SHIFT;
+			nr_pages = (read_len + (sd->pos & ~PAGE_CACHE_MASK)
+					+ PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+			nr_pages = find_get_pages_contig(mapping, index, nr_pages, pages);
+			for (i = 0; i < nr_pages; i++) {
+				if (PageReadahead(pages[i])) {
+					page_cache_async_readahead(mapping, &in->f_ra, in,
+						pages[i], index, nr_pages - i);
+				}
+				index++;
+				page_cache_release(pages[i]);
+			}
+			in->f_ra.delay_readahead = 0;
+		}
+#endif /*CONFIG_DELAY_ASYNC_READAHEAD*/
+
 		if (unlikely(ret <= 0)) {
 			sd->pos = prev_pos;
 			goto out_release;

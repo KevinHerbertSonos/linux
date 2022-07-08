@@ -11,7 +11,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/slab.h>
 #include <net/rtnetlink.h>
 #include <net/net_namespace.h>
 #include <net/sock.h>
@@ -42,8 +41,8 @@ static int br_fill_ifinfo(struct sk_buff *skb, const struct net_bridge_port *por
 	struct nlmsghdr *nlh;
 	u8 operstate = netif_running(dev) ? dev->operstate : IF_OPER_DOWN;
 
-	br_debug(br, "br_fill_info event %d port %s master %s\n",
-		     event, dev->name, br->dev->name);
+	pr_debug("br_fill_info event %d port %s master %s\n",
+		 event, dev->name, br->dev->name);
 
 	nlh = nlmsg_put(skb, pid, seq, event, sizeof(*hdr), flags);
 	if (nlh == NULL)
@@ -87,9 +86,7 @@ void br_ifinfo_notify(int event, struct net_bridge_port *port)
 	struct sk_buff *skb;
 	int err = -ENOBUFS;
 
-	br_debug(port->br, "port %u(%s) event %d\n",
-		 (unsigned)port->port_no, port->dev->name, event);
-
+	pr_debug("bridge notify event=%d\n", event);
 	skb = nlmsg_new(br_nlmsg_size(), GFP_ATOMIC);
 	if (skb == NULL)
 		goto errout;
@@ -102,10 +99,104 @@ void br_ifinfo_notify(int event, struct net_bridge_port *port)
 		goto errout;
 	}
 	rtnl_notify(skb, net, 0, RTNLGRP_LINK, NULL, GFP_ATOMIC);
-	return;
 errout:
 	if (err < 0)
 		rtnl_set_sk_err(net, RTNLGRP_LINK, err);
+}
+
+#ifdef CONFIG_SONOS_BRIDGE_PROXY
+static unsigned int sats_match_bridge(const struct net_bridge *br) {
+
+	struct net_bridge_port *p;
+	unsigned int num_sats_checked = 0;
+
+	if (!br->current_ipv4_addr) {
+		return 0;
+	}
+
+	list_for_each_entry_rcu(p, &br->port_list, list) {
+		if (p->is_satellite) {
+			num_sats_checked++;
+			if (!p->sat_ip || p->sat_ip != br->current_ipv4_addr) {
+				/* We're very strict here on purpose. If
+				 * there's even a single satellite that
+				 * either has no IP set yet, or has an
+				 * IP that doesn't match the bridge,
+				 * we'll return "no match". */
+				return 0;
+			}
+		}
+	}
+
+	/* If we checked at least one sat and it matched, return true. */
+	return num_sats_checked;
+}
+
+static void br_dupip_notify(struct net_bridge *br, int time)
+{
+	struct net *net = dev_net(br->dev);
+	struct sk_buff *skb;
+	int err = -ENOBUFS;
+	struct nlmsghdr *nlh;
+
+	skb = nlmsg_new(RTA_LENGTH(sizeof(time)), GFP_ATOMIC);
+
+	if (skb == NULL) {
+		goto errout;
+	}
+
+	nlh = nlmsg_put(skb, 0, 0, RWM_DUPE_IP, 0, 0);
+
+	if (nlh == NULL) {
+		goto errout;
+	}
+
+	RTA_PUT(skb, RWA_DUPE_TIME, sizeof(time), &time);
+	nlmsg_end(skb, nlh);
+	rtnl_notify(skb, net, 0, RTMGRP_Rincon, NULL, GFP_ATOMIC);
+	return;
+
+rtattr_failure:
+	nlmsg_cancel(skb, nlh);
+
+errout:
+	kfree_skb(skb);
+	rtnl_set_sk_err(net, RTMGRP_Rincon, err);
+}
+
+void br_dupip_timer_expired(unsigned long arg)
+{
+	struct net_bridge *br = (struct net_bridge *)arg;
+	static const int dupip_notify_interval_secs = 30;
+
+	spin_lock_bh(&br->lock);
+
+	if (sats_match_bridge(br)) {
+		br_dupip_notify(br, ((long)jiffies - (long)br->dupip_start) / HZ);
+		mod_timer(&br->dupip_timer,
+			  jiffies + dupip_notify_interval_secs*HZ);
+	} else {
+		printk("br proxy: IP conflict event ends %d\n", __LINE__);
+		br_dupip_notify(br, -1);
+	}
+
+	spin_unlock_bh(&br->lock);
+}
+#endif
+
+void br_dupip_check(struct net_bridge *br)
+{
+#ifdef CONFIG_SONOS_BRIDGE_PROXY
+	if (!sats_match_bridge(br) && timer_pending(&br->dupip_timer)) {
+		printk("br proxy: IP conflict event ends %d\n", __LINE__);
+		br_dupip_notify(br, -1);
+		del_timer(&br->dupip_timer);
+	} else if (sats_match_bridge(br) && !timer_pending(&br->dupip_timer)) {
+		printk("br proxy: IP conflict event begins\n");
+		br->dupip_start = jiffies;
+		mod_timer(&br->dupip_timer, jiffies);
+	}
+#endif
 }
 
 /*
@@ -115,15 +206,19 @@ static int br_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	struct net *net = sock_net(skb->sk);
 	struct net_device *dev;
+	const unsigned char *src  = eth_hdr(skb)->h_source;
+	struct net_bridge_port *p ;
 	int idx;
 
 	idx = 0;
 	for_each_netdev(net, dev) {
 		/* not a bridge port */
-		if (dev->br_port == NULL || idx < cb->args[0])
+		if (dev->br_port_list == NULL || idx < cb->args[0])
 			goto skip;
 
-		if (br_fill_ifinfo(skb, dev->br_port, NETLINK_CB(cb->skb).pid,
+        p = br_find_port(src, dev->br_port_list);
+
+		if (br_fill_ifinfo(skb, p, NETLINK_CB(cb->skb).pid,
 				   cb->nlh->nlmsg_seq, RTM_NEWLINK,
 				   NLM_F_MULTI) < 0)
 			break;
@@ -143,6 +238,7 @@ skip:
 static int br_rtm_setlink(struct sk_buff *skb,  struct nlmsghdr *nlh, void *arg)
 {
 	struct net *net = sock_net(skb->sk);
+    const unsigned char *src  = eth_hdr(skb)->h_source;
 	struct ifinfomsg *ifm;
 	struct nlattr *protinfo;
 	struct net_device *dev;
@@ -168,12 +264,13 @@ static int br_rtm_setlink(struct sk_buff *skb,  struct nlmsghdr *nlh, void *arg)
 	if (!dev)
 		return -ENODEV;
 
-	p = dev->br_port;
-	if (!p)
+	if (!dev->br_port_list)
 		return -EINVAL;
 
+    p = br_find_port(src, dev->br_port_list);
+
 	/* if kernel STP is running, don't allow changes */
-	if (p->br->stp_enabled == BR_KERNEL_STP)
+	if (p->br->stp_enabled)
 		return -EBUSY;
 
 	if (!netif_running(dev) ||

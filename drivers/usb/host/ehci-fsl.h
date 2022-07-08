@@ -1,4 +1,4 @@
-/* Copyright (c) 2005 freescale semiconductor
+/* Copyright (c) 2005, 2009-2010 Freescale Semiconductor, Inc.
  * Copyright (c) 2005 MontaVista Software
  *
  * This program is free software; you can redistribute  it and/or modify it
@@ -36,3 +36,8 @@
 #define FSL_SOC_USB_CTRL	0x500	/* NOTE: big-endian */
 #define SNOOP_SIZE_2GB		0x1e
 #endif				/* _EHCI_FSL_H */
+
+#if defined(CONFIG_FSL_USB_OTG) || defined(CONFIG_FSL_USB_OTG_MODULE)
+extern struct resource *otg_get_resources(void);
+extern int is_otg;
+#endif

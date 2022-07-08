@@ -1,7 +1,7 @@
 /*
  * P2020 RDB Device Tree Source
  *
- * Copyright 2009 Freescale Semiconductor Inc.
+ * Copyright 2009-2010 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -45,6 +45,12 @@
 
 	memory {
 		device_type = "memory";
+	};
+
+	l2sram@fff00000 {
+		device_type = "memory";
+		compatible = "fsl,l2sram";
+		reg = <0x0 0xfff00000 0 0x10000>;
 	};
 
 	localbus@ffe05000 {
@@ -143,14 +149,14 @@
 			};
 
 			partition@a00000 {
-				/* 7MB for JFFS2 based Root file System */
-				reg = <0x00a00000 0x00700000>;
+				/* 15MB for JFFS2 based Root file System */
+				reg = <0x00a00000 0x00f00000>;
 				label = "NAND (RW) JFFS2 Root File System";
 			};
 
-			partition@1100000 {
-				/* 15MB for JFFS2 based Root file System */
-				reg = <0x01100000 0x00f00000>;
+			partition@1900000 {
+				/* 7MB for Writable User Area */
+				reg = <0x01900000 0x00700000>;
 				label = "NAND (RW) Writable User area";
 			};
 		};
@@ -246,6 +252,7 @@
 			reg = <0x7000 0x1000>;
 			interrupts = <59 0x2>;
 			interrupt-parent = <&mpic>;
+			espi,num-ss-bits = <4>;
 			mode = "cpu";
 
 			fsl_m25p80@0 {
@@ -254,9 +261,7 @@
 				compatible = "fsl,espi-flash";
 				reg = <0>;
 				linux,modalias = "fsl_m25p80";
-				modal = "s25sl128b";
-				spi-max-frequency = <50000000>;
-				mode = <0>;
+				spi-max-frequency = <40000000>;
 
 				partition@0 {
 					/* 512KB for u-boot Bootloader Image */
@@ -396,6 +401,11 @@
 			phy_type = "ulpi";
 		};
 
+		ptp_timer: ptimer@24e00 {
+			compatible = "fsl,gianfar-ptp-timer";
+			reg = <0x24e00 0xb0>;
+		};
+
 		enet0: ethernet@24000 {
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -410,6 +420,7 @@
 			interrupt-parent = <&mpic>;
 			fixed-link = <1 1 1000 0 0>;
 			phy-connection-type = "rgmii-id";
+			ptimer-handle = <&ptp_timer>;
 
 			mdio@520 {
 				#address-cells = <1>;
@@ -445,6 +456,7 @@
 			tbi-handle = <&tbi0>;
 			phy-handle = <&phy0>;
 			phy-connection-type = "sgmii";
+			ptimer-handle = <&ptp_timer>;
 
 			mdio@520 {
 				#address-cells = <1>;
@@ -473,6 +485,7 @@
 			interrupt-parent = <&mpic>;
 			phy-handle = <&phy1>;
 			phy-connection-type = "rgmii-id";
+			ptimer-handle = <&ptp_timer>;
 		};
 
 		sdhci@2e000 {
@@ -480,6 +493,7 @@
 			reg = <0x2e000 0x1000>;
 			interrupts = <72 0x2>;
 			interrupt-parent = <&mpic>;
+			fsl,sdhci-adjust-timeout;
 			/* Filled in by U-Boot */
 			clock-frequency = <0>;
 		};
@@ -494,6 +508,8 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0xbfe>;
 			fsl,descriptor-types-mask = <0x3ab0ebf>;
+			fsl,multi-host-mode = "dual";
+			fsl,channel-remap = <0x3>;
 		};
 
 		mpic: pic@40000 {
@@ -503,6 +519,28 @@
 			reg = <0x40000 0x40000>;
 			compatible = "chrp,open-pic";
 			device_type = "open-pic";
+		};
+
+		message@41400 {
+			compatible = "fsl,p2020-msg", "fsl,mpic-msg";
+			reg = <0x41400 0x200>;
+			interrupts = <
+				0xb0 2
+				0xb1 2
+				0xb2 2
+				0xb3 2>;
+			interrupt-parent = <&mpic>;
+		};
+
+		message@42400 {
+			compatible = "fsl,p2020-msg", "fsl,mpic-msg";
+			reg = <0x42400 0x200>;
+			interrupts = <
+				0xb4 2
+				0xb5 2
+				0xb6 2
+				0xb7 2>;
+			interrupt-parent = <&mpic>;
 		};
 
 		msi@41600 {
@@ -529,6 +567,7 @@
 	};
 
 	pci0: pcie@ffe09000 {
+		cell-index = <1>;
 		compatible = "fsl,mpc8548-pcie";
 		device_type = "pci";
 		#interrupt-cells = <1>;
@@ -541,6 +580,14 @@
 		clock-frequency = <33333333>;
 		interrupt-parent = <&mpic>;
 		interrupts = <25 2>;
+		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
+		interrupt-map = <
+			/* IDSEL 0x0 */
+			0000 0x0 0x0 0x1 &mpic 0x4 0x1
+			0000 0x0 0x0 0x2 &mpic 0x5 0x1
+			0000 0x0 0x0 0x3 &mpic 0x6 0x1
+			0000 0x0 0x0 0x4 &mpic 0x7 0x1
+			>;
 		pcie@0 {
 			reg = <0x0 0x0 0x0 0x0 0x0>;
 			#size-cells = <2>;
@@ -557,6 +604,7 @@
 	};
 
 	pci1: pcie@ffe0a000 {
+		cell-index = <2>;
 		compatible = "fsl,mpc8548-pcie";
 		device_type = "pci";
 		#interrupt-cells = <1>;
@@ -569,6 +617,14 @@
 		clock-frequency = <33333333>;
 		interrupt-parent = <&mpic>;
 		interrupts = <26 2>;
+		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
+		interrupt-map = <
+			/* IDSEL 0x0 */
+			0000 0x0 0x0 0x1 &mpic 0x0 0x1
+			0000 0x0 0x0 0x2 &mpic 0x1 0x1
+			0000 0x0 0x0 0x3 &mpic 0x2 0x1
+			0000 0x0 0x0 0x4 &mpic 0x3 0x1
+			>;
 		pcie@0 {
 			reg = <0x0 0x0 0x0 0x0 0x0>;
 			#size-cells = <2>;

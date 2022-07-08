@@ -51,6 +51,10 @@ struct fsl_pq_mdio_priv {
 	struct fsl_pq_mdio __iomem *regs;
 };
 
+#ifdef CONFIG_MV88E6020_PHY
+void mv88e6020_set_mii_bus(struct mii_bus *bus);
+#endif
+
 /*
  * Write value to the PHY at mii_id at register regnum,
  * on the bus attached to the local interface, which may be different from the
@@ -409,6 +413,12 @@ static int fsl_pq_mdio_probe(struct of_device *ofdev,
 				new_bus->name);
 		goto err_free_irqs;
 	}
+
+#ifdef CONFIG_MV88E6020_PHY
+	/* The ethernet switch driver needs to know the MII bus and I didn't 
+	   want to have it involved with the PHY scanning since its not a PHY. */
+	mv88e6020_set_mii_bus(new_bus);
+#endif
 
 	return 0;
 

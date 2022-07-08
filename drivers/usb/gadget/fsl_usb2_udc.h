@@ -1,5 +1,6 @@
 /*
  * Freescale USB device/endpoint management registers
+ * Copyright (C) 2010 Freescale Semiconductor, Inc. All rights reserved.
  */
 #ifndef __FSL_USB2_UDC_H
 #define __FSL_USB2_UDC_H
@@ -346,7 +347,11 @@ struct usb_sys_interface {
 /* control Register Bit Masks */
 #define  USB_CTRL_IOENB                       0x00000004
 #define  USB_CTRL_ULPI_INT0EN                 0x00000001
-
+#ifdef CONFIG_PPC_85xx
+#define USB_CTRL_UTMI_PHY_EN			0x00000200
+#define USB_CTRL_USB_EN				0x00000004
+#define USB_CTRL_ULPI_PHY_CLK_SEL		0x00000400
+#endif
 /* Endpoint Queue Head data struct
  * Rem: all the variables of qh are LittleEndian Mode
  * and NEXT_POINTER_MASK should operate on a LittleEndian, Phy Addr
@@ -581,4 +586,10 @@ static inline void fsl_udc_clk_release(void)
 }
 #endif
 
+#endif
+
+#if defined(CONFIG_FSL_USB_OTG) || defined(CONFIG_FSL_USB_OTG_MODULE)
+/* Get platform resource from OTG driver */
+extern struct resource *otg_get_resources(void);
+extern int is_otg;
 #endif

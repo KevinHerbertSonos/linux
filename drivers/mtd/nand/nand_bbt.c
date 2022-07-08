@@ -60,6 +60,10 @@
 #include <linux/delay.h>
 #include <linux/vmalloc.h>
 
+#ifdef CONFIG_MTD_NAND_SONOS_VNB_MAPPING
+void vnb_MapBlock(struct mtd_info*, loff_t, uint8_t*);
+#endif
+
 /**
  * check_pattern - [GENERIC] check if a pattern is in the buffer
  * @buf:	the buffer to search
@@ -367,6 +371,12 @@ static int scan_block_fast(struct mtd_info *mtd, struct nand_bbt_descr *bd,
 
 		if (check_short_pattern(buf, bd))
 			return 1;
+
+#ifdef CONFIG_MTD_NAND_SONOS_VNB_MAPPING
+		if (j == 0) {
+		    vnb_MapBlock(mtd, offs, buf);
+		}
+#endif
 
 		offs += mtd->writesize;
 	}

@@ -21,6 +21,40 @@ source "arch/powerpc/platforms/44x/Kconfig"
 source "arch/powerpc/platforms/40x/Kconfig"
 source "arch/powerpc/platforms/amigaone/Kconfig"
 
+config SONOS
+	bool "Sonos features added"
+	depends on PPC_83xx || PPC_85xx
+	default y
+	help
+	  This enables support for the Sonos features in the kernel.
+
+config SONOS_BRIDGE_PROXY
+	bool "Sonos Bridge Proxy"
+	depends on SONOS
+	help
+	  Support for Sonos Bridge Proxy
+
+config SONOS_FENWAY
+	bool "Sonos Fenway"
+	depends on SONOS && PPC_83xx
+	default y
+	help
+	  Support for Sonos Fenway-specific stuff
+
+config SONOS_LIMELIGHT
+	bool "Sonos Limelight"
+	depends on SONOS && PPC_85xx && SONOS_BRIDGE_PROXY
+	help
+	  Support for Sonos Limelight-specific stuff
+ 
+config SONOS_DIAGS
+	bool "Sonos diags"
+	depends on SONOS
+	default y
+	help
+	  Support for Sonos diagnostics
+	  Turns on 8250, suppresses LEDs and more...
+ 
 config PPC_NATIVE
 	bool
 	depends on 6xx || PPC64
@@ -168,6 +202,14 @@ config CPU_FREQ_PMAC64
 	help
 	  This adds support for frequency switching on Apple iMac G5,
 	  and some of the more recent desktop G5 machines as well.
+
+config MPC85xx_CPUFREQ
+	bool "Support for Freescale MPC85xx CPU freq"
+	depends on PPC_85xx && PPC32
+	select CPU_FREQ_TABLE
+	help
+	  This adds support for frequency switching on Freescale MPC85xx,
+	  this currently includes P1022 processor.
 
 config PPC_PASEMI_CPUFREQ
 	bool "Support for PA Semi PWRficient"
@@ -337,5 +379,11 @@ config MCU_MPC8349EMITX
 config XILINX_PCI
 	bool "Xilinx PCI host bridge support"
 	depends on PCI && XILINX_VIRTEX
+
+config FSL_PIXIS
+	tristate "Freescale board control FPGA"
+	depends on FSL_SOC
+	help
+	  Say Y here to support board control FPGA.
 
 endmenu

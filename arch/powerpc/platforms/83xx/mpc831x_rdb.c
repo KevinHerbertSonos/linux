@@ -38,10 +38,19 @@ static void __init mpc831x_rdb_setup_arch(void)
 #ifdef CONFIG_PCI
 	for_each_compatible_node(np, "pci", "fsl,mpc8349-pci")
 		mpc83xx_add_bridge(np);
+#if defined(CONFIG_SONOS_LIMELIGHT)
 	for_each_compatible_node(np, "pci", "fsl,mpc8314-pcie")
 		mpc83xx_add_bridge(np);
 #endif
+#ifdef CONFIG_SONOS_FENWAY
+	for_each_compatible_node(np, "pci", "fsl,mpc8315-pcie")
+		mpc83xx_add_bridge(np);
+	ppc_md.pci_exclude_device = mpc83xx_exclude_device;
+#endif
+#endif
+#if defined(CONFIG_SONOS_LIMELIGHT)
 	mpc831x_usb_cfg();
+#endif
 }
 
 static void __init mpc831x_rdb_init_IRQ(void)

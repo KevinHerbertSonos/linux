@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Freescale Semicondutor, Inc. 2006-2010. All rights reserved.
+ * Copyright (C) 2006-2010 Freescale Semiconductor, Inc. All rights reserved.
  *
  * Author: Andy Fleming <afleming@freescale.com>
  *
@@ -149,6 +149,54 @@ static int mpc8568_mds_phy_fixups(struct phy_device *phydev)
 	return err;
 }
 
+#ifdef CONFIG_PCI
+/*Host/agent status can be read from porbmsr in the global utilities*/
+static int get_p1021mds_host_agent(void)
+{
+	struct device_node *np;
+	void __iomem *gur_regs;
+	u32 host_agent;
+
+	np = of_find_compatible_node(NULL, NULL, "fsl,p1021-guts");
+	if (np == NULL) {
+		printk(KERN_ERR "Could not find global-utilities node\n");
+		return 0;
+	}
+
+	gur_regs = of_iomap(np, 0);
+	of_node_put(np);
+	if (!gur_regs) {
+		printk(KERN_ERR "Failed to map global-utilities register space\n");
+		return 0;
+	}
+	host_agent = (in_be32(gur_regs + 4) & 0x00070000) >> 16 ;
+
+	iounmap(gur_regs);
+
+	return host_agent;
+}
+
+/*
+ * To judge if the PCI(e) controller is host/agent mode through
+ * the PORBMSR register.
+ *     0: agent mode
+ *     1: host mode
+ */
+static bool p1021mds_pci_is_host(u32 host_agent, resource_size_t res)
+{
+	switch (res & 0xfffff) {
+	case 0xa000:    /* PCIe1 */
+		return host_agent & 0x2;
+		break;
+	case 0x9000:    /* PCIe2 */
+		return host_agent & 0x1;
+		break;
+	default:
+		return true;
+	}
+}
+#endif
+
 /* ************************************************************************
  *
  * Setup the architecture
@@ -162,8 +210,10 @@ static void __init mpc85xx_mds_setup_arch(void)
 {
 	struct device_node *np;
 	static u8 __iomem *bcsr_regs = NULL;
+	int use_ucc_uart = 0;
 #ifdef CONFIG_PCI
 	struct pci_controller *hose;
+	u32 host_agent;
 #endif
 	dma_addr_t max = 0xffffffff;
 
@@ -181,11 +231,14 @@ static void __init mpc85xx_mds_setup_arch(void)
 	}
 
 #ifdef CONFIG_PCI
+	host_agent = get_p1021mds_host_agent();
 	for_each_node_by_type(np, "pci") {
 		if (of_device_is_compatible(np, "fsl,mpc8540-pci") ||
 		    of_device_is_compatible(np, "fsl,mpc8548-pcie")) {
 			struct resource rsrc;
 			of_address_to_resource(np, 0, &rsrc);
+			if (!p1021mds_pci_is_host(host_agent, rsrc.start))
+				continue;
 			if ((rsrc.start & 0xfffff) == 0x8000)
 				fsl_add_bridge(np, 1);
 			else
@@ -222,6 +275,14 @@ static void __init mpc85xx_mds_setup_arch(void)
 
 		for_each_node_by_name(ucc, "ucc")
 			par_io_of_config(ucc);
+
+#if defined CONFIG_ATM_UCC
+{
+		struct device_node *upc;
+		for_each_node_by_name(upc, "upc")
+			par_io_of_config(upc);
+}
+#endif
 	}
 
 	if (bcsr_regs) {
@@ -281,9 +342,23 @@ static void __init mpc85xx_mds_setup_arch(void)
 
 		} else if (machine_is(p1021_mds)) {
 #define BCSR11_ENET_MICRST     (0x1 << 5)
+#define BCSR6_TDMD_UART1	(0x1 << 2)
 			/* Reset Micrel PHY */
 			clrbits8(&bcsr_regs[11], BCSR11_ENET_MICRST);
 			setbits8(&bcsr_regs[11], BCSR11_ENET_MICRST);
+
+			np = of_find_compatible_node(NULL, NULL, "ucc_uart");
+			if (np && of_device_is_available(np)) {
+				use_ucc_uart = 1;
+				/*Enable UART1 */
+				clrbits8(&bcsr_regs[6], BCSR6_TDMD_UART1);
+			}
+#if defined CONFIG_ATM_UCC
+#define BCSR6_LBC_UPC          (0x1 << 5)
+#define BCSR6_UPC_EN           (0x1 << 4)
+			clrbits8(&bcsr_regs[6], BCSR6_LBC_UPC);
+			clrbits8(&bcsr_regs[6], BCSR6_UPC_EN);
+#endif
 		}
 
 		iounmap(bcsr_regs);
@@ -292,8 +367,13 @@ static void __init mpc85xx_mds_setup_arch(void)
 	if (machine_is(p1021_mds)) {
 #define MPC85xx_PMUXCR_OFFSET           0x60
 #define MPC85xx_PMUXCR_QE0              0x00008000
+#define MPC85xx_PMUXCR_QE2              0x00002000
 #define MPC85xx_PMUXCR_QE3              0x00001000
+#define MPC85xx_PMUXCR_QE4              0x00000800
+#define MPC85xx_PMUXCR_QE5              0x00000400
+#define MPC85xx_PMUXCR_QE8              0x00000080
 #define MPC85xx_PMUXCR_QE9              0x00000040
+#define MPC85xx_PMUXCR_QE11             0x00000010
 #define MPC85xx_PMUXCR_QE12             0x00000008
 		static __be32 __iomem *pmuxcr;
 
@@ -311,12 +391,25 @@ static void __init mpc85xx_mds_setup_arch(void)
 			 * enable QE UEC mode, we need to set bit QE0 for UCC1
 			 * in Eth mode, QE0 and QE3 for UCC5 in Eth mode, QE9
 			 * and QE12 for QE MII management singals in PMUXCR
-			 * register.
+			 * register. QE8 need to be exposed for UCC7 UART mode.
 			 */
 				setbits32(pmuxcr, MPC85xx_PMUXCR_QE0 |
 						  MPC85xx_PMUXCR_QE3 |
 						  MPC85xx_PMUXCR_QE9 |
 						  MPC85xx_PMUXCR_QE12);
+
+			if (use_ucc_uart)
+				setbits32(pmuxcr, MPC85xx_PMUXCR_QE8);
+
+#if defined CONFIG_ATM_UCC
+			clrbits32(pmuxcr, MPC85xx_PMUXCR_QE12);
+			clrbits32(pmuxcr, MPC85xx_PMUXCR_QE9);
+			setbits32(pmuxcr, MPC85xx_PMUXCR_QE0 |
+					  MPC85xx_PMUXCR_QE2 |
+					  MPC85xx_PMUXCR_QE4 |
+					  MPC85xx_PMUXCR_QE5 |
+					  MPC85xx_PMUXCR_QE11);
+#endif
 
 			of_node_put(np);
 		}
@@ -422,6 +515,7 @@ static void __init mpc85xx_mds_pic_init(void)
 	struct mpic *mpic;
 	struct resource r;
 	struct device_node *np = NULL;
+	unsigned long root = of_get_flat_dt_root();
 
 	np = of_find_node_by_type(NULL, "open-pic");
 	if (!np)
@@ -433,10 +527,18 @@ static void __init mpc85xx_mds_pic_init(void)
 		return;
 	}
 
-	mpic = mpic_alloc(np, r.start,
+	if (of_flat_dt_is_compatible(root, "fsl,P1021MDS-CAMP")) {
+		mpic = mpic_alloc(np, r.start,
+			MPIC_PRIMARY | MPIC_BIG_ENDIAN |
+			MPIC_BROKEN_FRR_NIRQS,
+			0, 256, " OpenPIC  ");
+
+	} else {
+		mpic = mpic_alloc(np, r.start,
 			MPIC_PRIMARY | MPIC_WANTS_RESET | MPIC_BIG_ENDIAN |
 			MPIC_BROKEN_FRR_NIRQS | MPIC_SINGLE_DEST_CPU,
 			0, 256, " OpenPIC  ");
+	}
 	BUG_ON(mpic == NULL);
 	of_node_put(np);
 

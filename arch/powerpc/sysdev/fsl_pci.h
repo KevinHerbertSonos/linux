@@ -21,6 +21,8 @@
 #define PIWAR_TGI_LOCAL		0x00f00000	/* target - local memory */
 #define PIWAR_READ_SNOOP	0x00050000
 #define PIWAR_WRITE_SNOOP	0x00005000
+#define PIWAR_SZ_MASK          0x0000003f
+#define PIWAR_2G	0xa0f5501e	/* Enable, Prefetch, Local Mem, Snoop R/W, 2G */
 
 /* PCI/PCI Express outbound window reg */
 struct pci_outbound_window_regs {
@@ -49,7 +51,9 @@ struct ccsr_pci {
 	__be32	int_ack;		/* 0x.008 - PCI Interrupt Acknowledge Register */
 	__be32	pex_otb_cpl_tor;	/* 0x.00c - PCIE Outbound completion timeout register */
 	__be32	pex_conf_tor;		/* 0x.010 - PCIE configuration timeout register */
-	u8	res2[12];
+	u8	res2[4];
+	__be32	pex_int_stat;		/* 0x.018 - PCIE Interrupt Status register */
+	u8	res2b[4];
 	__be32	pex_pme_mes_dr;		/* 0x.020 - PCIE PME and message detect register */
 	__be32	pex_pme_mes_disr;	/* 0x.024 - PCIE PME and message disable register */
 	__be32	pex_pme_mes_ier;	/* 0x.028 - PCIE PME and message interrupt enable register */
@@ -88,6 +92,8 @@ struct ccsr_pci {
 extern int fsl_add_bridge(struct device_node *dev, int is_primary);
 extern void fsl_pcibios_fixup_bus(struct pci_bus *bus);
 extern int mpc83xx_add_bridge(struct device_node *dev);
+extern int mpc83xx_exclude_device(struct pci_controller *hose,
+		u_char bus, u_char devfn);
 
 #endif /* __POWERPC_FSL_PCI_H */
 #endif /* __KERNEL__ */

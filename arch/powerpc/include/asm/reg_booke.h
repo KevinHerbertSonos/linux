@@ -35,7 +35,13 @@
 #define MSR_KERNEL	(MSR_ME|MSR_RI|MSR_IR|MSR_DR|MSR_CE)
 #define MSR_USER	(MSR_KERNEL|MSR_PR|MSR_EE)
 #else
+
+#if defined(CONFIG_DEBUG_CW)
+#define MSR_KERNEL      (MSR_ME|MSR_RI|MSR_CE|MSR_DE)
+#else
 #define MSR_KERNEL	(MSR_ME|MSR_RI|MSR_CE)
+#endif
+
 #define MSR_USER	(MSR_KERNEL|MSR_PR|MSR_EE)
 #endif
 
@@ -243,6 +249,22 @@
 #define MCSR_BUS_DRERR 	0x00000008UL /* Read Bus Error on data load */
 #define MCSR_BUS_WRERR 	0x00000004UL /* Write Bus Error on buffered
 					store or cache line push */
+#endif
+
+/* Bit definitions for the HID1 */
+#ifdef CONFIG_E500
+#ifndef CONFIG_PPC_E500MC
+/* e500v1/v2 */
+#define HID1_PLL_CFG_MASK 0xfc000000UL	/* PLL_CFG input pins */
+#define HID1_RFXE	0x00020000UL	/* Read fault exception enable */
+#define HID1_R1DPE	0x00008000UL	/* R1 data bus parity enable */
+#define HID1_R2DPE	0x00004000UL	/* R2 data bus parity enable */
+#define HID1_ASTME	0x00002000UL	/* Address bus streaming mode enable */
+#define HID1_ABE	0x00001000UL	/* Address broadcast enable */
+#define HID1_MPXTT	0x00000400UL	/* MPX re-map transfer type */
+#define HID1_ATS	0x00000080UL	/* Atomic status */
+#define HID1_MID_MASK	0x0000000fUL	/* MID input pins */
+#endif
 #endif
 
 /* Bit definitions for the DBSR. */

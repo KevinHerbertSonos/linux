@@ -26,6 +26,7 @@
 			Nick Holloway, 27th May 1994
 	[I tweaked this explanation a little but that's all]
 			Alan Cox, 30th May 1994
+	Copyright 2009-2010 Freescale Semiconductor, Inc.
 */
 
 #include <linux/module.h>
@@ -65,11 +66,21 @@ static netdev_tx_t dummy_xmit(struct sk_buff *skb, struct net_device *dev)
 	return NETDEV_TX_OK;
 }
 
+#ifdef CONFIG_NET_GIANFAR_FP
+static int dummy_accept_fastpath(struct net_device *dev, struct dst_entry *dst)
+{
+	return -1;
+}
+#endif
+
 static const struct net_device_ops dummy_netdev_ops = {
 	.ndo_start_xmit		= dummy_xmit,
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_set_multicast_list = set_multicast_list,
 	.ndo_set_mac_address	= dummy_set_address,
+#ifdef CONFIG_NET_GIANFAR_FP
+	.ndo_accept_fastpath	= dummy_accept_fastpath,
+#endif
 };
 
 static void dummy_setup(struct net_device *dev)

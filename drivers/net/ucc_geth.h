@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Freescale Semicondutor, Inc. 2006-2009. All rights reserved.
+ * Copyright (C) 2006-2010 Freescale Semiconductor, Inc. All rights reserved.
  *
  * Author: Shlomi Gridish <gridish@freescale.com>
  *
@@ -875,8 +875,8 @@ struct ucc_geth_hardware_statistics {
 #define UCC_GETH_SIZE_OF_BD                     QE_SIZEOF_BD
 
 /* Driver definitions */
-#define TX_BD_RING_LEN                          0x10
-#define RX_BD_RING_LEN                          0x10
+#define TX_BD_RING_LEN                          64
+#define RX_BD_RING_LEN                          64
 
 #define TX_RING_MOD_MASK(size)                  (size-1)
 #define RX_RING_MOD_MASK(size)                  (size-1)

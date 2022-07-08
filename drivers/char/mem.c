@@ -807,6 +807,59 @@ static const struct file_operations oldmem_fops = {
 };
 #endif
 
+#ifdef CONFIG_SONOS_FILLMORE
+static loff_t memory_arlseek(struct file * file, loff_t offset, int orig)
+{
+        loff_t ret;
+
+        mutex_lock(&file->f_path.dentry->d_inode->i_mutex);
+        switch (orig) {
+                case 0:
+                        file->f_pos = offset & 0xffffffff;
+                        ret = file->f_pos;
+                        force_successful_syscall_return();
+                        break;
+                case 1:
+                        file->f_pos += offset;
+                        file->f_pos &= 0xffffffff;
+                        ret = file->f_pos;
+                        force_successful_syscall_return();
+                        break;
+                default:
+                        ret = -EINVAL;
+        }
+        mutex_unlock(&file->f_path.dentry->d_inode->i_mutex);
+        return ret;
+}
+
+static ssize_t read_armem(struct file *file, char __user *buf, 
+			 size_t count, loff_t *ppos)
+{
+	unsigned int	pos = (unsigned int)*ppos;
+	if (copy_to_user(buf, (void *)pos, count))
+		return -EFAULT;
+ 	*ppos += count;
+ 	return count;
+}
+
+static ssize_t write_armem(struct file * file, const char __user * buf, 
+			  size_t count, loff_t *ppos)
+{
+	unsigned int	pos = (unsigned int)*ppos;
+	if(copy_from_user((void *)pos, buf, count)) {
+		return -EFAULT;
+	}
+	*ppos += count;
+ 	return count;
+}
+
+static struct file_operations armem_fops = {
+	.llseek		= memory_arlseek,
+	.read		= read_armem,
+	.write		= write_armem,
+};
+#endif	// CONFIG_SONOS_FILLMORE
+
 static ssize_t kmsg_write(struct file *file, const char __user *buf,
 			  size_t count, loff_t *ppos)
 {
@@ -853,6 +906,9 @@ static const struct memdev {
 	[11] = { "kmsg", 0, &kmsg_fops, NULL },
 #ifdef CONFIG_CRASH_DUMP
 	[12] = { "oldmem", 0, &oldmem_fops, NULL },
+#endif
+#ifdef CONFIG_SONOS_FILLMORE
+	[13] = { "armem",  S_IRUSR | S_IWUSR | S_IRGRP, &armem_fops, NULL },
 #endif
 };
 
