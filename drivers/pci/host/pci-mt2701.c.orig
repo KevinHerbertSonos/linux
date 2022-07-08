@@ -135,6 +135,9 @@ static const struct mtk_phy_init {
 	{ 0xc14, 0xf0000, 0xa0000 },
 	{ 0xa28, 0x3fe00, 0x2000 },
 	{ 0xa2c, 0x1ff, 0x10 },
+#ifdef CONFIG_SONOS
+	{ 0x938, 0xffffffff, 0x40008200 },	/* disable SSC */
+#endif
 };
 
 static struct mtk_pcie *sys_to_pcie(struct pci_sys_data *sys)
@@ -396,6 +399,17 @@ static void mtk_pcie_preinit(struct mtk_pcie *pcie)
 	mtk_foreach_port(port)
 		if (port->enable)
 			mtk_pcie_configure_phy(port);
+
+#ifdef CONFIG_SONOS
+	/* force to GEN1 */
+	/* Configre RC Link Speed */
+	mtk_foreach_port(port) {
+		pcie_config_read(&bus, (port->id)<<3, 0xa0, 4, &val);
+		val &= ~PCI_EXP_LNKSTA_CLS;
+		val |= PCI_EXP_LNKSTA_CLS_2_5GB;
+		pcie_config_write(&bus, (port->id)<<3, 0xa0, 4, val);
+	}
+#endif
 
 	/* PCIe EP reset */
 	val = 0;

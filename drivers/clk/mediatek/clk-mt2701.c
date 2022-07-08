@@ -815,10 +815,10 @@ static const struct mtk_gate_regs peri1_cg_regs __initconst = {
 	}
 
 static const struct mtk_gate peri_clks[] __initconst = {
-	GATE_PERI0(CLK_PERI_USB0_MCU, "usb0_mcu_ck", "axi_sel", 31),
-	GATE_PERI0(CLK_PERI_ETH, "eth_ck", "clk26m", 30),
-	GATE_PERI0(CLK_PERI_SPI0, "spi0_ck", "spi0_sel", 29),
-	GATE_PERI0(CLK_PERI_AUXADC, "auxadc_ck", "clk26m", 28),
+	GATE_PERI1(CLK_PERI_USB0_MCU, "usb0_mcu_ck", "axi_sel", 31),
+	GATE_PERI1(CLK_PERI_ETH, "eth_ck", "clk26m", 30),
+	GATE_PERI1(CLK_PERI_SPI0, "spi0_ck", "spi0_sel", 29),
+	GATE_PERI1(CLK_PERI_AUXADC, "auxadc_ck", "clk26m", 28),
 	GATE_PERI0(CLK_PERI_I2C3, "i2c3_ck", "clk26m", 27),
 	GATE_PERI0(CLK_PERI_I2C2, "i2c2_ck", "axi_sel", 26),
 	GATE_PERI0(CLK_PERI_I2C1, "i2c1_ck", "axi_sel", 25),
@@ -1082,7 +1082,7 @@ static void __init mtk_vdecsys_init(struct device_node *node)
 }
 
 static const struct mtk_gate_regs hif_cg_regs __initconst = {
-	.sta_ofs = 0x0030,
+	.sta_ofs = 0x0008,
 };
 
 #define GATE_HIF(_id, _name, _parent, _shift) {		\
