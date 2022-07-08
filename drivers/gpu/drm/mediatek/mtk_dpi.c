@@ -19,11 +19,13 @@
 #include <linux/component.h>
 #include <linux/platform_device.h>
 #include <linux/of.h>
+#include <linux/of_gpio.h>
 #include <linux/of_graph.h>
 #include <linux/interrupt.h>
 #include <linux/types.h>
 #include <linux/clk.h>
 #include <linux/pm_runtime.h>
+#include <linux/pinctrl/consumer.h>
 
 #include "mtk_dpi_regs.h"
 #include "mtk_drm_ddp_comp.h"
@@ -85,6 +87,9 @@ struct mtk_dpi {
 	enum mtk_dpi_out_channel_swap channel_swap;
 	bool power_sta;
 	u8 power_ctl;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *pins_gpio;
+	struct pinctrl_state *pins_dpi;
 };
 
 static inline struct mtk_dpi *mtk_dpi_from_encoder(struct drm_encoder *e)
@@ -396,6 +401,7 @@ static void mtk_dpi_config_color_format(struct mtk_dpi *dpi,
 
 static void mtk_dpi_power_off(struct mtk_dpi *dpi, enum mtk_dpi_power_ctl pctl)
 {
+	printk(KERN_DEBUG "y-t dpi power off.\n");
 	dpi->power_ctl &= ~pctl;
 
 	if ((dpi->power_ctl & DPI_POWER_START) ||
@@ -419,6 +425,7 @@ static int mtk_dpi_power_on(struct mtk_dpi *dpi, enum mtk_dpi_power_ctl pctl)
 {
 	int ret;
 
+	printk(KERN_DEBUG "y-t dpi power on.\n");
 	dpi->power_ctl |= pctl;
 
 	if (!(dpi->power_ctl & DPI_POWER_START) &&
@@ -615,6 +622,9 @@ static void mtk_dpi_encoder_disable(struct drm_encoder *encoder)
 		}
 	}
 
+	if (dpi->pinctrl && dpi->pins_gpio)                      
+		pinctrl_select_state(dpi->pinctrl, dpi->pins_gpio);
+
 	mtk_dpi_power_off(dpi, DPI_POWER_ENABLE);
 }
 
@@ -630,6 +640,9 @@ static void mtk_dpi_encoder_enable(struct drm_encoder *encoder)
 
 	mtk_dpi_power_on(dpi, DPI_POWER_ENABLE);
 	mtk_dpi_set_display_mode(dpi, &dpi->mode);
+
+	if (dpi->pinctrl && dpi->pins_dpi)                    
+		pinctrl_select_state(dpi->pinctrl, dpi->pins_dpi);
 
 	if (dpi->panel) {
 		if (drm_panel_enable(dpi->panel) < 0) {
@@ -925,6 +938,26 @@ static int mtk_dpi_probe(struct platform_device *pdev)
 
 	dpi->dev = dev;
 	dpi->conf = (struct mtk_dpi_conf *)match->data;
+
+	dpi->pinctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR(dpi->pinctrl)) {
+		dpi->pinctrl = NULL;
+		dev_dbg(&pdev->dev, "Cannot find pinctrl!\n");
+	}
+	if (dpi->pinctrl) {
+		dpi->pins_gpio = pinctrl_lookup_state(dpi->pinctrl, "sleep");
+		if (IS_ERR(dpi->pins_gpio)) {
+			dpi->pins_gpio = NULL;
+			dev_dbg(&pdev->dev, "Cannot find pinctrl idle!\n");
+		}
+		if (dpi->pins_gpio)
+			pinctrl_select_state(dpi->pinctrl, dpi->pins_gpio);
+		dpi->pins_dpi = pinctrl_lookup_state(dpi->pinctrl, "default");
+		if (IS_ERR(dpi->pins_dpi)) {
+			dpi->pins_dpi = NULL;
+			dev_dbg(&pdev->dev, "Cannot find pinctrl active!\n");
+		}
+	}
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	dpi->regs = devm_ioremap_resource(dev, mem);
