@@ -27,6 +27,11 @@
 
 #include "br_private.h"
 
+#if defined(CONFIG_SONOS)
+#include "br_mcast.h"
+#include "br_sonos.h"
+#endif
+
 /*
  * Determine initial path cost based on speed.
  * using recommendations from 802.1d standard
@@ -35,6 +40,9 @@
  */
 static int port_cost(struct net_device *dev)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-65574 */
+	return sonos_initial_port_cost(dev);
+#else
 	struct ethtool_cmd ecmd;
 
 	if (!__ethtool_get_settings(dev, &ecmd)) {
@@ -58,10 +66,11 @@ static int port_cost(struct net_device *dev)
 		return 2500;
 
 	return 100;	/* assume old 10Mbps */
+#endif
 }
 
 
-/* Check for port carrier transistions. */
+/* Check for port carrier transitions. */
 void br_port_carrier_check(struct net_bridge_port *p)
 {
 	struct net_device *dev = p->dev;
@@ -107,8 +116,27 @@ static void destroy_nbp(struct net_bridge_port *p)
 	p->dev = NULL;
 	dev_put(dev);
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	/* SONOS: We currently only add a kobject for non-p2p ports, so just
+	 *        free the net_bridge_port if the port is p2p.
+	 *
+	 *        Yes, we eventually need to fix the bridge so that all objects
+	 *        are managed the same way.
+	 */
+        if (p->is_p2p) {
+		kfree(p);
+		return;
+	}
+#endif
 	kobject_put(&p->kobj);
 }
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-65562 */
+void br_sonos_destroy_nbp(struct net_bridge_port *p)
+{
+	destroy_nbp(p);
+}
+#endif
 
 static void destroy_nbp_rcu(struct rcu_head *head)
 {
@@ -130,8 +158,19 @@ static void del_nbp(struct net_bridge_port *p)
 {
 	struct net_bridge *br = p->br;
 	struct net_device *dev = p->dev;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	struct net_bridge_port_list_node *pl;
+#endif
 
 	sysfs_remove_link(br->ifobj, p->dev->name);
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	/* If we're not already on a bridge, punt */
+	if ((pl = dev->br_port_list) == NULL)
+		return;
+
+	sonos_del_nbp(p, br, dev, pl);
+#else
 
 	dev_set_promiscuity(dev, -1);
 
@@ -158,26 +197,36 @@ static void del_nbp(struct net_bridge_port *p)
 	kobject_del(&p->kobj);
 
 	br_netpoll_disable(p);
+#endif
 
 	call_rcu(&p->rcu, destroy_nbp_rcu);
 }
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-65562 */
+void br_sonos_del_nbp(struct net_bridge_port *p)
+{
+	del_nbp(p);
+}
+#endif
 
 /* Delete bridge device */
 void br_dev_delete(struct net_device *dev, struct list_head *head)
 {
 	struct net_bridge *br = netdev_priv(dev);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	sonos_del_br(br);
+#else
 	struct net_bridge_port *p, *n;
 
 	list_for_each_entry_safe(p, n, &br->port_list, list) {
 		del_nbp(p);
 	}
 
-	br_fdb_delete_by_port(br, NULL, 1);
-
 	del_timer_sync(&br->gc_timer);
 
 	br_sysfs_delbr(br->dev);
 	unregister_netdevice_queue(br->dev, head);
+#endif
 }
 
 /* find an available port number */
@@ -208,6 +257,9 @@ static struct net_bridge_port *new_nbp(struct net_bridge *br,
 {
 	int index;
 	struct net_bridge_port *p;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	struct net_bridge_port_list_node *pl;
+#endif
 
 	index = find_portno(br);
 	if (index < 0)
@@ -223,14 +275,37 @@ static struct net_bridge_port *new_nbp(struct net_bridge *br,
 	p->path_cost = port_cost(dev);
 	p->priority = 0x8000 >> BR_PORT_BITS;
 	p->port_no = index;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651, SWPBL-65562 */
+	pl = sonos_alloc_port_list(p);
+	if (pl == NULL) {
+		return NULL;
+	}
+	dev->br_port_list = pl;
+#endif
 	p->flags = 0;
 	br_init_port(p);
 	p->state = BR_STATE_DISABLED;
 	br_stp_port_timer_init(p);
 	br_multicast_add_port(p);
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	if (kobject_init_and_add(&p->kobj, &brport_ktype, &(dev->dev.kobj),
+				 SYSFS_BRIDGE_PORT_ATTR))
+	{
+		printk("bridge: failed to add kernel obj\n");
+	}
+#endif
+
 	return p;
 }
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-65562 */
+struct net_bridge_port *br_sonos_new_nbp(struct net_bridge *br,
+					 struct net_device *dev)
+{
+	return new_nbp(br, dev);
+}
+#endif
 
 int br_add_bridge(struct net *net, const char *name)
 {
@@ -243,12 +318,16 @@ int br_add_bridge(struct net *net, const char *name)
 	if (!dev)
 		return -ENOMEM;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	res = sonos_add_bridge(net, name, dev);
+#else
 	dev_net_set(dev, net);
 	dev->rtnl_link_ops = &br_link_ops;
 
 	res = register_netdev(dev);
 	if (res)
 		free_netdev(dev);
+#endif
 	return res;
 }
 
@@ -301,6 +380,12 @@ int br_min_mtu(const struct net_bridge *br)
 /*
  * Recomputes features using slave's features
  */
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+void br_features_recompute(struct net_bridge *br)
+{
+	sonos_br_features_recompute(br);
+}
+#else
 netdev_features_t br_features_recompute(struct net_bridge *br,
 	netdev_features_t features)
 {
@@ -320,10 +405,14 @@ netdev_features_t br_features_recompute(struct net_bridge *br,
 
 	return features;
 }
+#endif
 
 /* called with RTNL */
 int br_add_if(struct net_bridge *br, struct net_device *dev)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	return sonos_br_add_if(br, dev);
+#else
 	struct net_bridge_port *p;
 	int err = 0;
 	bool changed_addr;
@@ -421,11 +510,15 @@ put_back:
 	dev_put(dev);
 	kfree(p);
 	return err;
+#endif
 }
 
 /* called with RTNL */
 int br_del_if(struct net_bridge *br, struct net_device *dev)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	return sonos_br_del_if(br, dev);
+#else
 	struct net_bridge_port *p;
 	bool changed_addr;
 
@@ -449,19 +542,32 @@ int br_del_if(struct net_bridge *br, struct net_device *dev)
 	netdev_update_features(br->dev);
 
 	return 0;
+#endif
 }
 
 void __net_exit br_net_exit(struct net *net)
 {
 	struct net_device *dev;
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
 	LIST_HEAD(list);
+#endif
 
 	rtnl_lock();
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+restart:
+	for_each_netdev(net, dev)
+		if (dev->priv_flags & IFF_EBRIDGE)
+		{
+			br_dev_delete(dev, NULL);
+			goto restart;
+		}
+#else
 	for_each_netdev(net, dev)
 		if (dev->priv_flags & IFF_EBRIDGE)
 			br_dev_delete(dev, &list);
 
 	unregister_netdevice_many(&list);
+#endif
 	rtnl_unlock();
 
 }

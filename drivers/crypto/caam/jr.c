@@ -521,7 +521,11 @@ static int caam_jr_probe(struct platform_device *pdev)
 
 	atomic_set(&jrpriv->tfm_count, 0);
 
+#ifdef CONFIG_SONOS
+	device_init_wakeup(&pdev->dev, 0);
+#else
 	device_init_wakeup(&pdev->dev, 1);
+#endif
 	device_set_wakeup_enable(&pdev->dev, false);
 
 	return 0;

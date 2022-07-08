@@ -25,3 +25,25 @@ $(obj)/x509_rsakey-asn1.o: $(obj)/x509_rsakey-asn1.c $(obj)/x509_rsakey-asn1.h
 
 clean-files	+= x509-asn1.c x509-asn1.h
 clean-files	+= x509_rsakey-asn1.c x509_rsakey-asn1.h
+
+ifdef CONFIG_SONOS_SECBOOT
+obj-y += sonos_signature_common_linux.o
+obj-y += sonos_signature_keys.o
+ifndef SONOS_ARCH_ATTR_STUB_SECBOOT_ARCH_KEYS
+obj-y += sonos_signature_keys_$(SONOSBOARD).o
+endif
+obj-y += sonos_signature_verify_linux.o
+
+# rawrsa handling
+obj-y += rawrsa_key_parser.o
+rawrsa_key_parser-y := \
+	rawrsa-asn1.o \
+	rawrsa_parser.o \
+	rawrsa_public_key.o
+
+$(obj)/rawrsa_parser.o: $(obj)/rawrsa-asn1.h
+$(obj)/rawrsa-asn1.o: $(obj)/rawrsa-asn1.c $(obj)/rawrsa-asn1.h
+
+clean-files	+= rawrsa-asn1.c rawrsa-asn1.h
+
+endif

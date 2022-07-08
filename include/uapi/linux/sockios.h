@@ -127,6 +127,8 @@
 /* hardware time stamping: parameters in linux/net_tstamp.h */
 #define SIOCSHWTSTAMP   0x89b0
 
+#define SIOCGIFSTATS    0x89c0
+
 /* Device private ioctl calls */
 
 /*

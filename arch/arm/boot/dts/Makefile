@@ -97,7 +97,7 @@ dtb-$(CONFIG_ARCH_MVEBU) += armada-370-db.dtb \
 	armada-xp-db.dtb \
 	armada-xp-gp.dtb \
 	armada-xp-openblocks-ax3-4.dtb
-dtb-$(CONFIG_ARCH_MXC) += \
+dtb-$(CONFIG_ARCH_MXC_IGNORE) += \
 	imx25-karo-tx25.dtb \
 	imx25-pdk.dtb \
 	imx27-apf27.dtb \
@@ -164,7 +164,7 @@ dtb-$(CONFIG_ARCH_MXC) += \
 	imx6sx-sabreauto.dtb \
 	imx6sx-sabreauto-m4.dtb \
 	vf610-twr.dtb
-dtb-$(CONFIG_ARCH_MXS) += imx23-evk.dtb \
+dtb-$(CONFIG_ARCH_MXS_IGNORE) += imx23-evk.dtb \
 	imx23-olinuxino.dtb \
 	imx23-stmp378x_devb.dtb \
 	imx28-apf28.dtb \
@@ -252,6 +252,14 @@ dtb-$(CONFIG_ARCH_VT8500) += vt8500-bv07.dtb \
 	wm8650-mid.dtb \
 	wm8850-w70v2.dtb
 dtb-$(CONFIG_ARCH_ZYNQ) += zynq-zc702.dtb
+
+dtb-$(CONFIG_SONOS_ENCORE) += encore.dtb
+dtb-$(CONFIG_SONOS_SOLBASE) += solbase.dtb
+dtb-$(CONFIG_SONOS_ROYALE) += royale.dtb
+dtb-$(CONFIG_SONOS_BOOTLEG) += bootleg.dtb
+dtb-$(CONFIG_SONOS_PARAMOUNT) += paramount.dtb
+dtb-$(CONFIG_SONOS_CHAPLIN) += chaplin.dtb
+dtb-$(CONFIG_SONOS_NEPTUNE) += neptune.dtb
 
 targets += dtbs
 targets += $(dtb-y)

@@ -45,6 +45,9 @@
 #include <linux/poll.h>
 #include <linux/irq_work.h>
 #include <linux/utsname.h>
+#ifdef CONFIG_SONOS
+#include "mdp.h"
+#endif
 
 #include <asm/uaccess.h>
 
@@ -71,6 +74,14 @@ int console_printk[4] = {
  */
 int oops_in_progress;
 EXPORT_SYMBOL(oops_in_progress);
+#ifdef CONFIG_SONOS
+#if defined CONFIG_SONOS_DIAGS && !defined SONOS_STRICT_DIAG_BUILD
+static int enable_printk = 1;
+#else
+static int enable_printk = 0;
+#endif
+#endif
+
 
 /*
  * console_sem protects the console_drivers list, and also
@@ -354,7 +365,7 @@ static void log_store(int facility, int level,
 	if (ts_nsec > 0)
 		msg->ts_nsec = ts_nsec;
 	else
-		msg->ts_nsec = local_clock();
+                msg->ts_nsec = local_clock();
 	memset(log_dict(msg) + dict_len, 0, pad_len);
 	msg->len = sizeof(struct log) + text_len + dict_len + pad_len;
 
@@ -1270,6 +1281,11 @@ static void call_console_drivers(int level, const char *text, size_t len)
 {
 	struct console *con;
 
+#ifdef CONFIG_SONOS
+	if (enable_printk == 0 && oops_in_progress == 0 ) {
+		return;
+	}
+#endif
 	trace_console(text, len);
 
 	if (level >= console_loglevel && !ignore_loglevel)
@@ -1834,6 +1850,22 @@ static int __init console_setup(char *str)
 	return 1;
 }
 __setup("console=", console_setup);
+
+#ifdef CONFIG_SONOS
+#ifdef CONFIG_PRINTK
+static int __init enable_printk_setup(char *str)
+{
+	if(!str) return 1;
+
+	// when uboot passes enable_printk it always passes enable_printk=1
+	enable_printk = simple_strtoul(str, NULL, 10);
+
+	return 1;
+}
+__setup("enable_printk=", enable_printk_setup);
+#endif
+#endif
+
 
 /**
  * add_preferred_console - add a device to the list of preferred consoles.

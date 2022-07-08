@@ -80,8 +80,14 @@ static int read_block(struct inode *inode, void *addr, unsigned int block,
 
 	dlen = le32_to_cpu(dn->ch.len) - UBIFS_DATA_NODE_SZ;
 	out_len = UBIFS_BLOCK_SIZE;
+#ifdef CONFIG_SONOS_SECBOOT
 	err = ubifs_decompress(&dn->data, dlen, addr, &out_len,
-			       le16_to_cpu(dn->compr_type));
+					le16_to_cpu(dn->compr_type), (use_ubifs_crypto_key ? sonos_ubifs_crypto_key : NULL) );
+#else
+	err = ubifs_decompress(&dn->data, dlen, addr, &out_len,
+					le16_to_cpu(dn->compr_type));
+#endif
+
 	if (err || len != out_len)
 		goto dump;
 
@@ -649,8 +655,14 @@ static int populate_page(struct ubifs_info *c, struct page *page,
 
 			dlen = le32_to_cpu(dn->ch.len) - UBIFS_DATA_NODE_SZ;
 			out_len = UBIFS_BLOCK_SIZE;
+#ifdef CONFIG_SONOS_SECBOOT
 			err = ubifs_decompress(&dn->data, dlen, addr, &out_len,
-					       le16_to_cpu(dn->compr_type));
+							le16_to_cpu(dn->compr_type),
+							(use_ubifs_crypto_key ? sonos_ubifs_crypto_key : NULL) );
+#else
+			err = ubifs_decompress(&dn->data, dlen, addr, &out_len,
+							le16_to_cpu(dn->compr_type));
+#endif
 			if (err || len != out_len)
 				goto out_err;
 
@@ -1524,7 +1536,8 @@ static int ubifs_vm_page_mkwrite(struct vm_area_struct *vma,
 	}
 
 	wait_for_stable_page(page);
-	return VM_FAULT_LOCKED;
+	unlock_page(page);
+	return 0;
 
 out_unlock:
 	unlock_page(page);

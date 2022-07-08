@@ -67,6 +67,7 @@
 #define FEC_R_FIFO_RSEM		0x194 /* Receive FIFO section empty threshold */
 #define FEC_R_FIFO_RAEM		0x198 /* Receive FIFO almost empty threshold */
 #define FEC_R_FIFO_RAFL		0x19c /* Receive FIFO almost full threshold */
+#define FEC_FTRL		0x1b0 /* Frame Truncation Length */
 #define FEC_RACC		0x1C4 /* Receive Accelerator function */
 #define FEC_RCMR_1		0x1c8 /* Receive classification match ring 1 */
 #define FEC_RCMR_2		0x1cc /* Receive classification match ring 2 */
@@ -353,8 +354,15 @@ struct bufdesc_ex {
 #define FEC_ITR_EN		(0x1 << 31)
 #define FEC_ITR_ICFT(X)		((X & 0xFF) << 20)
 #define FEC_ITR_ICTT(X)		((X) & 0xFFFF)
+#ifdef CONFIG_SONOS
+#define FEC_ITR_ICFT_TX_DEFAULT	200  /* Set 200 frame count threshold */
+#define FEC_ITR_ICTT_TX_DEFAULT	1000 /* Set 1000us timer threshold */
+#define FEC_ITR_ICFT_RX_DEFAULT	0    /* SONOS - disable by default */
+#define FEC_ITR_ICTT_RX_DEFAULT	0    /* SONOS - disable by default */
+#else
 #define FEC_ITR_ICFT_DEFAULT	200  /* Set 200 frame count threshold */
 #define FEC_ITR_ICTT_DEFAULT	1000 /* Set 1000us timer threshold */
+#endif
 
 /* IEEE 1588 definition */
 #define FEC_T_PERIOD_ONE_SEC           0x3B9ACA00

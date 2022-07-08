@@ -406,6 +406,127 @@ static ssize_t vol_cdev_write(struct file *file, const char __user *buf,
 	return count;
 }
 
+#ifdef CONFIG_SONOS
+struct ubi_volume_desc * rootfs_open(int vol_id, int ubi_num)
+{
+	struct ubi_volume_desc *desc;
+
+	desc = ubi_open_volume(ubi_num, vol_id, UBI_READWRITE);
+	if (IS_ERR(desc)) {
+		printk("rootfs open device %d, volume %d fail %ld\n",
+			ubi_num, vol_id, PTR_ERR(desc));
+		return NULL;
+	}
+	return desc;
+}
+
+int rootfs_update(struct ubi_volume_desc *desc, int64_t bytes)
+{
+	int err = 0;
+	struct ubi_volume *vol = desc->vol;
+	struct ubi_device *ubi = vol->ubi;
+	int64_t rsvd_bytes;
+
+	if (!capable(CAP_SYS_RESOURCE)) {
+		err = -EPERM;
+		goto  err_skip;
+	}
+
+	if (desc->mode == UBI_READONLY) {
+		err = -EROFS;
+		goto err_skip;
+	}
+
+	rsvd_bytes = (long long)vol->reserved_pebs *
+			ubi->leb_size-vol->data_pad;
+	if (bytes < 0 || bytes > rsvd_bytes) {
+		err = -EINVAL;
+		goto err_skip;
+	}
+
+	err = get_exclusive(desc);
+	if (err < 0)
+		goto err_skip;
+
+	err = ubi_start_update(ubi, vol, bytes);
+	if (bytes == 0)
+		revoke_exclusive(desc, UBI_READWRITE);
+err_skip:
+	return err;
+}
+
+ssize_t rootfs_write(struct ubi_volume_desc *desc, const char *buf,
+			      size_t count, int flag)
+{
+	int err = 0;
+	struct ubi_volume *vol = desc->vol;
+	struct ubi_device *ubi = vol->ubi;
+
+	if ( !vol->updating ) {
+		printk("rootfs_write not ready\n");
+		return -1;
+	}
+
+	err = rootfs_ubi_more_update_data(ubi, vol, buf, count, flag);
+
+	if (err < 0) {
+		ubi_err("cannot accept more %zd bytes of data, error %d",
+			count, err);
+		return err;
+	}
+
+	if (err) {
+		/*
+		 * The operation is finished, @err contains number of actually
+		 * written bytes.
+		 */
+		count = err;
+
+		if (vol->changing_leb) {
+			revoke_exclusive(desc, UBI_READWRITE);
+			return count;
+		}
+
+		err = ubi_check_volume(ubi, vol->vol_id);
+		if (err < 0)
+			return err;
+
+		if (err) {
+			ubi_warn("volume %d on UBI device %d is corrupted",
+				 vol->vol_id, ubi->ubi_num);
+			vol->corrupted = 1;
+		}
+		vol->checked = 1;
+		ubi_volume_notify(ubi, vol, UBI_VOLUME_UPDATED);
+		revoke_exclusive(desc, UBI_READWRITE);
+	}
+
+	return count;
+}
+
+int rootfs_release(struct ubi_volume_desc *desc)
+{
+	struct ubi_volume *vol = desc->vol;
+
+	if (vol->updating) {
+		ubi_warn("update of volume %d not finished, volume is damaged",
+			 vol->vol_id);
+		ubi_assert(!vol->changing_leb);
+		vol->updating = 0;
+		vfree(vol->upd_buf);
+	} else if (vol->changing_leb) {
+		dbg_gen("only %lld of %lld bytes received for atomic LEB change for volume %d:%d, cancel",
+			vol->upd_received, vol->upd_bytes, vol->ubi->ubi_num,
+			vol->vol_id);
+		vol->changing_leb = 0;
+		vfree(vol->upd_buf);
+	}
+
+	ubi_close_volume(desc);
+	return 0;
+}
+#endif
+
 static long vol_cdev_ioctl(struct file *file, unsigned int cmd,
 			   unsigned long arg)
 {
@@ -667,6 +788,24 @@ static int verify_rsvol_req(const struct ubi_device *ubi,
 
 	return 0;
 }
+
+#if defined(CONFIG_SONOS)
+/**
+ * verify_get_vol_info_req - verify volume re-size request.
+ * @ubi: UBI device description object
+ * @req: the request to check
+ *
+ * This function returns zero if the request is correct, and %-EINVAL if not.
+ */
+static int verify_get_vol_info_req(const struct ubi_device *ubi,
+			    const struct ubi_get_vol_info_req *req)
+{
+	if (req->vol_id < 0 || req->vol_id >= ubi->vtbl_slots)
+		return -EINVAL;
+
+	return 0;
+}
+#endif
 
 /**
  * rename_volumes - rename UBI volumes.
@@ -961,6 +1100,50 @@ static long ubi_cdev_ioctl(struct file *file, unsigned int cmd,
 		kfree(req);
 		break;
 	}
+
+#if defined(CONFIG_SONOS)
+	/* Get information about volume geometry and available pebs.  This enables sufficient
+	 * information for a user-space utility to implement volume resize safely.
+	 */
+	case UBI_IOCGETVOLINFO:
+	{
+		struct ubi_get_vol_info_req req;
+
+		dbg_gen("get volume information");
+		err = copy_from_user(&req, argp, sizeof(struct ubi_get_vol_info_req));
+		if (err) {
+			err = -EFAULT;
+			break;
+		}
+
+		err = verify_get_vol_info_req(ubi, &req);
+		if (err)
+			break;
+
+		desc = ubi_open_volume(ubi->ubi_num, req.vol_id, UBI_EXCLUSIVE);
+		if (IS_ERR(desc)) {
+			err = PTR_ERR(desc);
+			break;
+		}
+
+		/* UBI device information */
+		req.device_available_pebs = ubi->avail_pebs;
+		/* volume-specific information */
+		req.volume_reserved_pebs = ubi->volumes[req.vol_id]->reserved_pebs;
+		req.volume_used_bytes = ubi->volumes[req.vol_id]->used_bytes;
+		req.peb_usable_bytes = ubi->volumes[req.vol_id]->usable_leb_size;
+
+		ubi_close_volume(desc);
+
+		err = copy_to_user((__user char *)arg, &req, sizeof(struct ubi_get_vol_info_req));
+		if (err) {
+			err = -EFAULT;
+			break;
+		}
+
+		break;
+	}
+#endif
 
 	default:
 		err = -ENOTTY;

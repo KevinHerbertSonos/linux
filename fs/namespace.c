@@ -25,6 +25,9 @@
 #include <linux/magic.h>
 #include "pnode.h"
 #include "internal.h"
+#ifdef CONFIG_SONOS_SECBOOT
+#include "sonos_lock.h"
+#endif
 
 #define HASH_SHIFT ilog2(PAGE_SIZE / sizeof(struct list_head))
 #define HASH_SIZE (1UL << HASH_SHIFT)
@@ -1989,7 +1992,12 @@ static int do_new_mount(struct path *path, const char *fstype, int flags,
 		/* Only in special cases allow devices from mounts
 		 * created outside the initial user namespace.
 		 */
+#ifdef CONFIG_SONOS_SECBOOT
+		// If force is set, make everything NODEV except /dev/pts...
+		if ( !(type->fs_flags & FS_USERNS_DEV_MOUNT) || (sonos_force_nodev() && strcmp("/dev/pts", name) ) ) {
+#else
 		if (!(type->fs_flags & FS_USERNS_DEV_MOUNT)) {
+#endif
 			flags |= MS_NODEV;
 			mnt_flags |= MNT_NODEV;
 		}
@@ -2244,6 +2252,77 @@ int copy_mount_string(const void __user *data, char **where)
 	return 0;
 }
 
+#ifdef CONFIG_SONOS_SECBOOT
+// Determine the correct crypto_key for the jffs partition to use before
+// mounting it.
+#define UBIFS_CRYPT_OFFSET	0x00580000
+#define UBIFS_CRYPT_STRIDE	0x00020000
+#define UBIFS_CRYPT_MAGIC	0x2b654543
+#include <linux/sonos_kernel.h>
+#include "mdp.h"
+/**
+ * struct ubifs_encryption_type
+ * @jffs_crypt_magic: rb-tree node
+ * @crypt_type: type of encryption in use for jffs partition
+ */
+struct ubifs_encryption_type {
+        __u32           jffs_crypt_magic;
+        __u32 crypt_type;
+};
+
+// Open a well-known location in the flash and retrieve the jffs encryption type.  The
+// calling function is responsible for setting and fixing the address space to enable
+// this functionality.
+static __u32 get_ubifs_crypt_type(void)
+{
+        int     fd;
+        int     bytes_read;
+	int	seek_stat;
+        __u32	retval = UBIFS_CRYPT_TYPE_NONE;
+	int	retries;
+	struct ubifs_encryption_type	crypt;
+
+        if ( (fd = sys_open("/dev/mtd0",O_RDONLY,0777)) < 0 ) {
+                printk(KERN_INFO "Cannot open /dev/mtd0 [%d]\n", fd);
+                goto get_crypt_failed;
+        }
+
+        // Opened the raw mtd device.  Go read the crypt_type.  Since it's raw,
+	// we need to account for the possibility of a bad block, so try four
+	// times, if necessary, at OFFSET + STRIDE*retries.  The crypt_init
+	// originally only programmed one, but should be doing all four.
+	for ( retries = 0;retries < 4;retries++ ) {
+		if ( (seek_stat = sys_lseek(fd, UBIFS_CRYPT_OFFSET + (retries * UBIFS_CRYPT_STRIDE), SEEK_SET)) < 0 ) {
+			// If we cannot seek to the offset, we may be on a board with the old
+			// flash layout.  In any event, we can't continue - assume plaintext...
+			printk(KERN_INFO "Seek to crypt offset failed [%d]\n", seek_stat);
+			break;
+		}
+		bytes_read = sys_read(fd, (char*)&crypt, sizeof(struct ubifs_encryption_type));
+		if ( bytes_read < sizeof(struct ubifs_encryption_type) ) {
+			printk(KERN_INFO "read of ubifs_encryption_type returned %d\n",bytes_read);
+			continue;
+		}
+
+		if ( crypt.jffs_crypt_magic != UBIFS_CRYPT_MAGIC ) {
+			// Bad magic number - assume plaintext - maybe it's right, maybe it isn't
+			printk(KERN_INFO "x%x is not the correct magic number\n", crypt.jffs_crypt_magic);
+			continue;
+		}
+
+		// Ok, we've read the structure and the magic number is right.  Set the value into
+		// the procfs attribute, and return it...
+		sonos_set_proc_crypt(crypt.crypt_type);
+		retval = crypt.crypt_type;
+		break;
+	}
+
+        sys_close(fd);
+get_crypt_failed:
+        return retval;
+}
+#endif
+
 /*
  * Flags is a 32-bit value that allows up to 31 non-fs dependent flags to
  * be given to the mount() call (ie: read-only, no-dev, no-suid etc).
@@ -2277,6 +2356,24 @@ long do_mount(const char *dev_name, const char *dir_name,
 	if (data_page)
 		((char *)data_page)[PAGE_SIZE - 1] = 0;
 
+#ifdef CONFIG_SONOS_SECBOOT
+	// Manage the encryption of the /jffs directory...
+	if ( !strncmp(dir_name, "/jffs", sizeof("/jffs")) ) {
+		__u32 type;
+		mm_segment_t old_fs = get_fs();
+		set_fs(KERNEL_DS);
+		// Before we mount the jffs directory, we need to set up the
+		// crypto_flag for the ubifs driver.  The jffs may be plaintext
+		// or aes encrypted, and there are multiple possible keys.
+		type = get_ubifs_crypt_type();
+		printk(KERN_INFO "Mounting /jffs...crypt_type = %d\n", (int) type);
+		if ( !sonos_set_ubifs_key(type) ) {
+			printk(KERN_INFO "Invalid CRYPT_TYPE in ubifs structure\n");
+		}
+		set_fs(old_fs);
+	}
+#endif
+
 	/* ... and get the mountpoint */
 	retval = kern_path(dir_name, LOOKUP_FOLLOW, &path);
 	if (retval)
@@ -2296,10 +2393,18 @@ long do_mount(const char *dev_name, const char *dir_name,
 	/* Separate the per-mountpoint flags */
 	if (flags & MS_NOSUID)
 		mnt_flags |= MNT_NOSUID;
+#ifdef CONFIG_SONOS_SECBOOT
+	// If force is set, make everything NODEV except /dev/pts...
+	if ( (flags & MS_NODEV) || (sonos_force_nodev() && strcmp("/dev/pts", dir_name)) )
+		mnt_flags |= MNT_NODEV;
+	if ( (flags & MS_NOEXEC) || sonos_forbid_execution() )
+		mnt_flags |= MNT_NOEXEC;
+#else
 	if (flags & MS_NODEV)
 		mnt_flags |= MNT_NODEV;
 	if (flags & MS_NOEXEC)
 		mnt_flags |= MNT_NOEXEC;
+#endif
 	if (flags & MS_NOATIME)
 		mnt_flags |= MNT_NOATIME;
 	if (flags & MS_NODIRATIME)

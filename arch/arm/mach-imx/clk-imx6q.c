@@ -749,8 +749,13 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
 	imx_clk_set_parent(clk[spdif1_sel], clk[pll3_usb_otg]);
 	imx_clk_set_rate(clk[spdif1_sel], 7500000);
 
+#ifdef CONFIG_SONOS
+	/* Set pll4_audio to a value that can derive 8 channels at 44.1kHz */
+	imx_clk_set_rate(clk[pll4_audio_div], 722534400);
+#else
 	/* Set pll4_audio to a value that can derive 5K-88.2KHz and 8K-96KHz */
 	imx_clk_set_rate(clk[pll4_audio_div], 541900800);
+#endif
 
 #ifdef CONFIG_MX6_VPU_352M
 	/*

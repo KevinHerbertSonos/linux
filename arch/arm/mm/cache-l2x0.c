@@ -338,6 +338,11 @@ void __init l2x0_init(void __iomem *base, u32 aux_val, u32 aux_mask)
 
 	aux &= aux_mask;
 	aux |= aux_val;
+// CONFIG_SONOS - In SMP mode, the absence of this bit results in stalls,
+// hangs and DMA timeouts.  (see SWPBL-56417)
+#if defined(CONFIG_SMP)
+	aux |= (1 << L2X0_AUX_CTRL_SHARE_OVERRIDE_SHIFT);
+#endif
 
 	/* Determine the number of ways */
 	switch (cache_id & L2X0_CACHE_ID_PART_MASK) {

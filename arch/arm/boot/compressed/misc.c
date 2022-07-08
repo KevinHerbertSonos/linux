@@ -21,9 +21,34 @@ unsigned int __machine_arch_type;
 #include <linux/compiler.h>	/* for inline */
 #include <linux/types.h>
 #include <linux/linkage.h>
+#include <linux/kernel.h>
 
 static void putstr(const char *ptr);
 extern void error(char *x);
+
+#ifdef CONFIG_SONOS_SECBOOT
+#include "sonos_digest_data.h"
+#include "sonos_rollback.h"
+
+/* External tool will modify this data in the compressed binary prior to the
+ * addition of the u-boot header.  After kernel decompression, it must be
+ * copied to KERNEL_ROOTFS_DIGEST for use by the kernel.  The decompressor
+ * discards the .data section, so keep it in .text.
+ */
+rootfs_digest_t rootfs_digest __attribute__ ((section (".text"))) = {
+	{ cpu_to_be32(SONOS_DIGEST_MAGIC1), cpu_to_be32(SONOS_DIGEST_MAGIC2) },	// digest_magic
+	0x87654321,				// digest_value_length
+	0x12345678,				// rootfs_length
+	{"Placeholder for computed digest" },	// digest_value
+} ;
+
+/* Include a copy of the whitelist in the uncompressed kernel with a different
+ * magic number.
+ */
+#define SONOS_FWA_IN_UNCOMPRESSED_KERNEL
+#include "../init/firmware_allowlist.c"
+#undef SONOS_FWA_IN_UNCOMPRESSED_KERNEL
+#endif
 
 #include CONFIG_UNCOMPRESS_INCLUDE
 
@@ -151,4 +176,30 @@ decompress_kernel(unsigned long output_start, unsigned long free_mem_ptr_p,
 		error("decompressor returned an error");
 	else
 		putstr(" done, booting the kernel.\n");
+
+#ifdef CONFIG_SONOS_SECBOOT
+	/* Kernel is decompressed and ready to go - copy the calculated
+	 * rootfs digest into its memory.
+	 */
+	{
+		int		*pkern;
+		int		*plocal;
+		int		i;
+
+		pkern = (int*)KERNEL_ROOTFS;
+#if defined(CONFIG_SONOS_ROOTFS_ADJUSTMENT)
+		/* During the initial implementation, we got lucky - the System.map
+		 * happened to locate the rootfs structure exactly where this code
+		 * needed to adjust it.  On other platforms, however, the physical
+		 * memory location happens not to match the virtual, and we need to
+		 * adjust the value.  We'll do that with a CONFIG.
+		 */
+		pkern = (int*)((int)pkern - (int)CONFIG_SONOS_ROOTFS_ADJUSTMENT);
+#endif
+		plocal = (int*)&rootfs_digest;
+
+		for(i=0;i<sizeof(rootfs_digest)/sizeof(int);i++)
+			*pkern++ = *plocal++;
+	}
+#endif
 }

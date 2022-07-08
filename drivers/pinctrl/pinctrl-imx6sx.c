@@ -377,7 +377,12 @@ static struct of_device_id imx6sx_pinctrl_of_match[] = {
 
 static int imx6sx_pinctrl_probe(struct platform_device *pdev)
 {
+#ifdef CONFIG_SONOS
+	/* Sonos use IOMUX from u-boot */
+	return 0;
+#else
 	return imx_pinctrl_probe(pdev, &imx6sx_pinctrl_info);
+#endif
 }
 
 static struct platform_driver imx6sx_pinctrl_driver = {

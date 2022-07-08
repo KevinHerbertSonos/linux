@@ -51,7 +51,19 @@
 
 #define HW_OCOTP_DATA			0x00000020
 
-#define HW_OCOTP_CUST_N(n)	(0x00000400 + (n) * 0x10)
+/* SONOS
+ * On IMX platforms the fusemap <=> shadow mapping does not follow a linear path.
+ * For banks greater than 5, there is a two-bank gap. So the base
+ * address needs to be adjusted.  Originally done for SoloX, turns out to be
+ * true for the quad as well.
+ *
+ * TODO: this breaks high fuse access on imx6 chips that aren't SoloX
+ *       but there isn't a good way to check for this at runtime to avoid that
+ *       today (we can't do a build time check on CONFIG_SOC_IMX6SX as it is
+ *       legal to specify multiple chips in CONFIG_SOC_* to try to get
+ *       simultaneous support for both).
+ */
+#define HW_OCOTP_CUST_N(n)	(((n) > 47 ? 0x00000500 : 0x00000400) + (n) * 0x10)
 #define BF(value, field)	(((value) << BP_##field) & BM_##field)
 
 #define DEF_RELAX		20	/* > 16.5ns */
@@ -125,16 +137,16 @@ static int otp_wait_busy(u32 flags)
 	return 0;
 }
 
-static ssize_t fsl_otp_show(struct kobject *kobj, struct kobj_attribute *attr,
-			    char *buf)
+/* returns 0 on success, negative errno on error */
+static int fsl_otp_read_by_index(unsigned int index, u32 *pValue)
 {
-	unsigned int index = attr - otp_kattr;
-	u32 value = 0;
 	int ret;
+
+	*pValue = 0;
 
 	ret = clk_prepare_enable(otp_clk);
 	if (ret)
-		return 0;
+		return ret;
 
 	mutex_lock(&otp_mutex);
 
@@ -143,12 +155,24 @@ static ssize_t fsl_otp_show(struct kobject *kobj, struct kobj_attribute *attr,
 	if (ret)
 		goto out;
 
-	value = __raw_readl(otp_base + HW_OCOTP_CUST_N(index));
+	*pValue = __raw_readl(otp_base + HW_OCOTP_CUST_N(index));
+
+	ret = 0;
 
 out:
 	mutex_unlock(&otp_mutex);
 	clk_disable_unprepare(otp_clk);
-	return ret ? 0 : sprintf(buf, "0x%x\n", value);
+	return ret;
+}
+
+static ssize_t fsl_otp_show(struct kobject *kobj, struct kobj_attribute *attr,
+			    char *buf)
+{
+	u32 value = 0;
+
+	return fsl_otp_read_by_index(attr - otp_kattr, &value)
+		? 0
+		: sprintf(buf, "0x%x\n", value);
 }
 
 static int otp_write_bits(int addr, u32 data, u32 magic)
@@ -204,6 +228,41 @@ out:
 	clk_disable_unprepare(otp_clk);
 	return ret ? 0 : count;
 }
+
+#ifdef CONFIG_SONOS
+#include "sonos_unlock.h"
+
+int get_imx6_cpuid(uint8_t* buf, size_t buf_len)
+{
+	uint64_t cpu_id;
+	uint32_t half;
+
+	if (buf_len != sizeof(cpu_id)) {
+		return 0;
+	}
+
+	if (fsl_otp_read_by_index(1, &half)) {
+		return 0;
+	}
+	cpu_id = ((uint64_t)half) << 32;
+	if (fsl_otp_read_by_index(2, &half)) {
+		return 0;
+	}
+	cpu_id |= half;
+
+	cpu_id = cpu_to_be64(cpu_id);
+	memcpy(buf, &cpu_id, sizeof cpu_id);
+	return 1;
+}
+EXPORT_SYMBOL(get_imx6_cpuid);
+
+int get_imx6_unlock_counter(uint32_t* pValue)
+{
+	return fsl_otp_read_by_index(8*SONOS_FUSE_UNLOCK_CTR_BANK +
+			             SONOS_FUSE_UNLOCK_CTR_WORD, pValue) == 0;
+}
+EXPORT_SYMBOL(get_imx6_unlock_counter);
+#endif
 
 static int fsl_otp_probe(struct platform_device *pdev)
 {

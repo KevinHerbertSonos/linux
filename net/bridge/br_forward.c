@@ -21,12 +21,56 @@
 #include <linux/netfilter_bridge.h>
 #include "br_private.h"
 
+#if defined(CONFIG_SONOS)
+#include <linux/if_arp.h>
+#include <linux/ip.h>
+#include <linux/udp.h>
+#include <net/arp.h>
+#include <net/checksum.h>
+#include "br_forward_sonos.h"
+#include "br_mcast.h"
+#include "br_proxy.h"
+
+/* called with rcu_read_lock */
+void br_deliver(const struct net_bridge_port *from,
+		const struct net_bridge_port *to,
+		struct sk_buff *skb)
+{
+	sonos_br_deliver(from, to, skb);
+}
+
+/* called with rcu_read_lock */
+void br_forward(const struct net_bridge_port *from,
+		const struct net_bridge_port *to,
+		struct sk_buff *skb)
+{
+	sonos_br_forward(from, to, skb);
+}
+
+/* called with rcu_read_lock */
+void br_flood_deliver(struct net_bridge *br,
+                      struct net_bridge_port *from,
+                      struct sk_buff *skb, int clone)
+{
+	sonos_flood_deliver(br, from, skb, clone);
+}
+
+/* called with rcu_read_lock */
+void br_flood_forward(struct net_bridge *br,
+                      struct net_bridge_port *from,
+                      struct sk_buff *skb, int clone)
+{
+	sonos_flood_forward(br, from, skb, clone);
+}
+
+#else /* !defined(CONFIG_SONOS) SWPBL-19651 */
+
 static int deliver_clone(const struct net_bridge_port *prev,
 			 struct sk_buff *skb,
 			 void (*__packet_hook)(const struct net_bridge_port *p,
 					       struct sk_buff *skb));
 
-/* Don't forward packets to originating port or forwarding diasabled */
+/* Don't forward packets to originating port or forwarding disabled */
 static inline int should_deliver(const struct net_bridge_port *p,
 				 const struct sk_buff *skb)
 {
@@ -214,6 +258,7 @@ void br_flood_forward(struct net_bridge *br, struct sk_buff *skb,
 {
 	br_flood(br, skb, skb2, __br_forward);
 }
+#endif /* !defined(CONFIG_SONOS) */
 
 #ifdef CONFIG_BRIDGE_IGMP_SNOOPING
 /* called with rcu_read_lock */
@@ -278,4 +323,4 @@ void br_multicast_forward(struct net_bridge_mdb_entry *mdst,
 {
 	br_multicast_flood(mdst, skb, skb2, __br_forward);
 }
-#endif
+#endif /* CONFIG_BRIDGE_IGMP_SNOOPING */

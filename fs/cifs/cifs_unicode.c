@@ -115,6 +115,7 @@ out:
 cp_convert:
 	len = cp->uni2char(src_char, target, NLS_MAX_CHARSET_SIZE);
 	if (len <= 0) {
+		printk(KERN_ERR "mapchar fails - non-plane 0 unicode character in filename? may not be able to index...\n");
 		*target = '?';
 		len = 1;
 	}

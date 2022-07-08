@@ -26,6 +26,10 @@
 #include <linux/backing-dev.h>
 #include <net/flow.h>
 
+#ifdef CONFIG_SONOS_SECBOOT
+#include "sonos_lock.h"
+#endif
+
 #define MAX_LSM_EVM_XATTR	2
 
 /* Boot-time LSM user choice */
@@ -698,7 +702,11 @@ static inline unsigned long mmap_prot(struct file *file, unsigned long prot)
 	 * ditto if it's not on noexec mount, except that on !MMU we need
 	 * BDI_CAP_EXEC_MMAP (== VM_MAYEXEC) in this case
 	 */
+#ifdef CONFIG_SONOS_SECBOOT
+	if (!( (file->f_path.mnt->mnt_flags & MNT_NOEXEC) && !sonos_allow_execution() ) ) {
+#else
 	if (!(file->f_path.mnt->mnt_flags & MNT_NOEXEC)) {
+#endif
 #ifndef CONFIG_MMU
 		unsigned long caps = 0;
 		struct address_space *mapping = file->f_mapping;

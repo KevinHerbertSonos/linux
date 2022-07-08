@@ -731,6 +731,13 @@ static int dev_create(struct dm_ioctl *param, size_t param_size)
 	return 0;
 }
 
+#ifdef CONFIG_SONOS
+int dm_dev_create(struct dm_ioctl *param, size_t param_size)
+{
+	return ( dev_create(param, param_size) );
+}
+#endif
+
 /*
  * Always use UUID for lookups if it's present, otherwise use name or dev.
  */
@@ -1025,6 +1032,13 @@ static int dev_suspend(struct dm_ioctl *param, size_t param_size)
 	return do_resume(param);
 }
 
+#ifdef CONFIG_SONOS
+int dm_dev_suspend(struct dm_ioctl *param, size_t param_size)
+{
+	return ( dev_suspend(param, param_size) );
+}
+#endif
+
 /*
  * Copies device info back to user space, used by
  * the create and info ioctls.
@@ -1296,6 +1310,13 @@ out:
 
 	return r;
 }
+
+#ifdef CONFIG_SONOS
+int dm_table_load(struct dm_ioctl *param, size_t param_size)
+{
+	return ( table_load(param, param_size) );
+}
+#endif
 
 static int table_clear(struct dm_ioctl *param, size_t param_size)
 {

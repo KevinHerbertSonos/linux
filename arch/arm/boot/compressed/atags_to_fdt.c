@@ -160,13 +160,25 @@ int atags_to_fdt(void *atag_list, void *fdt, int total_space)
 					(uint64_t *)mem_reg_property;
 				mem_reg_prop64[memcount++] =
 					cpu_to_fdt64(atag->u.mem.start);
+#ifndef CONFIG_SONOS_DIAGS
 				mem_reg_prop64[memcount++] =
 					cpu_to_fdt64(atag->u.mem.size);
+#else
+				/* reserve 8MB for diag memory testing */
+				mem_reg_prop64[memcount++] =
+					cpu_to_fdt64(atag->u.mem.size - 0x800000);
+#endif
 			} else {
 				mem_reg_property[memcount++] =
 					cpu_to_fdt32(atag->u.mem.start);
+#ifndef CONFIG_SONOS_DIAGS
 				mem_reg_property[memcount++] =
 					cpu_to_fdt32(atag->u.mem.size);
+#else
+				/* reserve 8MB for diag memory testing */
+				mem_reg_property[memcount++] =
+					cpu_to_fdt32(atag->u.mem.size - 0x800000);
+#endif
 			}
 
 		} else if (atag->hdr.tag == ATAG_INITRD2) {

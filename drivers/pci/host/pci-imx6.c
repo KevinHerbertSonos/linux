@@ -31,6 +31,17 @@
 #include <linux/types.h>
 #include <linux/busfreq-imx6.h>
 #include <linux/regulator/consumer.h>
+#ifdef CONFIG_SONOS
+#include <linux/irq.h>
+#endif
+
+/* to be removed when P3 are retired see comments in u-boot
+ * IMX_GPIO_NR is defined mach-imx6/hardware.h
+ * IMX_GPIO_NR is redefined here since it is tempory code otherwise
+ * the GPIO should be got from dts
+ */
+
+#define IMX_GPIO_NR(bank, nr)	(((bank) - 1) * 32 + (nr))
 
 #include "pcie-designware.h"
 
@@ -61,6 +72,13 @@ static const struct imx_pcie_data imx6sx_pcie_data = {
 struct imx6_pcie {
 	int			reset_gpio;
 	int			power_on_gpio;
+#ifdef CONFIG_SONOS
+	int			plx_ds_reset_gpio;
+	int			clk_buf_pd_gpio;
+	int			rst_2g_gpio;
+	int			rst_5g_gpio;
+	int			clk_req_gpio;
+#endif
 	int			wake_up_gpio;
 	int			disable_gpio;
 	const struct		imx_pcie_data *data;
@@ -79,6 +97,9 @@ static struct imx6_pcie *imx6_pcie;
 
 /* PCIe Port Logic registers (memory-mapped) */
 #define PL_OFFSET 0x700
+#define PCIE_PL_PFLR (PL_OFFSET + 0x08)
+#define PCIE_PL_PFLR_LINK_STATE_MASK		(0x3f << 16)
+#define PCIE_PL_PFLR_FORCE_LINK			(1 << 15)
 #define PCIE_PHY_DEBUG_R0 (PL_OFFSET + 0x28)
 #define PCIE_PHY_DEBUG_R1 (PL_OFFSET + 0x2c)
 
@@ -275,8 +296,23 @@ static int imx6_pcie_deassert_core_reset(struct pcie_port *pp)
 	struct imx6_pcie *imx6_pcie = to_imx6_pcie(pp);
 	int ret;
 
+#ifdef CONFIG_SONOS
+	if (gpio_is_valid(imx6_pcie->rst_2g_gpio)) {
+		gpio_set_value(imx6_pcie->rst_2g_gpio, 0);
+	}
+
+	if (gpio_is_valid(imx6_pcie->rst_5g_gpio)) {
+		gpio_set_value(imx6_pcie->rst_5g_gpio, 0);
+	}
+#endif
+
 	if (gpio_is_valid(imx6_pcie->power_on_gpio))
 		gpio_set_value_cansleep(imx6_pcie->power_on_gpio, 1);
+
+#ifdef CONFIG_SONOS
+	if (gpio_is_valid(imx6_pcie->plx_ds_reset_gpio))
+		gpio_set_value_cansleep(imx6_pcie->plx_ds_reset_gpio, 0);
+#endif
 
 	request_bus_freq(BUS_FREQ_HIGH);
 
@@ -335,13 +371,36 @@ static int imx6_pcie_deassert_core_reset(struct pcie_port *pp)
 	}
 
 	/* allow the clocks to stabilize */
+#ifdef CONFIG_SONOS
+	usleep_range(200, 500);
+#else
 	udelay(200);
+#endif
 
 	if (gpio_is_valid(imx6_pcie->reset_gpio)) {
 		gpio_set_value_cansleep(imx6_pcie->reset_gpio, 0);
+#ifdef CONFIG_SONOS
+		if (gpio_is_valid(imx6_pcie->clk_buf_pd_gpio))
+			gpio_set_value_cansleep(imx6_pcie->clk_buf_pd_gpio, 1);
+#endif
 		mdelay(1);
+#ifdef CONFIG_SONOS
+		if (gpio_is_valid(imx6_pcie->clk_buf_pd_gpio))
+			gpio_set_value_cansleep(imx6_pcie->clk_buf_pd_gpio, 0);
+			mdelay(1);
+#endif
 		gpio_set_value_cansleep(imx6_pcie->reset_gpio, 1);
 	}
+
+#ifdef CONFIG_SONOS
+	mdelay(1);
+	if (gpio_is_valid(imx6_pcie->rst_2g_gpio)) {
+		gpio_set_value(imx6_pcie->rst_2g_gpio, 1);
+	}
+	if (gpio_is_valid(imx6_pcie->rst_5g_gpio)) {
+		gpio_set_value(imx6_pcie->rst_5g_gpio, 1);
+	}
+#endif
 
 	return 0;
 
@@ -375,9 +434,11 @@ static void imx6_pcie_init_phy(struct pcie_port *pp)
 		regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR5,
 				BIT(19), 1 << 19);
 
+#ifndef CONFIG_SONOS
 		ret = regulator_enable(imx6_pcie->pcie_reg);
 		if (ret)
 			dev_info(pp->dev, "failed to enable pcie reg.\n");
+#endif
 		/* Power up PCIe PHY, ANATOP_REG_CORE offset 0x140, bit13-9 */
 		regulator_set_voltage(imx6_pcie->pcie_phy_reg,
 				1100000, 1100000);
@@ -386,9 +447,42 @@ static void imx6_pcie_init_phy(struct pcie_port *pp)
 			dev_info(pp->dev, "failed to enable pcie phy reg.\n");
 
 	}
+#if defined(CONFIG_SONOS_BOOTLEG)
+	{
+		/*
+		 * If the bootloader already enabled the link we need some special
+		 * handling to get the core back into a state where it is safe to
+		 * touch it for configuration. As there is no dedicated reset signal
+		 * wired up for MX6QDL, we need to manually force LTSSM into "detect"
+		 * state before completely disabling LTSSM, which is a prerequisite
+		 * for core configuration.
+		 * If both LTSSM_ENABLE and REF_SSP_ENABLE are active we have a strong
+		 * indication that the bootloader activated the link.
+		 */
+		u32 val, gpr1, gpr12;
+
+		regmap_read(imx6_pcie->iomuxc_gpr, IOMUXC_GPR1, &gpr1);
+		regmap_read(imx6_pcie->iomuxc_gpr, IOMUXC_GPR12, &gpr12);
+
+		if ((gpr1 & IMX6Q_GPR1_PCIE_REF_CLK_EN) &&
+		    (gpr12 & IMX6Q_GPR12_PCIE_CTL_2)) {
+			/* Out of order for the driver, a bit, but if the axi
+			 * clock isn't enabled, the following accesses will hang.
+			 */
+			clk_prepare_enable(imx6_pcie->pcie_axi);
+
+			val = readl(pp->dbi_base + PCIE_PL_PFLR);
+			val &= ~PCIE_PL_PFLR_LINK_STATE_MASK;
+			val |= PCIE_PL_PFLR_FORCE_LINK;
+			writel(val, pp->dbi_base + PCIE_PL_PFLR);
+			regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR12,
+				IMX6Q_GPR12_PCIE_CTL_2, 0 << 10);
+		}
+	}
+#else
 	regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR12,
 			IMX6Q_GPR12_PCIE_CTL_2, 0 << 10);
-
+#endif
 	/* configure constant input signal to the pcie ctrl and phy */
 	if (IS_ENABLED(CONFIG_EP_MODE_IN_EP_RC_SYS))
 		regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR12,
@@ -401,6 +495,18 @@ static void imx6_pcie_init_phy(struct pcie_port *pp)
 	regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR12,
 			IMX6Q_GPR12_LOS_LEVEL, 9 << 4);
 
+#if defined(CONFIG_SONOS) && !defined(CONFIG_SONOS_BOOTLEG)
+	regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR8,
+			IMX6Q_GPR8_TX_DEEMPH_GEN1, 21 << 0);
+	regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR8,
+			IMX6Q_GPR8_TX_DEEMPH_GEN2_3P5DB, 21 << 6);
+	regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR8,
+			IMX6Q_GPR8_TX_DEEMPH_GEN2_6DB, 32 << 12);
+	regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR8,
+			IMX6Q_GPR8_TX_SWING_FULL, 115 << 18);
+	regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR8,
+			IMX6Q_GPR8_TX_SWING_LOW, 115 << 25);
+#else
 	regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR8,
 			IMX6Q_GPR8_TX_DEEMPH_GEN1, 0 << 0);
 	regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR8,
@@ -411,6 +517,7 @@ static void imx6_pcie_init_phy(struct pcie_port *pp)
 			IMX6Q_GPR8_TX_SWING_FULL, 127 << 18);
 	regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR8,
 			IMX6Q_GPR8_TX_SWING_LOW, 127 << 25);
+#endif
 }
 
 static irqreturn_t imx_pcie_msi_irq_handler(int irq, void *arg)
@@ -441,7 +548,9 @@ static int imx6_pcie_host_init(struct pcie_port *pp)
 		regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR5,
 				BIT(19), 0 << 19);
 
-
+#if defined(CONFIG_SONOS) && !defined(CONFIG_SONOS_BOOTLEG)
+	mdelay(1);
+#endif
 	dw_pcie_setup_rc(pp);
 
 #ifdef DEBUG
@@ -477,7 +586,9 @@ static int imx6_pcie_host_init(struct pcie_port *pp)
 				 * Power down PCIe PHY.
 				 */
 				regulator_disable(imx6_pcie->pcie_phy_reg);
+#ifndef CONFIG_SONOS
 				regulator_disable(imx6_pcie->pcie_reg);
+#endif
 			} else {
 				clk_disable_unprepare(imx6_pcie->sata_ref_100m);
 				release_bus_freq(BUS_FREQ_HIGH);
@@ -485,6 +596,13 @@ static int imx6_pcie_host_init(struct pcie_port *pp)
 			return -ENODEV;
 		}
 	}
+
+#ifdef CONFIG_SONOS
+	if (gpio_is_valid(imx6_pcie->plx_ds_reset_gpio)) {
+		gpio_set_value_cansleep(imx6_pcie->plx_ds_reset_gpio, 1);
+		msleep(100);
+	}
+#endif
 
 	if (IS_ENABLED(CONFIG_PCI_MSI))
 		dw_pcie_msi_init(pp);
@@ -792,6 +910,9 @@ static int pci_imx_suspend_noirq(struct device *dev)
 {
 	struct imx6_pcie *imx6_pcie = dev_get_drvdata(dev);
 	struct pcie_port *pp = &imx6_pcie->pp;
+#if defined(CONFIG_SONOS) && !defined(CONFIG_SONOS_BOOTLEG)
+	int ret;
+#endif
 
 	if (is_imx6sx_pcie(imx6_pcie)) {
 		if (IS_ENABLED(CONFIG_PCI_IMX6SX_EXTREMELY_PWR_SAVE)) {
@@ -826,6 +947,12 @@ static int pci_imx_suspend_noirq(struct device *dev)
 			udelay(10);
 			regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR12,
 					BIT(16), 0 << 16);
+#if defined(CONFIG_SONOS) && !defined(CONFIG_SONOS_BOOTLEG)
+			udelay(1000);
+			if (gpio_is_valid(imx6_pcie->reset_gpio))
+				gpio_set_value_cansleep(imx6_pcie->reset_gpio, 0);
+#endif
+
 			clk_disable_unprepare(imx6_pcie->pcie_axi);
 			clk_disable_unprepare(imx6_pcie->lvds_gate);
 			clk_disable_unprepare(imx6_pcie->pcie_ref_125m);
@@ -834,6 +961,14 @@ static int pci_imx_suspend_noirq(struct device *dev)
 		}
 	}
 
+#if defined(CONFIG_SONOS) && !defined(CONFIG_SONOS_BOOTLEG)
+	ret =  enable_irq_wake(gpio_to_irq(imx6_pcie->wake_up_gpio));
+	if (ret) {
+		printk("%s: enable_irq_wake %d failed %d\n",
+			__func__, gpio_to_irq(imx6_pcie->wake_up_gpio), ret);
+		return ret;
+	}
+#endif
 	return 0;
 }
 
@@ -886,18 +1021,37 @@ static int pci_imx_resume_noirq(struct device *dev)
 			regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR12,
 					IMX6Q_GPR12_PCIE_CTL_2, 1 << 10);
 		} else {
+#if defined(CONFIG_SONOS) && !defined(CONFIG_SONOS_BOOTLEG)
+			/* Reset iMX6SX PCIe */
+			regmap_update_bits(imx6_pcie->iomuxc_gpr,
+				IOMUXC_GPR5, BIT(19), 1 << 19);
+#endif
+
 			request_bus_freq(BUS_FREQ_HIGH);
 			clk_prepare_enable(imx6_pcie->dis_axi);
 			clk_prepare_enable(imx6_pcie->lvds_gate);
 			clk_prepare_enable(imx6_pcie->pcie_ref_125m);
 			clk_prepare_enable(imx6_pcie->pcie_axi);
 
+#if defined(CONFIG_SONOS) && !defined(CONFIG_SONOS_BOOTLEG)
 			/* Reset iMX6SX PCIe */
+			regmap_update_bits(imx6_pcie->iomuxc_gpr,
+				IOMUXC_GPR5, BIT(19), 1 << 19);
+			if (gpio_is_valid(imx6_pcie->reset_gpio))
+				gpio_set_value_cansleep(imx6_pcie->reset_gpio, 1);
+			mdelay(20);
+
+			regmap_update_bits(imx6_pcie->iomuxc_gpr,
+					IOMUXC_GPR5, BIT(19), 0 << 19);
+#else
+			/* Reset iMX6Q PCIe */
 			regmap_update_bits(imx6_pcie->iomuxc_gpr,
 					IOMUXC_GPR5, BIT(18), 1 << 18);
 
 			regmap_update_bits(imx6_pcie->iomuxc_gpr,
 					IOMUXC_GPR5, BIT(18), 0 << 18);
+#endif
+
 			/*
 			 * controller maybe turn off, re-configure again
 			 */
@@ -908,9 +1062,18 @@ static int pci_imx_resume_noirq(struct device *dev)
 
 			if (IS_ENABLED(CONFIG_PCI_MSI))
 				dw_pcie_msi_cfg_restore(pp);
+
+#if defined(CONFIG_SONOS) && !defined(CONFIG_SONOS_BOOTLEG)
+			/* assert LTSSM enable */
+			regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR12,
+					IMX6Q_GPR12_PCIE_CTL_2, 1 << 10);
+#endif
 		}
 	}
 
+#if defined(CONFIG_SONOS) && !defined(CONFIG_SONOS_BOOTLEG)
+	disable_irq_wake(gpio_to_irq(imx6_pcie->wake_up_gpio));
+#endif
 	return 0;
 }
 
@@ -923,6 +1086,19 @@ static const struct dev_pm_ops pci_imx_pm_ops = {
 	.restore_noirq = pci_imx_resume_noirq, };
 #else
 static const struct dev_pm_ops pci_imx_pm_ops = { };
+#endif
+
+#if defined(CONFIG_SONOS) && !defined(CONFIG_SONOS_BOOTLEG)
+static irqreturn_t wowlan_isr(int irq, void *p)
+{
+	int ret = IRQ_NONE;
+	if ( irq == gpio_to_irq(imx6_pcie->wake_up_gpio) ||
+		irq == gpio_to_irq(imx6_pcie->clk_req_gpio)) {
+		printk("wowlan_isr %d\n", irq);
+		ret = IRQ_HANDLED;
+	}
+	return ret;
+}
 #endif
 
 static int __init imx6_pcie_probe(struct platform_device *pdev)
@@ -1004,7 +1180,45 @@ static int __init imx6_pcie_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "unable to get wake-up gpio\n");
 			goto err;
 		}
+#if defined(CONFIG_SONOS) && !defined(CONFIG_SONOS_BOOTLEG)
+		irq_set_irq_type(gpio_to_irq(imx6_pcie->wake_up_gpio),
+			IRQ_TYPE_EDGE_FALLING);
+		ret = request_irq(gpio_to_irq(imx6_pcie->wake_up_gpio),
+			wowlan_isr, IRQF_TRIGGER_FALLING,
+			"wowlan_isr", NULL);
+		if (ret) {
+			printk("%s: request_irq %d failed %d\n",
+				__func__, gpio_to_irq(imx6_pcie->wake_up_gpio),
+				ret);
+			return ret;
+		}
+#endif
 	}
+
+#if defined(CONFIG_SONOS) && !defined(CONFIG_SONOS_BOOTLEG)
+	imx6_pcie->clk_req_gpio = of_get_named_gpio(np, "clk-req-gpio", 0);
+	if (gpio_is_valid(imx6_pcie->clk_req_gpio)) {
+		ret = devm_gpio_request_one(&pdev->dev,
+					imx6_pcie->clk_req_gpio,
+					GPIOF_IN,
+					"PCIe clock req");
+		if (ret) {
+			dev_err(&pdev->dev, "unable to get clock-req gpio\n");
+			goto err;
+		}
+		irq_set_irq_type(gpio_to_irq(imx6_pcie->clk_req_gpio),
+			IRQ_TYPE_EDGE_FALLING);
+		ret = request_irq(gpio_to_irq(imx6_pcie->clk_req_gpio),
+			wowlan_isr, IRQF_TRIGGER_FALLING,
+			"wowlan_isr", NULL);
+		if (ret) {
+			printk("%s: request_irq %d failed %d\n",
+				__func__, gpio_to_irq(imx6_pcie->clk_req_gpio),
+				ret);
+			return ret;
+		}
+	}
+#endif
 
 	imx6_pcie->disable_gpio = of_get_named_gpio(np, "disable-gpio", 0);
 	if (gpio_is_valid(imx6_pcie->disable_gpio)) {
@@ -1017,6 +1231,60 @@ static int __init imx6_pcie_probe(struct platform_device *pdev)
 			goto err;
 		}
 	}
+
+#ifdef CONFIG_SONOS
+	/* PLX DS reset*/
+	imx6_pcie->plx_ds_reset_gpio = of_get_named_gpio(np, "plx-reset-gpio", 0);
+	if (gpio_is_valid(imx6_pcie->plx_ds_reset_gpio)) {
+		ret = devm_gpio_request_one(&pdev->dev,
+					imx6_pcie->plx_ds_reset_gpio,
+					GPIOF_OUT_INIT_LOW,
+					"PCIe reset");
+		if (ret) {
+			dev_err(&pdev->dev, "unable to get reset gpio\n");
+			goto err;
+		}
+	}
+
+	/* PCI switch clk buffer power down 0 up 1 down */
+	imx6_pcie->clk_buf_pd_gpio = of_get_named_gpio(np, "clk-buf-pd-gpio", 0);
+	if (gpio_is_valid(imx6_pcie->clk_buf_pd_gpio)) {
+		ret = devm_gpio_request_one(&pdev->dev,
+					imx6_pcie->clk_buf_pd_gpio,
+					GPIOF_OUT_INIT_LOW,
+					"PCIe clock buffer pd");
+		if (ret) {
+			dev_err(&pdev->dev, "unable to get clock buffer pd\n");
+			goto err;
+		}
+	}
+
+	/* 2G reset line down 0 up 1*/
+	imx6_pcie->rst_2g_gpio = of_get_named_gpio(np, "rst-2g-gpio", 0);
+	if (gpio_is_valid(imx6_pcie->rst_2g_gpio)) {
+		ret = devm_gpio_request_one(&pdev->dev,
+					imx6_pcie->rst_2g_gpio,
+					GPIOF_OUT_INIT_LOW,
+					"reset 2G");
+		if (ret) {
+			dev_err(&pdev->dev, "unable to get reset 2G gpio\n");
+			goto err;
+		}
+	}
+
+	/* 5G reset line down 0 up 1*/
+	imx6_pcie->rst_5g_gpio = of_get_named_gpio(np, "rst-5g-gpio", 0);
+	if (gpio_is_valid(imx6_pcie->rst_5g_gpio)) {
+		ret = devm_gpio_request_one(&pdev->dev,
+					imx6_pcie->rst_5g_gpio,
+					GPIOF_OUT_INIT_LOW,
+					"reset 5G");
+		if (ret) {
+			dev_err(&pdev->dev, "unable to get reset 5G gpio\n");
+			goto err;
+		}
+	}
+#endif
 
 	/* Fetch clocks */
 	imx6_pcie->lvds_gate = devm_clk_get(&pdev->dev, "lvds_gate");
@@ -1053,11 +1321,13 @@ static int __init imx6_pcie_probe(struct platform_device *pdev)
 		}
 
 		/* Get pcie regulator */
+#ifndef CONFIG_SONOS
 		imx6_pcie->pcie_reg = devm_regulator_get(pp->dev, "disp");
 		if (IS_ERR(imx6_pcie->pcie_reg))  {
 			dev_err(&pdev->dev, "pcie regulator not ready\n");
 			imx6_pcie->pcie_reg = NULL;
 		}
+#endif
 		imx6_pcie->pcie_phy_reg = devm_regulator_get(pp->dev, "pcie");
 		if (IS_ERR(imx6_pcie->pcie_phy_reg))  {
 			dev_err(&pdev->dev, "pcie phy regulator not ready\n");

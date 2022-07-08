@@ -235,6 +235,9 @@ struct mtd_info {
 	 */
 	int (*_get_device) (struct mtd_info *mtd);
 	void (*_put_device) (struct mtd_info *mtd);
+#ifdef CONFIG_SONOS
+	int (*read_special) (struct mtd_info *mtd, struct mtd_special_info *rsi, void *buff);
+#endif
 
 	/* Backing device capabilities for this device
 	 * - provides mmap capabilities
@@ -253,6 +256,9 @@ struct mtd_info {
 	struct module *owner;
 	struct device dev;
 	int usecount;
+#ifdef CONFIG_SONOS
+	int devid;
+#endif
 };
 
 int mtd_erase(struct mtd_info *mtd, struct erase_info *instr);

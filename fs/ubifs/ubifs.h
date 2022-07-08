@@ -159,6 +159,16 @@
 /* Maximum number of data nodes to bulk-read */
 #define UBIFS_MAX_BULK_READ 32
 
+#ifdef CONFIG_SONOS_SECBOOT
+/* 128 bit key size in bytes for UBIFS */
+#define UBIFS_CRYPTO_KEYSIZE 16
+/* AES in counter mode is the encryption algorithm */
+#define UBIFS_CRYPTO_ALGORITHM "ctr(aes)"
+
+extern __u8	sonos_ubifs_crypto_key[];
+extern bool	use_ubifs_crypto_key;
+#endif
+
 /*
  * Lockdep classes for UBIFS inode @ui_mutex.
  */
@@ -1773,13 +1783,35 @@ long ubifs_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 /* compressor.c */
 int __init ubifs_compressors_init(void);
 void ubifs_compressors_exit(void);
+#ifdef CONFIG_SONOS_SECBOOT
 void ubifs_compress(const void *in_buf, int in_len, void *out_buf, int *out_len,
-		    int *compr_type);
-int ubifs_decompress(const void *buf, int len, void *out, int *out_len,
-		     int compr_type);
+				int *compr_type, void *crypto_key);
+int ubifs_decompress(void *buf, int len, void *out, int *out_len,
+				int compr_type, void *crypto_key);
+#else
+void ubifs_compress(const void *in_buf, int in_len, void *out_buf, int *out_len,
+				int *compr_type);
+int ubifs_decompress(void *buf, int len, void *out, int *out_len,
+				int compr_type);
+#endif
 
 #include "debug.h"
 #include "misc.h"
 #include "key.h"
+
+#if defined(CONFIG_SONOS)
+/**
+ * We may need to resize the ubifs file system for jffs if the underlying
+ * ubi volume has changed in size.  If that happens, the mount command
+ * will be invoked with a -o sonos_resize=xxx, where xxx is a decimal
+ * number of blocks to expand the filesystem to.  The sonos_force_downsize
+ * flag overrides the implied downsize prevention, as that's a risky operation.
+ * We will NEVER downsize in the field, but for testing purposes, we need
+ * to be able to go up AND down on test units.
+ */
+extern int resize_blocks;
+extern bool sonos_force_downsize;
+#endif
+
 
 #endif /* !__UBIFS_H__ */

@@ -282,6 +282,16 @@ static int snvs_rtc_probe(struct platform_device *pdev)
 	writel(0xffffffff, data->ioaddr + SNVS_LPSR);
 
 	snvs_base = data->ioaddr;
+
+#ifdef CONFIG_SONOS
+	/* Disable RTC first */
+	snvs_rtc_enable(data, false);
+
+	/* Clear time */
+	writel(0, data->ioaddr + SNVS_LPSRTCLR);
+	writel(0, data->ioaddr + SNVS_LPSRTCMR);
+#endif
+
 	/* Enable RTC */
 	snvs_rtc_enable(data, true);
 

@@ -53,6 +53,15 @@ static struct shrinker ubifs_shrinker_info = {
 	.seeks = DEFAULT_SEEKS,
 };
 
+#if defined(CONFIG_SONOS)
+/**
+ * Resize information, if necessary.
+ */
+int resize_blocks = 0;
+bool sonos_force_downsize = false;
+#endif
+
+
 /**
  * validate_inode - validate inode.
  * @c: UBIFS file-system description object
@@ -943,6 +952,10 @@ enum {
 	Opt_chk_data_crc,
 	Opt_no_chk_data_crc,
 	Opt_override_compr,
+#if defined(CONFIG_SONOS)
+	Opt_sonos_resize,
+	Opt_sonos_force_downsize,
+#endif
 	Opt_err,
 };
 
@@ -954,6 +967,10 @@ static const match_table_t tokens = {
 	{Opt_chk_data_crc, "chk_data_crc"},
 	{Opt_no_chk_data_crc, "no_chk_data_crc"},
 	{Opt_override_compr, "compr=%s"},
+#if defined(CONFIG_SONOS)
+	{Opt_sonos_resize, "sonos_resize=%d"},
+	{Opt_sonos_force_downsize, "sonos_force_downsize"},
+#endif
 	{Opt_err, NULL},
 };
 
@@ -1053,6 +1070,27 @@ static int ubifs_parse_options(struct ubifs_info *c, char *options,
 			c->default_compr = c->mount_opts.compr_type;
 			break;
 		}
+#if defined(CONFIG_SONOS)
+		case Opt_sonos_resize:
+		{
+			char *resize_arg = match_strdup(&args[0]);
+
+			sscanf(resize_arg, "%d", &resize_blocks);
+			printk(KERN_INFO "%s:%d - sonos_resize option - resize_arg = %s, use %d resize_blocks\n", \
+					__func__, __LINE__, resize_arg, resize_blocks);
+			break;
+		}
+		case Opt_sonos_force_downsize:
+		{
+			/* Enforce order - don't set force_downsize if we don't have a block count first */
+			if (resize_blocks) {
+				printk(KERN_INFO "*** Risk of losing jffs - downsizing file system size ***\n");
+				printk(KERN_INFO "***    This is not a legitimate field operation!!!    ***\n");
+				sonos_force_downsize = true;
+			}
+			break;
+		}
+#endif
 		default:
 		{
 			unsigned long flag;
@@ -1162,6 +1200,11 @@ static int mount_ubifs(struct ubifs_info *c)
 	int err;
 	long long x, y;
 	size_t sz;
+
+#if defined(CONFIG_SONOS)
+	printk(KERN_INFO "%s:%d - c->max_leb_cnt = %d, c->vi.size = %d\n", \
+			__func__, __LINE__, c->max_leb_cnt, c->vi.size);
+#endif
 
 	c->ro_mount = !!(c->vfs_sb->s_flags & MS_RDONLY);
 	err = init_constants_early(c);
@@ -2123,6 +2166,10 @@ static struct dentry *ubifs_mount(struct file_system_type *fs_type, int flags,
 		goto out_close;
 	}
 
+#if defined(CONFIG_SONOS)
+	printk(KERN_INFO "%s:%d opened ubi%d_%d, %d blocks\n",\
+			__func__, __LINE__, c->vi.ubi_num, c->vi.vol_id, c->vi.size);
+#endif
 	dbg_gen("opened ubi%d_%d", c->vi.ubi_num, c->vi.vol_id);
 
 	sb = sget(fs_type, sb_test, sb_set, flags, c);

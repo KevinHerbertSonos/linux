@@ -309,6 +309,20 @@ static int part_block_markbad(struct mtd_info *mtd, loff_t ofs)
 	return res;
 }
 
+#ifdef CONFIG_SONOS
+static int part_read_special(struct mtd_info *mtd,
+	struct mtd_special_info *rsi, void *buf)
+{
+	int res = -EINVAL;
+	struct mtd_part *part = PART(mtd);
+
+	if (part->master->read_special)
+		res = part->master->read_special(part->master,
+			rsi, buf);
+	return res;
+}
+#endif
+
 static inline void free_partition(struct mtd_part *p)
 {
 	kfree(p->mtd.name);
@@ -426,6 +440,11 @@ static struct mtd_part *allocate_partition(struct mtd_info *master,
 		slave->mtd._block_isbad = part_block_isbad;
 	if (master->_block_markbad)
 		slave->mtd._block_markbad = part_block_markbad;
+#ifdef CONFIG_SONOS
+	if (master->read_special)
+		slave->mtd.read_special = part_read_special;
+	slave->mtd.devid = master->devid;
+#endif
 	slave->mtd._erase = part_erase;
 	slave->master = master;
 	slave->offset = part->offset;

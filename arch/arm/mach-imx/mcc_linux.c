@@ -348,6 +348,7 @@ int mcc_generate_cpu_to_cpu_interrupt(void)
 	else
 		return ret;
 }
+EXPORT_SYMBOL(mcc_generate_cpu_to_cpu_interrupt);
 
 /*!
  * \brief This function copies data.

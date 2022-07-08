@@ -151,15 +151,24 @@ err_clk:
 	return ret;
 }
 
+#ifdef CONFIG_SONOS
+#define gpmi_enable_clk(x) 0
+#define gpmi_disable_clk(x)
+#else
 #define gpmi_enable_clk(x) __gpmi_enable_clk(x, true)
 #define gpmi_disable_clk(x) __gpmi_enable_clk(x, false)
+#endif
 
 int gpmi_init(struct gpmi_nand_data *this)
 {
 	struct resources *r = &this->resources;
 	int ret;
 
+#ifdef CONFIG_SONOS
+	ret = __gpmi_enable_clk(this, true);
+#else
 	ret = gpmi_enable_clk(this);
+#endif
 	if (ret)
 		goto err_out;
 	ret = gpmi_reset_block(r->gpmi_regs, false);
@@ -199,6 +208,14 @@ int gpmi_init(struct gpmi_nand_data *this)
 err_out:
 	return ret;
 }
+
+#ifdef CONFIG_SONOS
+int gpmi_power_down(struct gpmi_nand_data *this)
+{
+	__gpmi_enable_clk(this, false);
+	return 0;
+}
+#endif
 
 /* This function is very useful. It is called only when the bug occur. */
 void gpmi_dump_info(struct gpmi_nand_data *this)
@@ -256,6 +273,9 @@ int bch_set_geometry(struct gpmi_nand_data *this)
 	unsigned int ecc_strength;
 	unsigned int page_size;
 	unsigned int gf_len;
+#if defined(CONFIG_SONOS)
+	unsigned int erase_threshold;
+#endif
 	int ret;
 
 	if (common_nfc_set_geometry(this))
@@ -297,6 +317,16 @@ int bch_set_geometry(struct gpmi_nand_data *this)
 			| BF_BCH_FLASH0LAYOUT1_GF(gf_len, this)
 			| BF_BCH_FLASH0LAYOUT1_DATAN_SIZE(block_size, this),
 			r->bch_regs + HW_BCH_FLASH0LAYOUT1);
+
+#if defined(CONFIG_SONOS)
+	/* Set the tolerance for bitflips when reading erased blocks. */
+	erase_threshold = gf_len / 2;
+	if (erase_threshold > bch_geo->ecc_strength)
+		erase_threshold = bch_geo->ecc_strength;
+
+	writel(erase_threshold & BM_BCH_MODE_ERASE_THRESHOLD_MASK,
+		r->bch_regs + HW_BCH_MODE);
+#endif
 
 	/* Set *all* chip selects to use layout 0. */
 	writel(0, r->bch_regs + HW_BCH_LAYOUTSELECT);
@@ -760,8 +790,13 @@ static int gpmi_nfc_compute_hardware_timing(struct gpmi_nand_data *this,
 
 	/* Control arrives here when we're ready to return our results. */
 return_results:
+#ifdef CONFIG_SONOS
+	hw->data_setup_in_cycles    = 2;
+	hw->data_hold_in_cycles     = 2;
+#else
 	hw->data_setup_in_cycles    = data_setup_in_cycles;
 	hw->data_hold_in_cycles     = data_hold_in_cycles;
+#endif
 	hw->address_setup_in_cycles = address_setup_in_cycles;
 	hw->use_half_periods        = dll_use_half_periods;
 	hw->sample_delay_factor     = sample_delay_factor;
@@ -876,8 +911,13 @@ static void gpmi_compute_edo_timing(struct gpmi_nand_data *this,
 	 *     get the 40MHz or 50MHz, we have to set DS=1, DH=1.
 	 *     Set the ADDRESS_SETUP to 0 in mode 4.
 	 */
+#ifdef CONFIG_SONOS
+	hw->data_setup_in_cycles = 2;
+	hw->data_hold_in_cycles = 2;
+#else
 	hw->data_setup_in_cycles = 1;
 	hw->data_hold_in_cycles = 1;
+#endif
 	hw->address_setup_in_cycles = ((mode == 5) ? 1 : 0);
 
 	/* [2] for GPMI_HW_GPMI_TIMING1 */
@@ -928,6 +968,15 @@ static int enable_edo_mode(struct gpmi_nand_data *this, int mode)
 	if (!feature)
 		return -ENOMEM;
 
+#ifdef CONFIG_SONOS
+	if ( (((mtd->devid & 0xff00 ) >> 8) == NAND_MFR_AMD ) ||
+		(((mtd->devid & 0xff00) >> 8) == NAND_MFR_WINBOND) ||
+		(((mtd->devid & 0xff00) >> 8) == NAND_MFR_MACRONIX)) {
+		dev_info(this->dev, "ONFI get/set features intentionally omitted for devid 0x%x\n",mtd->devid);
+		goto skip_spansion;
+	}
+#endif
+
 	nand->select_chip(mtd, 0);
 
 	/* [1] send SET FEATURE commond to NAND */
@@ -950,6 +999,9 @@ static int enable_edo_mode(struct gpmi_nand_data *this, int mode)
 	rate = (mode == 5) ? 100000000 : 80000000;
 	clk_set_rate(r->clock[0], rate);
 
+#ifdef CONFIG_SONOS
+skip_spansion:
+#endif
 	/* Let the gpmi_begin() re-compute the timing again. */
 	this->flags &= ~GPMI_TIMING_INIT_OK;
 
@@ -981,6 +1033,9 @@ int gpmi_extra_init(struct gpmi_nand_data *this)
 			mode = 4;
 		else
 			return 0;
+#ifdef CONFIG_SONOS
+		mode = 4;
+#endif
 
 		return enable_edo_mode(this, mode);
 	}

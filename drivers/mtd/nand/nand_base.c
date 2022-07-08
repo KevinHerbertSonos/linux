@@ -48,6 +48,11 @@
 #include <linux/io.h>
 #include <linux/mtd/partitions.h>
 
+#if defined(CONFIG_SONOS)
+static int ShutdownNandAccess = 0;
+static struct nand_chip *chip_for_shutdown;
+#endif
+
 /* Define default oob placement schemes for large and small page devices */
 static struct nand_ecclayout nand_oob_8 = {
 	.eccbytes = 3,
@@ -137,8 +142,17 @@ static void nand_release_device(struct mtd_info *mtd)
 	/* Release the controller and the chip */
 	spin_lock(&chip->controller->lock);
 	chip->controller->active = NULL;
-	chip->state = FL_READY;
-	wake_up(&chip->controller->wq);
+#if defined(CONFIG_SONOS)
+	if (ShutdownNandAccess) {
+		chip->state = FL_PM_SUSPENDED;
+		printk(KERN_INFO "releasing with ShutdownNandAccess set - putting into FL_PM_SUSPENDED state\n");
+	}
+	else
+#endif
+	{
+		chip->state = FL_READY;
+		wake_up(&chip->controller->wq);
+	}
 	spin_unlock(&chip->controller->lock);
 }
 
@@ -505,6 +519,19 @@ static int nand_block_checkbad(struct mtd_info *mtd, loff_t ofs, int getchip,
 	return nand_isbad_bbt(mtd, ofs, allowbbt);
 }
 
+#ifdef CONFIG_SONOS
+int nand_get_device_exp(struct nand_chip *chip,
+		struct mtd_info *mtd, int new_state)
+{
+	return nand_get_device(mtd, new_state);
+}
+
+void nand_release_device_exp(struct mtd_info *mtd)
+{
+	nand_release_device(mtd);
+}
+#endif
+
 /**
  * panic_nand_wait_ready - [GENERIC] Wait for the ready pin after commands.
  * @mtd: MTD device structure
@@ -818,6 +845,47 @@ retry:
 	remove_wait_queue(wq, &wait);
 	goto retry;
 }
+
+#if defined(CONFIG_SONOS)
+/**
+ * Provide a mechanism to allow the kernel to prevent any write or erase
+ * accesses to the flash in the case of the power rail going down.  We
+ * want to avoid power-cuts with the device open for either write or
+ * erase, which can cause problems.
+ */
+
+int nand_shutdown_access(int shutdown)
+{
+	struct nand_chip *chip = (struct nand_chip*)chip_for_shutdown;
+
+	if (chip == NULL) {
+		printk(KERN_ERR "no chip structure...\n");
+		return 0;
+	}
+
+	if (shutdown) {
+		ShutdownNandAccess = 1;
+		if (chip->state == FL_READY || chip->state == FL_PM_SUSPENDED) {
+			chip->state = FL_PM_SUSPENDED;
+			printk(KERN_NOTICE "NAND disabled...\n");
+			return 1;
+		} else {
+			printk(KERN_NOTICE "Trying to disable NAND...\n");
+			return 0;
+		}
+	} else {
+		ShutdownNandAccess = 0;
+		if (chip->state == FL_PM_SUSPENDED) {
+			chip->state = FL_READY;
+			wake_up(&chip->controller->wq);
+		}
+		printk(KERN_NOTICE "NAND enabled...\n");
+		return 0;
+	}
+}
+EXPORT_SYMBOL(nand_shutdown_access);
+#endif
+
 
 /**
  * panic_nand_wait - [GENERIC] wait until the command is done
@@ -2826,7 +2894,11 @@ static int nand_onfi_set_features(struct mtd_info *mtd, struct nand_chip *chip,
 	      & ONFI_OPT_CMD_SET_GET_FEATURES))
 		return -EINVAL;
 
+#ifdef CONFIG_SONOS
+	nand_command(mtd, NAND_CMD_SET_FEATURES, addr, -1);
+#else
 	chip->cmdfunc(mtd, NAND_CMD_SET_FEATURES, addr, -1);
+#endif
 	for (i = 0; i < ONFI_SUBFEATURE_PARAM_LEN; ++i)
 		chip->write_byte(mtd, subfeature_param[i]);
 
@@ -2856,7 +2928,11 @@ static int nand_onfi_get_features(struct mtd_info *mtd, struct nand_chip *chip,
 	/* clear the sub feature parameters */
 	memset(subfeature_param, 0, ONFI_SUBFEATURE_PARAM_LEN);
 
+#ifdef CONFIG_SONOS
+	nand_command(mtd, NAND_CMD_GET_FEATURES, addr, -1);
+#else
 	chip->cmdfunc(mtd, NAND_CMD_GET_FEATURES, addr, -1);
+#endif
 	for (i = 0; i < ONFI_SUBFEATURE_PARAM_LEN; ++i)
 		*subfeature_param++ = chip->read_byte(mtd);
 	return 0;
@@ -3126,6 +3202,16 @@ static int nand_flash_detect_onfi(struct mtd_info *mtd, struct nand_chip *chip,
 	mtd->erasesize *= mtd->writesize;
 
 	mtd->oobsize = le16_to_cpu(p->spare_bytes_per_page);
+#ifdef CONFIG_SONOS
+	/* All of Sonos devices using this kernel have large-page flash
+	 * devices, and they all have at least 64 bytes of oob data.  But
+	 * some may have 128.  Pretend that they don't...
+	 */
+	if (mtd->oobsize == 128) {
+		pr_info("Device has 128 bytes ouf-of-band - only using 64\n");
+		mtd->oobsize = 64;
+	}
+#endif
 
 	/* See erasesize comment */
 	chip->chipsize = 1 << (fls(le32_to_cpu(p->blocks_per_lun)) - 1);
@@ -3692,6 +3778,10 @@ ident_done:
 	if (mtd->writesize > 512 && chip->cmdfunc == nand_command)
 		chip->cmdfunc = nand_command_lp;
 
+#ifdef CONFIG_SONOS
+	mtd->devid = (*maf_id << 8) | (*dev_id);
+#endif
+
 	pr_info("device found, Manufacturer ID: 0x%02x, Chip ID: 0x%02x\n",
 		*maf_id, *dev_id);
 
@@ -4059,6 +4149,17 @@ int nand_scan_tail(struct mtd_info *mtd)
 	 */
 	if (!mtd->bitflip_threshold)
 		mtd->bitflip_threshold = mtd->ecc_strength;
+
+#if defined(CONFIG_SONOS)
+	/* This is a bit of a hack, but it should work, because we only have
+	 * one flash chip on the sonos device.  We may need/want to shut
+	 * down access to that chip from the kernel without going through
+	 * a file open operation.  So, since there's only one, we should be
+	 * able to save the chip pointer here at init time, and use it when
+	 * necessary.
+	 */
+	chip_for_shutdown = (struct nand_chip*)chip;
+#endif
 
 	/* Check, if we should skip the bad block table scan */
 	if (chip->options & NAND_SKIP_BBTSCAN)

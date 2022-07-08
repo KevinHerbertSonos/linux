@@ -259,6 +259,20 @@ static void __exit fixed_mdio_bus_exit(void)
 }
 module_exit(fixed_mdio_bus_exit);
 
+#ifdef CONFIG_MV88E6020_PHY
+void fixed_mdio_update_link(int link)
+{
+	struct fixed_mdio_bus *fmb = &platform_fmb;
+	struct fixed_phy *fp;
+
+	list_for_each_entry(fp, &fmb->phys, node) {
+		printk("%s: link %d\n", __func__, link);
+		fp->status.link = link;
+		fixed_phy_update_regs(fp);
+	}
+}
+#endif
+
 MODULE_DESCRIPTION("Fixed MDIO bus (MDIO bus emulation with fixed PHYs)");
 MODULE_AUTHOR("Vitaly Bordug");
 MODULE_LICENSE("GPL");

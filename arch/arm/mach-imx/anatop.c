@@ -168,6 +168,9 @@ void __init imx_init_revision_from_anatop(void)
 	case 5:
 		revision = IMX_CHIP_REVISION_1_5;
 		break;
+	case 6:
+		revision = IMX_CHIP_REVISION_1_6;
+		break;
 	default:
 		revision = IMX_CHIP_REVISION_UNKNOWN;
 	}

@@ -37,6 +37,10 @@
 #include <asm/mmu_context.h>
 #include "internal.h"
 
+#ifdef CONFIG_SONOS_SECBOOT
+#include "sonos_lock.h"
+#endif
+
 #if 0
 #define kenter(FMT, ...) \
 	printk(KERN_DEBUG "==> %s("FMT")\n", __func__, ##__VA_ARGS__)
@@ -1029,7 +1033,11 @@ static int validate_mmap_request(struct file *file,
 
 		/* handle executable mappings and implied executable
 		 * mappings */
+#ifdef CONFIG_SONOS_SECBOOT
+		if ( (file->f_path.mnt->mnt_flags & MNT_NOEXEC) && !sonos_allow_execution()) {
+#else
 		if (file->f_path.mnt->mnt_flags & MNT_NOEXEC) {
+#endif
 			if (prot & PROT_EXEC)
 				return -EPERM;
 		}

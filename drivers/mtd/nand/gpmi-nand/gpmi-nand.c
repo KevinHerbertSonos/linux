@@ -86,6 +86,40 @@ static irqreturn_t bch_irq(int irq, void *cookie)
 	return IRQ_HANDLED;
 }
 
+#ifdef CONFIG_SONOS
+int nand_get_device_exp(struct nand_chip *chip,
+	struct mtd_info *mtd, int new_state);
+void nand_release_device_exp(struct mtd_info *mtd);
+
+static int gpmi_nand_read_special(struct mtd_info *mtd,
+	struct mtd_special_info *rsi, void *buf)
+{
+	struct nand_chip *chip = (struct nand_chip*) mtd->priv;
+	int x;
+
+	chip->select_chip(mtd, 0);
+	nand_get_device_exp(chip, mtd, FL_READING);
+	if (rsi->preop_cmdlen) {
+		for (x = 0; x < rsi->preop_cmdlen; x++) {
+			chip->cmd_ctrl(mtd, rsi->preop_cmd[x] & 0xff,
+				NAND_CTRL_ALE);
+		}
+	}
+	if (rsi->alternate_read) {
+		chip->cmd_ctrl(mtd, rsi->alternate_read & 0xff, NAND_CTRL_ALE);
+		chip->cmdfunc(mtd, NAND_CMD_READ0, 0x00, 0);
+	} else {
+		chip->cmd_ctrl(mtd, NAND_CMD_NONE, NAND_NCE | NAND_CTRL_CHANGE);
+		chip->cmd_ctrl(mtd, NAND_CMD_READ0, NAND_CTRL_ALE);
+	}
+	chip->cmd_ctrl(mtd, NAND_CMD_NONE, NAND_NCE | NAND_CTRL_CHANGE);
+	nand_wait_ready(mtd);
+	chip->read_buf(mtd, buf, (rsi->datalen > 256) ? 256:rsi->datalen);
+	nand_release_device_exp(mtd);
+	return 0;
+}
+#endif
+
 /*
  *  Calculate the ECC strength by hand:
  *	E : The ECC strength.
@@ -614,7 +648,11 @@ static int gpmi_get_clks(struct gpmi_nand_data *this)
 		 * If you want to use the ONFI nand which is in the
 		 * Synchronous Mode, you should change the clock as you need.
 		 */
+#ifdef CONFIG_SONOS
+		clk_set_rate(r->clock[0], 99000000);
+#else
 		clk_set_rate(r->clock[0], 22000000);
+#endif
 
 	return 0;
 
@@ -988,6 +1026,32 @@ static void block_mark_swapping(struct gpmi_nand_data *this,
 	p[1] = (p[1] & mask) | (from_oob >> (8 - bit));
 }
 
+#if defined(CONFIG_SONOS)
+/*
+ * Count the number of 0 bits in a supposed to be
+ * erased region and correct them. Return the number
+ * of bitflips or zero when the region was correct.
+ */
+static unsigned int erased_sector_bitflips(unsigned char *data,
+					unsigned int chunk,
+					struct bch_geometry *geo)
+{
+	unsigned int flip_bits = 0;
+	int i;
+	int base = geo->ecc_chunk_size * chunk;
+
+	/* Count bitflips */
+	for (i = 0; i < geo->ecc_chunk_size; i++)
+		flip_bits += hweight8(~data[base + i]);
+
+	/* Correct bitflips by 0xFF'ing this chunk. */
+	if (flip_bits)
+		memset(&data[base], 0xFF, geo->ecc_chunk_size);
+
+	return flip_bits;
+}
+#endif
+
 static int gpmi_ecc_read_page(struct mtd_info *mtd, struct nand_chip *chip,
 				uint8_t *buf, int oob_required, int page)
 {
@@ -999,6 +1063,9 @@ static int gpmi_ecc_read_page(struct mtd_info *mtd, struct nand_chip *chip,
 	dma_addr_t    auxiliary_phys;
 	unsigned int  i;
 	unsigned char *status;
+#if defined(CONFIG_SONOS)
+	unsigned int  flips;
+#endif
 	unsigned int  max_bitflips = 0;
 	int           ret;
 
@@ -1033,15 +1100,36 @@ static int gpmi_ecc_read_page(struct mtd_info *mtd, struct nand_chip *chip,
 	status = auxiliary_virt + nfc_geo->auxiliary_status_offset;
 
 	for (i = 0; i < nfc_geo->ecc_chunk_count; i++, status++) {
+#if defined(CONFIG_SONOS)
+		if (*status == STATUS_GOOD)
+#else
 		if ((*status == STATUS_GOOD) || (*status == STATUS_ERASED))
+#endif
 			continue;
 
 		if (*status == STATUS_UNCORRECTABLE) {
 			mtd->ecc_stats.failed++;
 			continue;
 		}
+
+#if defined(CONFIG_SONOS)
+		/*
+		 * The number of bitflips are either counted in software
+		 * in case of an erased chunk or otherwise reported by
+		 * the BCH block.
+		 */
+		if (*status == STATUS_ERASED)
+			flips = erased_sector_bitflips(payload_virt, i,
+							       nfc_geo);
+		else
+			flips = *status;
+
+		mtd->ecc_stats.corrected += flips;
+		max_bitflips = max_t(unsigned int, max_bitflips, flips);
+#else
 		mtd->ecc_stats.corrected += *status;
 		max_bitflips = max_t(unsigned int, max_bitflips, *status);
+#endif
 	}
 
 	if (oob_required) {
@@ -1703,6 +1791,9 @@ static int gpmi_nand_init(struct gpmi_nand_data *this)
 	mtd->priv		= chip;
 	mtd->name		= "gpmi-nand";
 	mtd->owner		= THIS_MODULE;
+#ifdef CONFIG_SONOS
+	mtd->read_special	= gpmi_nand_read_special;
+#endif
 
 	/* init the nand_chip{}, we don't support a 16-bit NAND Flash bus. */
 	chip->priv		= this;
@@ -1834,6 +1925,10 @@ static int gpmi_pm_suspend(struct device *dev)
 	struct gpmi_nand_data *this = dev_get_drvdata(dev);
 
 	release_dma_channels(this);
+
+#ifdef CONFIG_SONOS
+	gpmi_power_down(this);
+#endif
 	return 0;
 }
 

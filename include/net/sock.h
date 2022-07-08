@@ -391,6 +391,10 @@ struct sock {
 #ifdef CONFIG_SECURITY
 	void			*sk_security;
 #endif
+#if defined(CONFIG_SONOS) || defined(__SONOS_LINUX__)
+	unsigned short sonos_options;
+	unsigned short sonos_options_pad;
+#endif
 	__u32			sk_mark;
 	u32			sk_classid;
 	struct cg_proto		*sk_cgrp;
@@ -2012,7 +2016,7 @@ extern void sk_reset_timer(struct sock *sk, struct timer_list *timer,
 			   unsigned long expires);
 
 extern void sk_stop_timer(struct sock *sk, struct timer_list *timer);
-
+int __sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb);
 extern int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb);
 
 extern int sock_queue_err_skb(struct sock *sk, struct sk_buff *skb);

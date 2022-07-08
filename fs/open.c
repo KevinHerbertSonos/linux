@@ -34,6 +34,10 @@
 
 #include "internal.h"
 
+#ifdef CONFIG_SONOS_SECBOOT
+#include "sonos_lock.h"
+#endif
+
 int do_truncate(struct dentry *dentry, loff_t length, unsigned int time_attrs,
 	struct file *filp)
 {
@@ -339,7 +343,11 @@ retry:
 		 * with the "noexec" flag.
 		 */
 		res = -EACCES;
+#ifdef CONFIG_SONOS_SECBOOT
+		if ( (path.mnt->mnt_flags & MNT_NOEXEC) && !sonos_allow_execution() )
+#else
 		if (path.mnt->mnt_flags & MNT_NOEXEC)
+#endif
 			goto out_path_release;
 	}
 

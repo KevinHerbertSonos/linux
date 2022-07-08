@@ -727,7 +727,12 @@ int ubifs_jnl_write_data(struct ubifs_info *c, const struct inode *inode,
 		compr_type = ui->compr_type;
 
 	out_len = dlen - UBIFS_DATA_NODE_SZ;
+
+#ifdef CONFIG_SONOS_SECBOOT
+	ubifs_compress(buf, len, &data->data, &out_len, &compr_type, (use_ubifs_crypto_key ? sonos_ubifs_crypto_key : NULL));
+#else
 	ubifs_compress(buf, len, &data->data, &out_len, &compr_type);
+#endif
 	ubifs_assert(out_len <= UBIFS_BLOCK_SIZE);
 
 	dlen = UBIFS_DATA_NODE_SZ + out_len;
@@ -1110,11 +1115,20 @@ static int recomp_data_node(struct ubifs_data_node *dn, int *new_len)
 
 	len = le32_to_cpu(dn->ch.len) - UBIFS_DATA_NODE_SZ;
 	compr_type = le16_to_cpu(dn->compr_type);
+
+#ifdef CONFIG_SONOS_SECBOOT
+	err = ubifs_decompress(&dn->data, len, buf, &out_len, compr_type, (use_ubifs_crypto_key ? sonos_ubifs_crypto_key : NULL));
+#else
 	err = ubifs_decompress(&dn->data, len, buf, &out_len, compr_type);
+#endif
 	if (err)
 		goto out;
 
+#ifdef CONFIG_SONOS_SECBOOT
+	ubifs_compress(buf, *new_len, &dn->data, &out_len, &compr_type, (use_ubifs_crypto_key ? sonos_ubifs_crypto_key : NULL));
+#else
 	ubifs_compress(buf, *new_len, &dn->data, &out_len, &compr_type);
+#endif
 	ubifs_assert(out_len <= UBIFS_BLOCK_SIZE);
 	dn->compr_type = cpu_to_le16(compr_type);
 	dn->size = cpu_to_le32(*new_len);

@@ -466,6 +466,12 @@ void ubifs_add_lpt_dirt(struct ubifs_info *c, int lnum, int dirty)
 	dbg_lp("LEB %d add %d to %d",
 	       lnum, dirty, c->ltab[lnum - c->lpt_first].dirty);
 	ubifs_assert(lnum >= c->lpt_first && lnum <= c->lpt_last);
+#ifdef CONFIG_SONOS
+	if ( unlikely(!(lnum >= c->lpt_first && lnum <= c->lpt_last)) ) {
+		printk("ASSERT: lnum %d out of range\n", lnum);
+		return;
+	}
+#endif
 	c->ltab[lnum - c->lpt_first].dirty += dirty;
 }
 

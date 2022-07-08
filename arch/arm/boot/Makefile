@@ -54,6 +54,36 @@ $(obj)/compressed/vmlinux: $(obj)/Image FORCE
 $(obj)/zImage:	$(obj)/compressed/vmlinux FORCE
 	$(call if_changed,objcopy)
 	@$(kecho) '  Kernel: $@ is ready'
+ifneq ($(CONFIG_ARM_APPENDED_DTB),)
+ifeq ($(CONFIG_SONOS_ENCORE),y)
+	@$(kecho) '  Kernel: $@ append encore.dtb to kernel'
+	cat $(obj)/dts/encore.dtb >> $@
+endif
+ifeq ($(CONFIG_SONOS_SOLBASE),y)
+	@$(kecho) '  Kernel: $@ append solbase.dtb to kernel'
+	cat $(obj)/dts/solbase.dtb >> $@
+endif
+ifeq ($(CONFIG_SONOS_ROYALE),y)
+	@$(kecho) '  Kernel: $@ append royale.dtb to kernel'
+	cat $(obj)/dts/royale.dtb >> $@
+endif
+ifeq ($(CONFIG_SONOS_BOOTLEG),y)
+	@$(kecho) '  Kernel: $@ append bootleg.dtb to kernel'
+	cat $(obj)/dts/bootleg.dtb >> $@
+endif
+ifeq ($(CONFIG_SONOS_PARAMOUNT),y)
+	@$(kecho) '  Kernel: $@ append paramount.dtb to kernel'
+	cat $(obj)/dts/paramount.dtb >> $@
+endif
+ifeq ($(CONFIG_SONOS_CHAPLIN),y)
+	@$(kecho) '  Kernel: $@ append chaplin.dtb to kernel'
+	cat $(obj)/dts/chaplin.dtb >> $@
+endif
+ifeq ($(CONFIG_SONOS_NEPTUNE),y)
+	@$(kecho) '  Kernel: $@ append neptune.dtb to kernel'
+	cat $(obj)/dts/neptune.dtb >> $@
+endif
+endif
 
 endif
 
@@ -79,6 +109,10 @@ $(obj)/uImage:	$(obj)/zImage FORCE
 	@$(check_for_multiple_loadaddr)
 	$(call if_changed,uimage)
 	@$(kecho) '  Image $@ is ready'
+
+$(obj)/uImage-dtb.%:   $(obj)/zImage-dtb.% FORCE
+	$(call if_changed,uimage)
+	 @echo '  Image $@ is ready'
 
 $(obj)/bootp/bootp: $(obj)/zImage initrd FORCE
 	$(Q)$(MAKE) $(build)=$(obj)/bootp $@

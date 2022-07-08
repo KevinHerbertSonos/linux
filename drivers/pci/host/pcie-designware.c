@@ -818,6 +818,20 @@ void dw_pcie_setup_rc(struct pcie_port *pp)
 	val |= PCI_COMMAND_IO | PCI_COMMAND_MEMORY |
 		PCI_COMMAND_MASTER | PCI_COMMAND_SERR;
 	dw_pcie_writel_rc(pp, val, dbi_base + PCI_COMMAND);
+
+#if defined(CONFIG_SONOS_SOLBASE) || defined(CONFIG_SONOS_NEPTUNE) || defined(CONFIG_SONOS_CHAPLIN)
+	/*
+	 * FIXME: Force the PCIe RC to Gen1 operation
+	 * The RC must be forced into Gen1 mode before bringing the link
+	 * up, otherwise no downstream devices are detected. After the
+	 * link is up, a managed Gen1->Gen2 transition can be initiated.
+	 */
+	dw_pcie_readl_rc(pp, dbi_base + 0x7C, &val);
+	val &= ~0xf;
+	val |= 0x1;
+	dw_pcie_writel_rc(pp, val, dbi_base + 0x7c);
+#endif
+
 }
 
 MODULE_AUTHOR("Jingoo Han <jg1.han@samsung.com>");

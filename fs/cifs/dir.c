@@ -486,7 +486,7 @@ cifs_atomic_open(struct inode *inode, struct dentry *direntry,
 		goto out;
 	}
 
-	file_info = cifs_new_fileinfo(&fid, file, tlink, oplock);
+	file_info = cifs_new_fileinfo(&fid, file, tlink);
 	if (file_info == NULL) {
 		if (server->ops->close)
 			server->ops->close(xid, tcon, &fid);

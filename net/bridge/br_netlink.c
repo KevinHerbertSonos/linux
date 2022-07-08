@@ -21,8 +21,18 @@
 #include "br_private.h"
 #include "br_private_stp.h"
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+
+#include "br_proxy.h"
+#include "br_sonos.h"
+
+#endif
+
 static inline size_t br_port_info_size(void)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	return 1;
+#else
 	return nla_total_size(1)	/* IFLA_BRPORT_STATE  */
 		+ nla_total_size(2)	/* IFLA_BRPORT_PRIORITY */
 		+ nla_total_size(4)	/* IFLA_BRPORT_COST */
@@ -31,6 +41,7 @@ static inline size_t br_port_info_size(void)
 		+ nla_total_size(1)	/* IFLA_BRPORT_PROTECT */
 		+ nla_total_size(1)	/* IFLA_BRPORT_FAST_LEAVE */
 		+ 0;
+#endif
 }
 
 static inline size_t br_nlmsg_size(void)
@@ -45,6 +56,7 @@ static inline size_t br_nlmsg_size(void)
 		+ nla_total_size(br_port_info_size()); /* IFLA_PROTINFO */
 }
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
 static int br_port_fill_attrs(struct sk_buff *skb,
 			      const struct net_bridge_port *p)
 {
@@ -61,6 +73,7 @@ static int br_port_fill_attrs(struct sk_buff *skb,
 
 	return 0;
 }
+#endif
 
 /*
  * Create one netlink message for one interface
@@ -106,6 +119,15 @@ static int br_fill_ifinfo(struct sk_buff *skb,
 	     nla_put_u32(skb, IFLA_LINK, dev->iflink)))
 		goto nla_put_failure;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651, SWPBL-65566 */
+	if (event == RTM_NEWLINK && port) {
+		if (nla_put_u8(skb, IFLA_PROTINFO, port->state)) {
+			goto nla_put_failure;
+		}
+	}
+
+	goto done;
+#else
 	if (event == RTM_NEWLINK && port) {
 		struct nlattr *nest
 			= nla_nest_start(skb, IFLA_PROTINFO | NLA_F_NESTED);
@@ -152,6 +174,7 @@ static int br_fill_ifinfo(struct sk_buff *skb,
 
 		nla_nest_end(skb, af);
 	}
+#endif
 
 done:
 	return nlmsg_end(skb, nlh);
@@ -160,6 +183,14 @@ nla_put_failure:
 	nlmsg_cancel(skb, nlh);
 	return -EMSGSIZE;
 }
+
+#if defined(CONFIG_SONOS) /* Needed by br_proxy.c */
+int br_sonos_fill_ifinfo(struct sk_buff *skb, const struct net_bridge_port *port,
+			 u32 pid, u32 seq, int event, unsigned int flags)
+{
+	return br_fill_ifinfo(skb, port, pid, seq, event, flags, 0, port->dev);
+}
+#endif
 
 /*
  * Notify listeners of a change in port information
@@ -174,8 +205,12 @@ void br_ifinfo_notify(int event, struct net_bridge_port *port)
 		return;
 
 	net = dev_net(port->dev);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	br_debug(port->br, "bridge notify event=%d\n", event);
+#else
 	br_debug(port->br, "port %u(%s) event %d\n",
 		 (unsigned int)port->port_no, port->dev->name, event);
+#endif
 
 	skb = nlmsg_new(br_nlmsg_size(), GFP_ATOMIC);
 	if (skb == NULL)
@@ -196,6 +231,7 @@ errout:
 }
 
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
 /*
  * Dump information about all ports, in response to GETLINK
  */
@@ -438,20 +474,6 @@ static int br_validate(struct nlattr *tb[], struct nlattr *data[])
 	return 0;
 }
 
-static int br_dev_newlink(struct net *src_net, struct net_device *dev,
-			  struct nlattr *tb[], struct nlattr *data[])
-{
-	struct net_bridge *br = netdev_priv(dev);
-
-	if (tb[IFLA_ADDRESS]) {
-		spin_lock_bh(&br->lock);
-		br_stp_change_bridge_id(br, nla_data(tb[IFLA_ADDRESS]));
-		spin_unlock_bh(&br->lock);
-	}
-
-	return register_netdevice(dev);
-}
-
 static size_t br_get_link_af_size(const struct net_device *dev)
 {
 	struct net_port_vlans *pv;
@@ -480,12 +502,21 @@ struct rtnl_link_ops br_link_ops __read_mostly = {
 	.priv_size	= sizeof(struct net_bridge),
 	.setup		= br_dev_setup,
 	.validate	= br_validate,
-	.newlink	= br_dev_newlink,
 	.dellink	= br_dev_delete,
 };
+#endif
 
 int __init br_netlink_init(void)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	if (__rtnl_register(PF_BRIDGE, RTM_GETLINK, NULL, br_dump_ifinfo, NULL))
+		return -ENOBUFS;
+
+	/* Only the first call to __rtnl_register can fail */
+	__rtnl_register(PF_BRIDGE, RTM_SETLINK, br_rtm_setlink, NULL, NULL);
+
+	return 0;
+#else
 	int err;
 
 	br_mdb_init();
@@ -504,11 +535,16 @@ out_af:
 out:
 	br_mdb_uninit();
 	return err;
+#endif
 }
 
 void __exit br_netlink_fini(void)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	rtnl_unregister_all(PF_BRIDGE);
+#else
 	br_mdb_uninit();
 	rtnl_af_unregister(&br_af_ops);
 	rtnl_link_unregister(&br_link_ops);
+#endif
 }

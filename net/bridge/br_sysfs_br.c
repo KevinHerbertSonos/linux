@@ -44,7 +44,13 @@ static ssize_t store_bridge_parm(struct device *d,
 	if (endp == buf)
 		return -EINVAL;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	spin_lock_bh(&br->lock);
 	err = (*set)(br, val);
+	spin_unlock_bh(&br->lock);
+#else
+	err = (*set)(br, val);
+#endif
 	return err ? err : len;
 }
 
@@ -142,7 +148,11 @@ static ssize_t store_stp_state(struct device *d,
 
 	if (!rtnl_trylock())
 		return restart_syscall();
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	br->stp_enabled = val?1:0;
+#else
 	br_stp_set_enabled(br, val);
+#endif
 	rtnl_unlock();
 
 	return len;
@@ -309,8 +319,18 @@ static ssize_t store_group_addr(struct device *d,
 		   &new_addr[3], &new_addr[4], &new_addr[5]) != 6)
 		return -EINVAL;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	/* Must be 01:80:c2:00:00:0X */
+	for (i = 0; i < 5; i++)
+		if (new_addr[i] != br_group_address[i])
+			return -EINVAL;
+
+	if (new_addr[5] & ~0xf)
+		return -EINVAL;
+#else
 	if (!is_link_local_ether_addr(new_addr))
 		return -EINVAL;
+#endif
 
 	if (new_addr[5] == 1 ||		/* 802.3x Pause address */
 	    new_addr[5] == 2 ||		/* 802.3ad Slow protocols */

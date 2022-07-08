@@ -58,9 +58,18 @@ void mxc_restart(char mode, const char *cmd)
 	 */
 	else if ((wdog_source == 2 && (cpu_is_imx6q() || cpu_is_imx6dl() ||
 			cpu_is_imx6sl())) || cpu_is_imx6sx())
+#if !defined(CONFIG_SONOS)
 		wcr_enable = 0x14;
+#else
+	/*
+	 * Sonos is not using NOR flash, so we don't have the concern that the
+	 * code above is working around.  We want to write a 0 to SRS.
+	 */
+		wcr_enable = 0x04;
+#endif
 	else
 		wcr_enable = (1 << 2);
+
 
 	/* Assert SRS signal */
 	__raw_writew(wcr_enable, wdog_base);

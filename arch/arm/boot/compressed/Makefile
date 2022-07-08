@@ -127,6 +127,13 @@ endif
 ccflags-y := -fpic -mno-single-pic-base -fno-builtin -I$(obj)
 asflags-y := -DZIMAGE
 
+# Supply the address of the rootfs digest structure to the decompressor as a constant
+ifeq ($(CONFIG_SONOS_SECBOOT), y)
+	KROOTFS_DIGEST = $(shell $(CROSS_COMPILE)objdump -x -s -f vmlinux | \
+			grep " rootfs_digest" | awk '{print $$1}')
+	ccflags-y += -DKERNEL_ROOTFS=0x$(KROOTFS_DIGEST)
+endif
+
 # Supply kernel BSS size to the decompressor via a linker symbol.
 KBSS_SZ = $(shell $(CROSS_COMPILE)size $(obj)/../../../../vmlinux | \
 		awk 'END{print $$3}')

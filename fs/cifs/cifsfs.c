@@ -55,7 +55,7 @@
 
 int cifsFYI = 0;
 int traceSMB = 0;
-bool enable_oplocks = true;
+bool enable_oplocks = false;
 unsigned int linuxExtEnabled = 1;
 unsigned int lookupCacheEnabled = 1;
 unsigned int global_secflags = CIFSSEC_DEF;

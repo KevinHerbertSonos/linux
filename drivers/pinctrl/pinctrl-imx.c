@@ -653,21 +653,29 @@ int imx_pinctrl_remove(struct platform_device *pdev)
 #ifdef CONFIG_PM
 int imx_pinctrl_suspend(struct platform_device *pdev, pm_message_t state)
 {
+#ifdef CONFIG_SONOS
+	return 0;
+#else
 	struct imx_pinctrl *ipctl = platform_get_drvdata(pdev);
 
 	if (!ipctl)
 		return -EINVAL;
 
 	return pinctrl_force_sleep(ipctl->pctl);
+#endif
 }
 
 int imx_pinctrl_resume(struct platform_device *pdev)
 {
+#ifdef CONFIG_SONOS
+	return 0;
+#else
 	struct imx_pinctrl *ipctl = platform_get_drvdata(pdev);
 
 	if (!ipctl)
 		return -EINVAL;
 
 	return pinctrl_force_default(ipctl->pctl);
+#endif
 }
 #endif

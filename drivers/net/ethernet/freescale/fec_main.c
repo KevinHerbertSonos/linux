@@ -61,6 +61,10 @@
 #include <linux/version.h>
 
 #include <asm/cacheflush.h>
+#ifdef CONFIG_SONOS_SOLBASE
+#include "mdp.h"
+extern struct manufacturing_data_page sys_mdp;
+#endif
 
 #include "fec.h"
 
@@ -73,6 +77,14 @@
 static void set_multicast_list(struct net_device *ndev);
 static void fec_reset_phy(struct platform_device *pdev);
 static void fec_enet_itr_coal_init(struct net_device *ndev);
+#ifdef CONFIG_SONOS
+#ifdef CONFIG_MV88E6020_PHY
+void mv88e6020_sonos_phy_connect(void (*link_up)(struct net_device *), struct net_device *ndev);
+void mv88e6020_sonos_phy_disconnect(void);
+#endif
+void sonos_phy_connect(void (*link_up)(struct net_device *), struct net_device *ndev);
+void sonos_phy_disconnect(void);
+#endif
 
 #define DRIVER_NAME	"fec"
 #define FEC_NAPI_WEIGHT	64
@@ -112,10 +124,19 @@ static struct platform_device_id fec_devtype[] = {
 		.driver_data = FEC_QUIRK_ENET_MAC,
 	}, {
 		.name = "imx6sx-fec",
+#ifdef CONFIG_SONOS
+		.driver_data = FEC_QUIRK_ENET_MAC | FEC_QUIRK_TKT210582 | FEC_QUIRK_TKT210590
+#ifdef SONOS_ARCH_SOLBASE
+                /* Enable the AVB quirk, which is needed to enable interrupt coalescing */
+                               | FEC_QUIRK_HAS_AVB
+#endif
+                               ,
+#else
 		.driver_data = FEC_QUIRK_ENET_MAC | FEC_QUIRK_HAS_GBIT |
 				FEC_QUIRK_HAS_BUFDESC_EX | FEC_QUIRK_HAS_CSUM |
 				FEC_QUIRK_HAS_AVB | FEC_QUIRK_TKT210582 |
 				FEC_QUIRK_TKT210590,
+#endif
 	}, {
 		/* sentinel */
 	}
@@ -201,7 +222,11 @@ MODULE_PARM_DESC(macaddr, "FEC Ethernet MAC address");
 #define FEC_ECR_MAGICEN		(1 << 2)
 #define FEC_ECR_SLEEP		(1 << 3)
 
+#ifdef CONFIG_SONOS
+#define FEC_MII_TIMEOUT		40000 /* us */
+#else
 #define FEC_MII_TIMEOUT		30000 /* us */
+#endif
 
 /* Transmitter timeout */
 #define TX_TIMEOUT (2 * HZ)
@@ -932,6 +957,9 @@ fec_restart(struct net_device *ndev, int duplex)
 	u32 temp_mac[2];
 	u32 rcntl = OPT_FRAME_SIZE | 0x04;
 	u32 ecntl = FEC_ENET_ETHEREN; /* ETHEREN */
+#ifdef CONFIG_SONOS
+	u32 ftrl = PKT_MAXBUF_SIZE;
+#endif
 
 	if (netif_running(ndev)) {
 		netif_device_detach(ndev);
@@ -999,6 +1027,18 @@ fec_restart(struct net_device *ndev, int duplex)
 	/* Set MII speed */
 	writel(fep->phy_speed, fep->hwp + FEC_MII_SPEED);
 
+#ifdef CONFIG_SONOS
+#ifdef CONFIG_SONOS_SOLBASE
+	/* 3 internal module clock cycles for holdtime*/
+	if ( sys_mdp.mdp_revision >= MDP_REVISION_SOLBASE_PROTO4 )
+		writel(readl(fep->hwp + FEC_MII_SPEED) | 0x200,
+			fep->hwp + FEC_MII_SPEED);
+#elif !defined(CONFIG_SONOS_PARAMOUNT) && !defined(CONFIG_SONOS_NEPTUNE)
+	writel(readl(fep->hwp + FEC_MII_SPEED) | 0x200,
+		fep->hwp + FEC_MII_SPEED);
+#endif
+#endif
+
 #if !defined(CONFIG_M5272)
 	/* set RX checksum */
 	val = readl(fep->hwp + FEC_RACC);
@@ -1015,7 +1055,11 @@ fec_restart(struct net_device *ndev, int duplex)
 	 */
 	if (id_entry->driver_data & FEC_QUIRK_ENET_MAC) {
 		/* Enable flow control and length check */
+#ifdef CONFIG_SONOS
+		rcntl |= 0x00000020;
+#else
 		rcntl |= 0x40000000 | 0x00000020;
+#endif
 
 		/* RGMII, RMII or MII */
 		if (fep->phy_interface == PHY_INTERFACE_MODE_RGMII)
@@ -1079,6 +1123,14 @@ fec_restart(struct net_device *ndev, int duplex)
 		rcntl &= ~FEC_ENET_FCE;
 	}
 #endif /* !defined(CONFIG_M5272) */
+
+#ifdef CONFIG_SONOS
+	writel(ftrl, fep->hwp + FEC_FTRL); // Truncate long packets
+
+	rcntl |= FEC_ENET_FCE;
+	if (ndev->flags & IFF_PROMISC)
+		rcntl |= 0x8;
+#endif
 
 	writel(rcntl, fep->hwp + FEC_R_CNTRL);
 
@@ -1764,8 +1816,11 @@ static void fec_enet_adjust_link(struct net_device *ndev)
 		}
 	}
 
+	/* Avoid logging erroneous PHY state on Paramount (SWPBL-88190) */
+#if !defined(CONFIG_SONOS_PARAMOUNT) && !defined(CONFIG_SONOS_NEPTUNE)
 	if (status_change)
 		phy_print_status(phy_dev);
+#endif
 }
 
 static int fec_enet_mdio_read(struct mii_bus *bus, int mii_id, int regnum)
@@ -2275,6 +2330,64 @@ static int fec_enet_us_to_itr_clock(struct net_device *ndev, int us)
 	return us * (fep->itr_clk_rate / 64000) / 1000;
 }
 
+#ifdef CONFIG_SONOS
+/* Set threshold for interrupt coalescing */
+static void fec_enet_itr_coal_set(struct net_device *ndev)
+{
+	struct fec_enet_private *fep = netdev_priv(ndev);
+	const struct platform_device_id *id_entry =
+				platform_get_device_id(fep->pdev);
+	int rx_itr = 0;
+	int tx_itr = 0;
+
+	if (!(id_entry->driver_data & FEC_QUIRK_HAS_AVB))
+		return;
+
+	if (fep->tx_time_itr && fep->tx_pkts_itr) {
+		printk("%s: setting tx coalescing: tx-usecs: %d tx-frames: %d\n",
+			ndev->name, fep->tx_time_itr, fep->tx_pkts_itr);
+		/*
+		 * Select enet system clock as Interrupt Coalescing
+		 * timer Clock Source
+		 */
+		tx_itr = FEC_ITR_CLK_SEL;
+
+		/* set ICFT and ICTT */
+		tx_itr |= FEC_ITR_ICFT(fep->tx_pkts_itr);
+		tx_itr |= FEC_ITR_ICTT(fec_enet_us_to_itr_clock(ndev, fep->tx_time_itr));
+
+		tx_itr |= FEC_ITR_EN;
+	} else {
+		printk("%s: tx coalescing disabled\n", ndev->name);
+	}
+
+	writel(tx_itr, fep->hwp + FEC_TXIC0);
+	writel(tx_itr, fep->hwp + FEC_TXIC1);
+	writel(tx_itr, fep->hwp + FEC_TXIC2);
+
+	if (fep->rx_time_itr && fep->rx_pkts_itr) {
+		printk("%s: setting rx coalescing: rx-usecs: %d rx-frames: %d\n",
+			ndev->name, fep->rx_time_itr, fep->rx_pkts_itr);
+		/*
+		 * Select enet system clock as Interrupt Coalescing
+		 * timer Clock Source
+		 */
+		rx_itr = FEC_ITR_CLK_SEL;
+
+		/* set ICFT and ICTT */
+		rx_itr |= FEC_ITR_ICFT(fep->rx_pkts_itr);
+		rx_itr |= FEC_ITR_ICTT(fec_enet_us_to_itr_clock(ndev, fep->rx_time_itr));
+
+		rx_itr |= FEC_ITR_EN;
+	} else {
+		printk("%s: rx coalescing disabled\n", ndev->name);
+	}
+
+	writel(rx_itr, fep->hwp + FEC_RXIC0);
+	writel(rx_itr, fep->hwp + FEC_RXIC1);
+	writel(rx_itr, fep->hwp + FEC_RXIC2);
+}
+#else
 /* Set threshold for interrupt coalescing */
 static void fec_enet_itr_coal_set(struct net_device *ndev)
 {
@@ -2313,6 +2426,7 @@ static void fec_enet_itr_coal_set(struct net_device *ndev)
 	writel(tx_itr, fep->hwp + FEC_TXIC2);
 	writel(rx_itr, fep->hwp + FEC_RXIC2);
 }
+#endif
 
 static int fec_enet_get_coalesce(struct net_device *ndev,
 				struct ethtool_coalesce *ec)
@@ -2358,11 +2472,19 @@ static void fec_enet_itr_coal_init(struct net_device *ndev)
 {
 	struct ethtool_coalesce ec;
 
+#ifdef CONFIG_SONOS
+	ec.rx_coalesce_usecs = FEC_ITR_ICTT_RX_DEFAULT;
+	ec.rx_max_coalesced_frames = FEC_ITR_ICFT_RX_DEFAULT;
+
+	ec.tx_coalesce_usecs = FEC_ITR_ICTT_TX_DEFAULT;
+	ec.tx_max_coalesced_frames = FEC_ITR_ICFT_TX_DEFAULT;
+#else
 	ec.rx_coalesce_usecs = FEC_ITR_ICTT_DEFAULT;
 	ec.rx_max_coalesced_frames = FEC_ITR_ICFT_DEFAULT;
 
 	ec.tx_coalesce_usecs = FEC_ITR_ICTT_DEFAULT;
 	ec.tx_max_coalesced_frames = FEC_ITR_ICFT_DEFAULT;
+#endif
 
 	fec_enet_set_coalesce(ndev, &ec);
 }
@@ -2558,6 +2680,55 @@ static int fec_enet_alloc_buffers(struct net_device *ndev)
 	return 0;
 }
 
+#ifdef CONFIG_SONOS
+static void fec_announce_linkup(struct fec_enet_private *fep,
+	struct net_device *dev)
+{
+	struct net *rtnl = dev_net(dev);
+
+	struct sk_buff *skb;
+	struct nlmsghdr *nlh;
+	unsigned char *b;
+	int size = NLMSG_SPACE(1024);
+
+	skb = nlmsg_new(size, GFP_ATOMIC);
+	if (!skb) {
+		netlink_set_err(rtnl->rtnl, 0, RTMGRP_Rincon, ENOBUFS);
+		return;
+	}
+	b = skb->tail;
+	nlh = nlmsg_put(skb, 0, 0, RWM_MII, 0, 0);
+	if ( !nlh )
+		goto nlmsg_failure;
+	nla_put(skb, RWA_DEV_NAME, IFNAMSIZ, dev->name);
+	nlh->nlmsg_len = skb->tail - b;
+
+	NETLINK_CB(skb).dst_group = RTMGRP_Rincon;
+	nlmsg_end(skb, nlh);
+	rtnl_notify(skb, rtnl, 0, RTMGRP_Rincon, NULL, GFP_ATOMIC);
+	return;
+
+nlmsg_failure:
+	kfree_skb(skb);
+	netlink_set_err(rtnl->rtnl, 0, RTMGRP_Rincon, EINVAL);
+        printk("gfar: phy announce failed.\n");
+}
+
+void fec_link_up(struct net_device *ndev)
+{
+	struct fec_enet_private *fep;
+
+	if (ndev == NULL) {
+		printk("%s: ndev NULL\n", __func__);
+	}
+	else {
+		printk("%s: announcing link status change\n", __func__);
+		fep = netdev_priv(ndev);
+		fec_announce_linkup(fep, ndev);
+	}
+}
+#endif
+
 static inline bool fec_enet_irq_workaround(struct fec_enet_private *fep)
 {
 	struct device_node *np = fep->pdev->dev.of_node;
@@ -2629,6 +2800,18 @@ fec_enet_open(struct net_device *ndev)
 	device_set_wakeup_enable(&ndev->dev,
 		fep->wol_flag & FEC_WOL_FLAG_ENABLE);
 
+#ifdef CONFIG_SONOS
+#ifdef CONFIG_SONOS_SOLBASE
+	if ( sys_mdp.mdp_revision < MDP_REVISION_SOLBASE_PROTO4 )
+		mv88e6020_sonos_phy_connect(fec_link_up, ndev);
+	else
+		sonos_phy_connect(fec_link_up, ndev);
+#elif defined(CONFIG_MV88E6020_PHY)
+	mv88e6020_sonos_phy_connect(fec_link_up, ndev);
+#else
+	sonos_phy_connect(fec_link_up, ndev);
+#endif
+#endif
 	return 0;
 }
 
@@ -2648,6 +2831,18 @@ fec_enet_close(struct net_device *ndev)
 		phy_disconnect(fep->phy_dev);
 	}
 
+#ifdef CONFIG_SONOS
+#ifdef CONFIG_SONOS_SOLBASE
+	if ( sys_mdp.mdp_revision < MDP_REVISION_SOLBASE_PROTO4 )
+		mv88e6020_sonos_phy_disconnect();
+	else
+		sonos_phy_disconnect();
+#elif defined(CONFIG_MV88E6020_PHY)
+	mv88e6020_sonos_phy_disconnect();
+#else
+	sonos_phy_disconnect();
+#endif
+#endif
 	fec_enet_clk_enable(ndev, false);
 
 	pinctrl_pm_select_sleep_state(&fep->pdev->dev);
@@ -2747,11 +2942,25 @@ fec_set_mac_address(struct net_device *ndev, void *p)
 
 	memcpy(ndev->dev_addr, addr->sa_data, ndev->addr_len);
 
+#ifdef CONFIG_SONOS
+	/* This is to make setmac happy if it is before ifconfig
+	 * since we don't have function call to check if the clk is enabled
+	 * we have to leave clk enabled here
+	 */
+	if ( fep->opened == 0 )
+		fec_enet_clk_enable(ndev, true);
+#endif
+
 	writel(ndev->dev_addr[3] | (ndev->dev_addr[2] << 8) |
 		(ndev->dev_addr[1] << 16) | (ndev->dev_addr[0] << 24),
 		fep->hwp + FEC_ADDR_LOW);
 	writel((ndev->dev_addr[5] << 16) | (ndev->dev_addr[4] << 24),
 		fep->hwp + FEC_ADDR_HIGH);
+
+#ifdef CONFIG_SONOS
+	if ( fep->opened == 0 )
+		fec_enet_clk_enable(ndev, false);
+#endif
 	return 0;
 }
 
@@ -2775,6 +2984,15 @@ static void fec_poll_controller(struct net_device *dev)
 			enable_irq(fep->irq[i]);
 		}
 	}
+}
+#endif
+
+#ifdef CONFIG_SONOS
+static netdev_features_t fec_fix_features(struct net_device *netdev,
+	netdev_features_t features)
+{
+	features &= ~NETIF_F_GRO;
+	return features;
 }
 #endif
 
@@ -2848,6 +3066,9 @@ static const struct net_device_ops fec_netdev_ops = {
 	.ndo_do_ioctl		= fec_enet_ioctl,
 #ifdef CONFIG_NET_POLL_CONTROLLER
 	.ndo_poll_controller	= fec_poll_controller,
+#endif
+#ifdef CONFIG_SONOS
+	.ndo_fix_features	= fec_fix_features,
 #endif
 	.ndo_set_features	= fec_set_features,
 };
@@ -3166,6 +3387,18 @@ fec_probe(struct platform_device *pdev)
 	} else {
 		fep->phy_interface = ret;
 	}
+#ifdef CONFIG_SONOS
+#ifdef CONFIG_SONOS_SOLBASE
+	if ( sys_mdp.mdp_revision < MDP_REVISION_SOLBASE_PROTO4 ) {
+		/* Sol was used switch with rmii interface */
+		fep->phy_interface = PHY_INTERFACE_MODE_RMII;
+	}
+#endif
+#if defined(CONFIG_SONOS_PARAMOUNT) || defined(CONFIG_SONOS_NEPTUNE)
+	/* Paramount and Neptune have switch with rmii interface */
+	fep->phy_interface = PHY_INTERFACE_MODE_RMII;
+#endif
+#endif
 
 	fep->clk_ipg = devm_clk_get(&pdev->dev, "ipg");
 	if (IS_ERR(fep->clk_ipg)) {
@@ -3330,9 +3563,11 @@ fec_suspend(struct device *dev)
 			fep->wol_flag |= FEC_WOL_FLAG_SLEEP_ON;
 		fec_stop(ndev);
 		netif_device_detach(ndev);
+#ifndef CONFIG_SONOS
 		if (!(fep->wol_flag & FEC_WOL_FLAG_ENABLE))
 			fec_enet_clk_enable(ndev, false);
 		pinctrl_pm_select_sleep_state(&fep->pdev->dev);
+#endif
 		phy_stop(fep->phy_dev);
 	} else if (fep->mii_bus_share && !fep->phy_dev) {
 		fec_enet_clk_enable(ndev, false);

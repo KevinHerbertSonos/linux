@@ -184,6 +184,9 @@ void __init proc_root_init(void)
 	proc_device_tree_init();
 #endif
 	proc_mkdir("bus", NULL);
+#ifdef CONFIG_SONOS_SECBOOT
+	proc_mkdir("sonos-lock",NULL);
+#endif
 	proc_sys_init();
 }
 

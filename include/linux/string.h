@@ -113,6 +113,7 @@ extern void * memchr(const void *,int,__kernel_size_t);
 void *memchr_inv(const void *s, int c, size_t n);
 
 extern char *kstrdup(const char *s, gfp_t gfp);
+extern const char *kstrdup_const(const char *s, gfp_t gfp);
 extern char *kstrndup(const char *s, size_t len, gfp_t gfp);
 extern void *kmemdup(const void *src, size_t len, gfp_t gfp);
 
@@ -142,6 +143,7 @@ static inline bool strstarts(const char *str, const char *prefix)
 }
 
 extern size_t memweight(const void *ptr, size_t bytes);
+extern void memzero_explicit(void *s, size_t count);
 
 /**
  * kbasename - return the last part of a pathname.
@@ -153,5 +155,5 @@ static inline const char *kbasename(const char *path)
 	const char *tail = strrchr(path, '/');
 	return tail ? tail + 1 : path;
 }
-
+extern void kfree_const(const void *x);
 #endif /* _LINUX_STRING_H_ */

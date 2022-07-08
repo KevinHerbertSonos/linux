@@ -63,6 +63,14 @@ int mcc_initialize(MCC_NODE node)
     int return_value = MCC_SUCCESS;
     MCC_SIGNAL tmp_signals_received = {(MCC_SIGNAL_TYPE)0, {(MCC_CORE)0, (MCC_NODE)0, (MCC_PORT)0}};
 
+#ifdef CONFIG_SONOS
+    static int count = 0;
+    /*return SUCCESS if this function gets called more than once*/
+    if (count) {
+        return return_value;
+    }
+#endif
+
     /* Initialize synchronization module for shared data protection */
     return_value = mcc_init_semaphore(MCC_SHMEM_SEMAPHORE_NUMBER);
     if(return_value != MCC_SUCCESS)
@@ -126,8 +134,16 @@ int mcc_initialize(MCC_NODE node)
     }
     
     MCC_DCACHE_FLUSH_MLINES(bookeeping_data, sizeof(MCC_BOOKEEPING_STRUCT));
+
+#ifdef CONFIG_SONOS
+    if (return_value == MCC_SUCCESS) {
+        count++;
+    }
+#endif
+
     return return_value;
 }
+EXPORT_SYMBOL(mcc_initialize);
 
 /*!
  * \brief This function de-initializes the Multi Core Communication subsystem for a given node.
@@ -176,6 +192,7 @@ int mcc_destroy(MCC_NODE node)
 
     return return_value;
 }
+EXPORT_SYMBOL(mcc_destroy);
 
 /*!
  * \brief This function creates an endpoint.
@@ -223,6 +240,7 @@ int mcc_create_endpoint(MCC_ENDPOINT *endpoint, MCC_PORT port)
 
     return return_value;
 }
+EXPORT_SYMBOL(mcc_create_endpoint);
 
 /*!
  * \brief This function destroys an endpoint.
@@ -264,6 +282,7 @@ int mcc_destroy_endpoint(MCC_ENDPOINT *endpoint)
 
     return return_value;
 }
+EXPORT_SYMBOL(mcc_destroy_endpoint);
 
 /*!
  * \brief This function sends a message to an endpoint.
@@ -364,6 +383,7 @@ int mcc_send(MCC_ENDPOINT *src_endpoint, MCC_ENDPOINT *dest_endpoint, void *msg,
 
     return return_value;
 }
+EXPORT_SYMBOL(mcc_send);
 
 /*!
  * \private
@@ -660,6 +680,7 @@ int mcc_recv(MCC_ENDPOINT *src_endpoint, MCC_ENDPOINT *dest_endpoint, void *buff
 
     return return_value;
 }
+EXPORT_SYMBOL(mcc_recv);
 
 #if MCC_SEND_RECV_NOCOPY_API_ENABLED
 /*!
@@ -949,3 +970,4 @@ int mcc_get_info(MCC_NODE node, MCC_INFO_STRUCT* info_data)
 
     return return_value;
 }
+EXPORT_SYMBOL(mcc_get_info);

@@ -540,6 +540,34 @@ int dev_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 		 * Not applicable in our case */
 	case SIOCSIFLINK:
 		return -ENOTTY;
+		
+	case SIOCGIFSTATS:
+	{
+		struct net_device *dev;
+		struct net_device_stats temp;
+
+		dev = dev_get_by_name(net, ifr.ifr_name);
+		if (dev == NULL) {
+			return -ENODEV;
+		}
+
+		// The existing kernel function to gather network statistics wants to make them all 64 bits.  We
+		// just want 32.  There's no real point in creating another function to do a straightforward
+		// copy that we can just do here, so here it is...
+		{
+			unsigned long *src = (unsigned long*)&dev->stats;
+			unsigned long *dest = (unsigned long *) &temp;
+			int net_stat_count;
+
+			for (net_stat_count = 0; net_stat_count < ( sizeof(struct net_device_stats)/sizeof(unsigned long) ); net_stat_count++) {
+				dest[net_stat_count] = src[net_stat_count];
+			}
+		}
+		// Should be all set - pass it up to the user.
+		ret = copy_to_user(ifr.ifr_data, (void *) &temp, sizeof(struct net_device_stats));
+
+		return ret;
+	}
 
 	/*
 	 *	Unknown or private ioctl.

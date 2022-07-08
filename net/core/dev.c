@@ -3282,6 +3282,15 @@ int (*br_fdb_test_addr_hook)(struct net_device *dev,
 EXPORT_SYMBOL_GPL(br_fdb_test_addr_hook);
 #endif
 
+#ifdef CONFIG_SONOS
+/*
+ * If bridge module is loaded call bridging hook.
+ * returns NULL if packet was consumed.
+ */
+rx_handler_func_t *br_handle_frame_hook = NULL;
+EXPORT_SYMBOL_GPL(br_handle_frame_hook);
+#endif
+
 #ifdef CONFIG_NET_CLS_ACT
 /* TODO: Maybe we should just force sch_ingress to be compiled in
  * when CONFIG_NET_CLS_ACT is? otherwise some useless instructions
@@ -3496,6 +3505,19 @@ ncls:
 		else if (unlikely(!skb))
 			goto unlock;
 	}
+
+#ifdef CONFIG_SONOS
+	if ( br_handle_frame_hook != NULL ) {
+		if (pt_prev) {
+			ret = deliver_skb(skb, pt_prev, orig_dev);
+			pt_prev = NULL;
+		}
+		if ( br_handle_frame_hook(&skb) == RX_HANDLER_CONSUMED ) {
+			ret = NET_RX_SUCCESS;
+			goto unlock;
+		}
+	}
+#endif
 
 	rx_handler = rcu_dereference(skb->dev->rx_handler);
 	if (rx_handler) {

@@ -322,6 +322,7 @@ static inline int is_imx6q_uart(struct imx_port *sport)
 {
 	return sport->devdata->devtype == IMX6Q_UART;
 }
+
 /*
  * Save and restore functions for UCR1, UCR2 and UCR3 registers
  */

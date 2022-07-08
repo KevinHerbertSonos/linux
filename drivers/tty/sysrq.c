@@ -48,6 +48,12 @@
 #include <asm/ptrace.h>
 #include <asm/irq_regs.h>
 
+#ifdef CONFIG_SONOS_SECBOOT
+#include "mdp.h"
+#include "sonos_lock.h"
+extern int is_sysrq_authorized(void);
+#endif
+
 /* Whether we react on sysrq keys or just ignore them */
 static int __read_mostly sysrq_enabled = SYSRQ_DEFAULT_ENABLE;
 static bool __read_mostly sysrq_always_enabled;
@@ -510,6 +516,14 @@ void __handle_sysrq(int key, bool check_mask)
 	int i;
 	unsigned long flags;
 
+#ifdef CONFIG_SONOS_SECBOOT
+#ifndef CONFIG_OPROFILE
+	if ( !is_sysrq_authorized() ) {
+		printk("sysrq handling is disabled\n");
+		return ;
+	}
+#endif
+#endif
 	spin_lock_irqsave(&sysrq_key_table_lock, flags);
 	/*
 	 * Raise the apparent loglevel to maximum so that the sysrq header

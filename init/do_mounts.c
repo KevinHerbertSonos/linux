@@ -31,6 +31,7 @@
 #include <linux/nfs_fs_sb.h>
 #include <linux/nfs_mount.h>
 
+
 #include "do_mounts.h"
 
 int __initdata rd_doload;	/* 1 = load RAM disk, 0 = don't load */
@@ -39,6 +40,10 @@ int root_mountflags = MS_RDONLY | MS_SILENT;
 static char * __initdata root_device_name;
 static char __initdata saved_root_name[64];
 static int root_wait;
+
+#ifdef CONFIG_SONOS_SECBOOT
+#include "sonos_mounts.c.inc"
+#endif
 
 dev_t ROOT_DEV;
 
@@ -352,6 +357,7 @@ static void __init get_fs_names(char *page)
 	*s = '\0';
 }
 
+#ifndef CONFIG_SONOS_SECBOOT
 static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 {
 	struct super_block *s;
@@ -369,6 +375,7 @@ static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 	       MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
 	return 0;
 }
+#endif
 
 void __init mount_block_root(char *name, int flags)
 {
@@ -478,7 +485,7 @@ void __init change_floppy(char *fmt, ...)
 	int fd;
 	va_list args;
 	va_start(args, fmt);
-	vsprintf(buf, fmt, args);
+	vsnprintf(buf, sizeof buf, fmt, args);
 	va_end(args);
 	fd = sys_open("/dev/root", O_RDWR | O_NDELAY, 0);
 	if (fd >= 0) {

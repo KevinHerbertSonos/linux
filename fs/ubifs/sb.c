@@ -526,6 +526,15 @@ int ubifs_read_superblock(struct ubifs_info *c)
 	int err, sup_flags;
 	struct ubifs_sb_node *sup;
 
+#if defined(CONFIG_SONOS)
+	if (resize_blocks) {
+		printk(KERN_INFO "%s:%d - c->max_leb_cnt = %d, c->vi.size = %d\n",\
+				__func__, __LINE__, c->max_leb_cnt, c->vi.size);
+		printk(KERN_INFO "%s:%d - sonos_force_downsize is %s, resize_blocks = %d\n", \
+				__func__, __LINE__, (sonos_force_downsize ? "true" : "false"), resize_blocks, c->max_leb_cnt);
+	}
+#endif
+
 	if (c->empty) {
 		err = create_default_filesystem(c);
 		if (err)
@@ -600,6 +609,15 @@ int ubifs_read_superblock(struct ubifs_info *c)
 
 	c->leb_cnt       = le32_to_cpu(sup->leb_cnt);
 	c->max_leb_cnt   = le32_to_cpu(sup->max_leb_cnt);
+
+#if defined(CONFIG_SONOS)
+	if (resize_blocks) {
+		printk(KERN_INFO "%s:%d - sb_node says 480 max - bumping to %d...\n", \
+				__func__, __LINE__, resize_blocks);
+		c->max_leb_cnt = resize_blocks;
+	}
+#endif
+
 	c->max_bud_bytes = le64_to_cpu(sup->max_bud_bytes);
 	c->log_lebs      = le32_to_cpu(sup->log_lebs);
 	c->lpt_lebs      = le32_to_cpu(sup->lpt_lebs);
@@ -621,14 +639,18 @@ int ubifs_read_superblock(struct ubifs_info *c)
 
 	/* Automatically increase file system size to the maximum size */
 	c->old_leb_cnt = c->leb_cnt;
+#if defined(CONFIG_SONOS)
+	if ((c->leb_cnt < c->vi.size && c->leb_cnt < c->max_leb_cnt) || sonos_force_downsize) {
+#else
 	if (c->leb_cnt < c->vi.size && c->leb_cnt < c->max_leb_cnt) {
+#endif
 		c->leb_cnt = min_t(int, c->max_leb_cnt, c->vi.size);
 		if (c->ro_mount)
 			dbg_mnt("Auto resizing (ro) from %d LEBs to %d LEBs",
 				c->old_leb_cnt,	c->leb_cnt);
 		else {
-			dbg_mnt("Auto resizing (sb) from %d LEBs to %d LEBs",
-				c->old_leb_cnt, c->leb_cnt);
+			ubifs_msg("Auto resizing (sb) from %d LEBs to %d LEBs",
+				c->old_leb_cnt, c->leb_cnt);	// SONOS
 			sup->leb_cnt = cpu_to_le32(c->leb_cnt);
 			err = ubifs_write_sb_node(c, sup);
 			if (err)

@@ -37,6 +37,10 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
+#ifdef CONFIG_SONOS_SOLBASE
+#include "mdp.h"
+extern struct manufacturing_data_page sys_mdp;
+#endif
 
 MODULE_DESCRIPTION("PHY library");
 MODULE_AUTHOR("Andy Fleming");
@@ -341,6 +345,19 @@ struct phy_device *get_phy_device(struct mii_bus *bus, int addr, bool is_c45)
 	/* If the phy_id is mostly Fs, there is no device there */
 	if ((phy_id & 0x1fffffff) == 0x1fffffff)
 		return NULL;
+
+#ifdef CONFIG_SONOS_SOLBASE
+	/* need to Investigate later to use fixed bus */
+	if ( sys_mdp.mdp_revision < MDP_REVISION_SOLBASE_PROTO4 ) {
+		if ( addr != 0x1d )
+			return NULL;
+	}
+#endif
+#ifdef CONFIG_SONOS
+	/* Don't use addr 0 */
+	if ( addr == 0 )
+		return NULL;
+#endif
 
 	dev = phy_device_create(bus, addr, phy_id, is_c45, &c45_ids);
 

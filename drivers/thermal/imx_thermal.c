@@ -25,6 +25,17 @@
 #include <linux/thermal.h>
 #include <linux/types.h>
 
+#define DISPLAY_SOC_TEMP
+
+#if defined(DISPLAY_SOC_TEMP)
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+
+static struct proc_dir_entry *procdir = NULL;
+#define IMX_THERM_PROC_DIR        "imx-thermal"
+#endif
+
+
 #define REG_SET		0x4
 #define REG_CLR		0x8
 #define REG_TOG		0xc
@@ -55,7 +66,12 @@ enum imx_thermal_trip {
  * It defines the temperature in millicelsius for passive trip point
  * that will trigger cooling action when crossed.
  */
+#if defined(CONFIG_SONOS_BOOTLEG)
+// We want a higher passive default for bootleg
+#define IMX_TEMP_PASSIVE		105000
+#else
 #define IMX_TEMP_PASSIVE		85000
+#endif
 #define IMX_TEMP_PASSIVE_COOL_DELTA	10000
 
 /*
@@ -260,6 +276,34 @@ static const struct thermal_zone_device_ops imx_tz_ops = {
 	.set_trip_temp = imx_set_trip_temp,
 };
 
+#if defined(DISPLAY_SOC_TEMP)
+static int imx_thermal_data_dump(struct seq_file *m, void *v)
+{
+	struct thermal_zone_device *tz = (struct thermal_zone_device *)m->private;
+	unsigned long temp;
+
+	imx_get_temp(tz, &temp);
+
+	seq_printf(m, "%5ld Celcius: IMX SoC internal\n", temp/1000);
+
+        return 0;
+}
+
+static int imx_therm_proc_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, imx_thermal_data_dump, PDE_DATA(inode));
+}
+
+static const struct file_operations imx_therm_proc_fops = {
+        .owner          = THIS_MODULE,
+        .open           = imx_therm_proc_open,
+        .read           = seq_read,
+        .llseek         = seq_lseek,
+        .release        = single_release,
+        .write          = seq_write,
+};
+#endif
+
 static int imx_get_sensor_data(struct platform_device *pdev)
 {
 	struct imx_thermal_data *data = platform_get_drvdata(pdev);
@@ -397,6 +441,20 @@ static int imx_thermal_probe(struct platform_device *pdev)
 		devfreq_cooling_unregister(data->cdev[1]);
 		return ret;
 	}
+
+#if defined(DISPLAY_SOC_TEMP)
+        if ( procdir == NULL )
+                procdir = proc_mkdir(IMX_THERM_PROC_DIR, NULL);
+        if (procdir == NULL) {
+                printk("Couldn't create base dir /proc/%s\n",
+                        IMX_THERM_PROC_DIR);
+                return -ENOMEM;
+        }
+        if (! proc_create_data("temp", 0, procdir,
+                        &imx_therm_proc_fops, data->tz)) {
+                printk("%s/temp not created\n", IMX_THERM_PROC_DIR);
+        }
+#endif
 
 	data->mode = THERMAL_DEVICE_ENABLED;
 

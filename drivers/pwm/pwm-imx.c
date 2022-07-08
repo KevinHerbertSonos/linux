@@ -32,12 +32,15 @@
 
 #define MX3_PWMCR			0x00    /* PWM Control Register */
 #define MX3_PWMSR			0x04    /* PWM Status Register */
+#define MX3_PWMIR			0x08    /* PWM Interrupt Register */
 #define MX3_PWMSAR			0x0C    /* PWM Sample Register */
 #define MX3_PWMPR			0x10    /* PWM Period Register */
+#define MX3_PWMCNR			0x14    /* PWM Counter Register */
 #define MX3_PWMCR_PRESCALER(x)		((((x) - 1) & 0xFFF) << 4)
 #define MX3_PWMCR_DOZEEN		(1 << 24)
 #define MX3_PWMCR_WAITEN		(1 << 23)
 #define MX3_PWMCR_DBGEN			(1 << 22)
+#define MX3_PWMCR_POUTC_INV		(1 << 18)
 #define MX3_PWMCR_CLKSRC_IPG_HIGH	(2 << 16)
 #define MX3_PWMCR_CLKSRC_IPG		(1 << 16)
 #define MX3_PWMCR_SWR			(1 << 3)
@@ -174,7 +177,7 @@ static int imx_pwm_config_v2(struct pwm_chip *chip,
 
 	cr = MX3_PWMCR_PRESCALER(prescale) |
 		MX3_PWMCR_DOZEEN | MX3_PWMCR_WAITEN |
-		MX3_PWMCR_DBGEN | MX3_PWMCR_CLKSRC_IPG_HIGH;
+		MX3_PWMCR_DBGEN | MX3_PWMCR_CLKSRC_IPG | MX3_PWMCR_POUTC_INV;
 
 	if (enable)
 		cr |= MX3_PWMCR_EN;
@@ -301,6 +304,10 @@ static int imx_pwm_probe(struct platform_device *pdev)
 		return PTR_ERR(imx->clk_ipg);
 	}
 
+	ret = clk_prepare_enable(imx->clk_ipg);
+	if (ret)
+		return ret;
+
 	imx->chip.ops = &imx_pwm_ops;
 	imx->chip.dev = &pdev->dev;
 	imx->chip.base = -1;
@@ -320,6 +327,7 @@ static int imx_pwm_probe(struct platform_device *pdev)
 		return ret;
 
 	platform_set_drvdata(pdev, imx);
+
 	return 0;
 }
 
@@ -330,6 +338,8 @@ static int imx_pwm_remove(struct platform_device *pdev)
 	imx = platform_get_drvdata(pdev);
 	if (imx == NULL)
 		return -ENODEV;
+
+	clk_disable_unprepare(imx->clk_ipg);
 
 	return pwmchip_remove(&imx->chip);
 }

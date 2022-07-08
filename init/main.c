@@ -101,6 +101,10 @@ static inline void mark_rodata_ro(void) { }
 extern void tc_init(void);
 #endif
 
+#ifdef CONFIG_SONOS_SECBOOT
+extern void check_sysrq_authorization(void);
+#endif
+
 /*
  * Debug helper: via this flag we know that we are in 'early bootup code'
  * where only the boot processor is running with IRQ disabled.  This means
@@ -903,6 +907,14 @@ static noinline void __init kernel_init_freeable(void)
 		ramdisk_execute_command = NULL;
 		prepare_namespace();
 	}
+
+#ifdef CONFIG_SONOS_SECBOOT
+	/*
+	 * Check the authorization for sysrq, since when we really want it, we'll
+	 * be in an interrupt and unable to...
+	 */
+	check_sysrq_authorization();
+#endif
 
 	/*
 	 * Ok, we have completed the initial bootup, and

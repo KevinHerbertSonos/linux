@@ -567,6 +567,7 @@ setup_ntlmv2_rsp(struct cifs_ses *ses, const struct nls_table *nls_cp)
 	struct ntlmv2_resp *buf;
 	char ntlmv2_hash[16];
 	unsigned char *tiblob = NULL; /* target info blob */
+	struct timespec utc;
 
 	if (ses->server->secType == RawNTLMSSP) {
 		if (!ses->domainName) {
@@ -601,7 +602,17 @@ setup_ntlmv2_rsp(struct cifs_ses *ses, const struct nls_table *nls_cp)
 			(ses->auth_key.response + CIFS_SESS_KEY_SIZE);
 	buf->blob_signature = cpu_to_le32(0x00000101);
 	buf->reserved = 0;
-	buf->time = cpu_to_le64(cifs_UnixTimeToNT(CURRENT_TIME));
+	utc = CURRENT_TIME;
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	// Since CURRENT_TIME is time-since-boot, factor in the time scraped
+	// from the server on session negotiation or included in the NTLMv2
+	// information blob
+	// NOTE: this may still be "wrong" from the server's standpoint, as
+	// the source of time it does authentication against may be the workgroup
+	// master or domain controller (and not the server's local time).
+	utc.tv_sec += ses->timeOff;
+#endif
+	buf->time = cpu_to_le64(cifs_UnixTimeToNT(utc));
 	get_random_bytes(&buf->client_chal, sizeof(buf->client_chal));
 	buf->reserved2 = 0;
 

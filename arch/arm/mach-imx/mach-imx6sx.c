@@ -142,14 +142,21 @@ static void __init imx6sx_enet_clk_sel(void)
 	 */
 	gpr = syscon_regmap_lookup_by_compatible("fsl,imx6sx-iomuxc-gpr");
 	if (!IS_ERR(gpr)) {
+#ifdef CONFIG_SONOS
+		/* Encore need to set ENET1 TX_CLK from exteral */
+		regmap_update_bits(gpr, IOMUXC_GPR1,
+				IMX6SX_GPR1_FEC_CLOCK_MUX_SEL_MASK, 1<<13);
+#else
 		regmap_update_bits(gpr, IOMUXC_GPR1,
 				IMX6SX_GPR1_FEC_CLOCK_MUX_SEL_MASK, 0);
+#endif
 		regmap_update_bits(gpr, IOMUXC_GPR1,
 				IMX6SX_GPR1_FEC_CLOCK_PAD_DIR_MASK, 0);
 	} else
 		pr_err("failed to find fsl,imx6sx-iomux-gpr regmap\n");
 }
 
+#ifndef CONFIG_SONOS
 static int ar8031_phy_fixup(struct phy_device *dev)
 {
 	u16 val;
@@ -245,13 +252,26 @@ static void __init imx6sx_enet_plt_init(void)
 	if (np && of_get_property(np, "fsl,magic-packet", NULL))
 		fec_pdata[1].sleep_mode_enable = imx6sx_fec2_stop_enable;
 }
+#endif
 
 static inline void imx6sx_enet_init(void)
 {
+#ifdef CONFIG_MV88E6020_PHY
+	int mv88e6020_reset = IMX_GPIO_NR(5, 18);
+	__gpio_set_value(mv88e6020_reset, 0);
+#endif
 	imx6_enet_mac_init("fsl,imx6sx-fec");
+#ifndef CONFIG_SONOS
 	imx6sx_enet_phy_init();
+#endif
 	imx6sx_enet_clk_sel();
+#ifndef CONFIG_SONOS
 	imx6sx_enet_plt_init();
+#endif
+#ifdef CONFIG_MV88E6020_PHY
+	mdelay(10);
+	__gpio_set_value(mv88e6020_reset, 1);
+#endif
 }
 
 /* Add auxdata to pass platform data */

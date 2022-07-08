@@ -903,10 +903,9 @@ struct inode *cifs_root_iget(struct super_block *sb)
 		rc = cifs_get_inode_info(&inode, "", NULL, sb, xid, NULL);
 
 	if (!inode) {
-		inode = ERR_PTR(rc);
-		goto out;
+		_free_xid(xid);
+		return ERR_PTR(-ENOMEM);
 	}
-
 #ifdef CONFIG_CIFS_FSCACHE
 	/* populate tcon->resource_id */
 	tcon->resource_id = CIFS_I(inode)->uniqueid;
@@ -923,11 +922,11 @@ struct inode *cifs_root_iget(struct super_block *sb)
 		inode->i_gid = cifs_sb->mnt_gid;
 		spin_unlock(&inode->i_lock);
 	} else if (rc) {
+		_free_xid(xid);
 		iget_failed(inode);
-		inode = ERR_PTR(rc);
+		return ERR_PTR(rc);
 	}
 
-out:
 	/* can not call macro free_xid here since in a void func
 	 * TODO: This is no longer true
 	 */

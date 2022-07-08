@@ -30,6 +30,9 @@
 #include <linux/bug.h>
 #include <linux/compiler.h>
 #include <linux/sort.h>
+#if defined(CONFIG_SONOS)
+#include "mdp.h"
+#endif
 
 #include <asm/unified.h>
 #include <asm/cp15.h>
@@ -630,6 +633,105 @@ static int __init early_mem(char *p)
 	return 0;
 }
 early_param("mem", early_mem);
+
+#if defined(CONFIG_SONOS)
+extern char uboot_version_str[120];
+#if defined(SONOS_ARCH_SOLBASE)
+#define MDP_MODEL    MDP_MODEL_SOLBASE
+#define MDP_SUBMODEL MDP_SUBMODEL_SOLBASE
+#define MDP_REVISION MDP_REVISION_SOLBASE_M0
+#elif defined(SONOS_ARCH_ENCORE)
+#define MDP_MODEL    MDP_MODEL_ENCORE
+#define MDP_SUBMODEL MDP_SUBMODEL_ENCORE
+#define MDP_REVISION MDP_REVISION_ENCORE_PROTO3
+#elif defined(SONOS_ARCH_ROYALE)
+#define MDP_MODEL    MDP_MODEL_ROYALE
+#define MDP_SUBMODEL MDP_SUBMODEL_ROYALE
+#define MDP_REVISION MDP_REVISION_ROYALE_PROTO1
+#elif defined(SONOS_ARCH_BOOTLEG)
+#define MDP_MODEL    MDP_MODEL_BOOTLEG
+#define MDP_SUBMODEL MDP_SUBMODEL_BOOTLEG
+#define MDP_REVISION MDP_REVISION_BOOTLEG_PROTO1
+#elif defined(SONOS_ARCH_PARAMOUNT)
+#define MDP_MODEL    MDP_MODEL_PARAMOUNT
+#define MDP_SUBMODEL MDP_SUBMODEL_PARAMOUNT
+#define MDP_REVISION MDP_REVISION_PARAMOUNT_PROTO1
+#elif defined(SONOS_ARCH_CHAPLIN)
+#define MDP_MODEL    MDP_MODEL_CHAPLIN
+#define MDP_SUBMODEL MDP_SUBMODEL_CHAPLIN
+#define MDP_REVISION MDP_REVISION_CHAPLIN_BS1
+#elif defined(SONOS_ARCH_NEPTUNE)
+#define MDP_MODEL    MDP_MODEL_NEPTUNE
+#define MDP_SUBMODEL MDP_SUBMODEL_NEPTUNE
+#define MDP_REVISION MDP_REVISION_NEPTUNE_BS1
+#elif defined(SONOS_ARCH_ATTR_STUB_SECBOOT_ARCH_KEYS)
+#define MDP_MODEL    0
+#define MDP_SUBMODEL 0
+#define MDP_REVISION 0
+#else
+#error MDP defaults not set
+#endif
+
+extern struct manufacturing_data_page3 sys_mdp3;
+/*
+ * copy the mdp from uboot
+ */
+static int __init early_mdp(char *p)
+{
+	unsigned long mdpAddr = 0;
+	void *mdpAddrV = NULL;
+
+#ifdef CONFIG_SONOS
+	/* Build bomb - mdp sizes must be the same for all builds, platforms, controllers */
+	BUILD_BUG_ON(sizeof(struct manufacturing_data_page)!=MDP1_BYTES);
+	BUILD_BUG_ON(sizeof(struct manufacturing_data_page2)!=MDP2_BYTES);
+	BUILD_BUG_ON(sizeof(struct manufacturing_data_page3)!=MDP3_BYTES);
+#endif
+	uboot_version_str[0] = 0;
+	if (kstrtoul(p, 16, &mdpAddr)) {
+		printk(KERN_ERR "early_mdp: strtoul returned an error\n");
+		goto mdp_err;
+	}
+	mdpAddrV = phys_to_virt(mdpAddr);
+
+	memcpy(&sys_mdp, mdpAddrV, sizeof(struct manufacturing_data_page));
+	if (sys_mdp.mdp_magic == MDP_MAGIC) {
+		struct smdp *s_mdp = (struct smdp *)mdpAddrV;
+		printk("MDP: model %lx, submodel %lx, rev %lx\n",
+			sys_mdp.mdp_model, sys_mdp.mdp_submodel, sys_mdp.mdp_revision);
+		memcpy(uboot_version_str, sys_mdp.u.uboot_version, 120);
+		if ( uboot_version_str[0] == 'U' ) {
+			printk("U-boot revision %s\n", uboot_version_str);
+		}
+		memset(&sys_mdp3, 0, sizeof(struct manufacturing_data_page3));
+		if ( s_mdp->mdp3.mdp3_magic == MDP_MAGIC3 ) {
+			printk("got mdp 3\n");
+			memcpy(&sys_mdp3, &s_mdp->mdp3,
+				sizeof(struct manufacturing_data_page3));
+		}
+		return 0;
+	} else {
+		printk("MDP: invalid magic: is %08lx should be %08x, using default\n",
+			sys_mdp.mdp_magic, MDP_MAGIC);
+		printk("MDP: flags = %#lx\n", sys_mdp.mdp_flags);
+	}
+
+mdp_err:
+	memset(&sys_mdp, 0, sizeof(struct manufacturing_data_page));
+	sys_mdp.mdp_magic = MDP_MAGIC ;
+	sys_mdp.mdp_vendor = MDP_VENDOR_RINCONNETWORKS;
+	sys_mdp.mdp_model = MDP_MODEL;
+	sys_mdp.mdp_submodel = MDP_SUBMODEL;
+	sys_mdp.mdp_revision = MDP_REVISION;
+	sys_mdp.mdp_region = MDP_REGION_USCA;
+	sys_mdp.mdp_flags = 0;
+	sys_mdp.mdp_reserved = MDP_RESERVED;
+	sys_mdp.mdp_hwfeatures = 0;
+
+	return 0;
+}
+early_param("mdpaddr", early_mdp);
+#endif	// CONFIG_SONOS
 
 static void __init request_standard_resources(struct machine_desc *mdesc)
 {

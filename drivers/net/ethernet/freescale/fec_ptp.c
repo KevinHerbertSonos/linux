@@ -582,7 +582,7 @@ void fec_ptp_start_cyclecounter(struct net_device *ndev)
 		/* start counter */
 		writel(FEC_T_CTRL_PERIOD_RST | FEC_T_CTRL_ENABLE,
 				fep->hwp + FEC_ATIME_CTRL);
-	} else if (fep->hwts_tx_en || fep->hwts_tx_en) {
+	} else if (fep->hwts_tx_en) {
 		/* use free running count */
 		writel(0, fep->hwp + FEC_ATIME_EVT_PERIOD);
 		writel(FEC_T_CTRL_ENABLE, fep->hwp + FEC_ATIME_CTRL);

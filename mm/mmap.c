@@ -44,6 +44,10 @@
 
 #include "internal.h"
 
+#ifdef CONFIG_SONOS_SECBOOT
+#include "sonos_lock.h"
+#endif
+
 #ifndef arch_mmap_check
 #define arch_mmap_check(addr, len, flags)	(0)
 #endif
@@ -1213,8 +1217,13 @@ unsigned long do_mmap_pgoff(struct file *file, unsigned long addr,
 	 * (the exception is when the underlying filesystem is noexec
 	 *  mounted, in which case we dont add PROT_EXEC.)
 	 */
+#ifdef CONFIG_SONOS_SECBOOT
+	if ((prot & PROT_READ) && (current->personality & READ_IMPLIES_EXEC))
+		if (!(file && ( (file->f_path.mnt->mnt_flags & MNT_NOEXEC) && !sonos_allow_execution() ) ))
+#else
 	if ((prot & PROT_READ) && (current->personality & READ_IMPLIES_EXEC))
 		if (!(file && (file->f_path.mnt->mnt_flags & MNT_NOEXEC)))
+#endif
 			prot |= PROT_EXEC;
 
 	if (!len)
@@ -1294,7 +1303,11 @@ unsigned long do_mmap_pgoff(struct file *file, unsigned long addr,
 		case MAP_PRIVATE:
 			if (!(file->f_mode & FMODE_READ))
 				return -EACCES;
+#ifdef CONFIG_SONOS_SECBOOT
+			if ( (file->f_path.mnt->mnt_flags & MNT_NOEXEC) && !sonos_allow_execution() ) {
+#else
 			if (file->f_path.mnt->mnt_flags & MNT_NOEXEC) {
+#endif
 				if (vm_flags & VM_EXEC)
 					return -EPERM;
 				vm_flags &= ~VM_MAYEXEC;

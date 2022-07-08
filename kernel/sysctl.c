@@ -62,6 +62,7 @@
 #include <linux/capability.h>
 #include <linux/binfmts.h>
 #include <linux/sched/sysctl.h>
+#include <linux/binfmts.h>
 
 #include <asm/uaccess.h>
 #include <asm/processor.h>
@@ -85,6 +86,9 @@
 #endif
 #ifdef CONFIG_CHR_DEV_SG
 #include <scsi/sg.h>
+#endif
+#ifdef CONFIG_SONOS
+#include "mdp.h"
 #endif
 
 #ifdef CONFIG_LOCKUP_DETECTOR
@@ -131,6 +135,13 @@ static unsigned long one_ul = 1;
 static int one_hundred = 100;
 #ifdef CONFIG_PRINTK
 static int ten_thousand = 10000;
+#ifdef CONFIG_SONOS
+extern struct manufacturing_data_page sys_mdp;
+int proc_dointvec_sonos_ep(struct ctl_table *table, int write,
+		     void __user *buffer, size_t *lenp, loff_t *ppos);
+int proc_dointvec_sonos_lo(struct ctl_table *table, int write,
+		     void __user *buffer, size_t *lenp, loff_t *ppos);
+#endif	// CONFIG_SONOS
 #endif
 
 /* this is needed for the proc_doulongvec_minmax of vm_dirty_bytes */
@@ -181,6 +192,34 @@ static int proc_do_cad_pid(struct ctl_table *table, int write,
 static int proc_taint(struct ctl_table *table, int write,
 			       void __user *buffer, size_t *lenp, loff_t *ppos);
 #endif
+
+#ifdef CONFIG_SONOS
+int bootgeneration = 0;
+static int __init bootgeneration_setup(char *str)
+{
+	bootgeneration = simple_strtoul(str, NULL, 0);
+	return 1;
+}
+__setup("bootgen=", bootgeneration_setup);
+
+static int bootsection = 0;
+static int __init bootsection_setup(char *str)
+{
+	bootsection = simple_strtoul(str, NULL, 0);
+	return 1;
+}
+__setup("bootsect=", bootsection_setup);
+
+#ifdef CONFIG_SONOS_FENWAY
+int fenway_submodel = 0;
+static int __init fenway_submodel_setup(char *str)
+{
+	fenway_submodel = simple_strtoul(str, NULL, 0);
+	return 1;
+}
+__setup("submodel=", fenway_submodel_setup);
+#endif	// CONFIG_SONOS_FENWAY
+#endif	// CONFIG_SONOS
 
 #ifdef CONFIG_PRINTK
 static int proc_dointvec_minmax_sysadmin(struct ctl_table *table, int write,
@@ -1079,6 +1118,38 @@ static struct ctl_table kern_table[] = {
 		.proc_handler	= proc_dointvec,
 	},
 #endif
+#ifdef CONFIG_SONOS
+	{
+		.procname 	= "bootgeneration",
+		.data		= &bootgeneration,
+		.maxlen		= sizeof(int),
+		.mode		= 0444,
+		.proc_handler = &proc_dointvec,
+	},
+	{
+		.procname 	= "bootsection",
+		.data		= &bootsection,
+		.maxlen		= sizeof(int),
+		.mode		= 0444,
+		.proc_handler = &proc_dointvec,
+	},
+#ifdef CONFIG_PRINTK
+	{
+		.procname 	= "enable_printk",
+		.data		= &sys_mdp.mdp_flags,
+		.maxlen		= sizeof(int),
+		.mode		= 0666,
+		.proc_handler = &proc_dointvec_sonos_ep,
+	},
+	{
+		.procname	= "printk_log_only",
+		.data		= &sys_mdp.mdp_flags,
+		.maxlen		= sizeof(int),
+		.mode		= 0666,
+		.proc_handler = &proc_dointvec_sonos_lo,
+	},
+#endif
+#endif	// CONFIG_SONOS
 	{ }
 };
 
@@ -1906,6 +1977,39 @@ static int do_proc_dointvec_conv(bool *negp, unsigned long *lvalp,
 	return 0;
 }
 
+#ifdef CONFIG_SONOS
+static int do_proc_dointvec_conv_sonos_ep(bool *negp, unsigned long *lvalp,
+				 int *valp,
+				 int write, void *data)
+{
+	if (write) {
+		*valp = (*(unsigned long*)data & ~MDP_KERNEL_PRINTK_ENABLE) | (*lvalp & MDP_KERNEL_PRINTK_ENABLE);
+	} else {
+		*negp = false;
+		*lvalp = (unsigned long)(*(unsigned long*)data & MDP_KERNEL_PRINTK_ENABLE);
+	}
+	return 0;
+}
+
+static int do_proc_dointvec_conv_sonos_lo(bool *negp, unsigned long *lvalp,
+				 int *valp,
+				 int write, void *data)
+{
+	unsigned long val;
+
+	if (write) {
+		val = *lvalp & MDP_KERNEL_PRINTK_ENABLE;
+		val = (val) ? 0 : MDP_KERNEL_PRINTK_ENABLE;
+		*valp = (*(unsigned long*)data & ~MDP_KERNEL_PRINTK_ENABLE) | val;
+	} else {
+		*negp = false;
+		val = (*(unsigned long*)data & MDP_KERNEL_PRINTK_ENABLE);
+		*lvalp = (val) ? 0 : MDP_KERNEL_PRINTK_ENABLE;
+	}
+	return 0;
+}
+#endif	// CONFIG_SONOS
+
 static const char proc_wspace_sep[] = { ' ', '\t', '\n' };
 
 static int __do_proc_dointvec(void *tbl_data, struct ctl_table *table,
@@ -2023,6 +2127,22 @@ int proc_dointvec(struct ctl_table *table, int write,
     return do_proc_dointvec(table,write,buffer,lenp,ppos,
 		    	    NULL,NULL);
 }
+
+#ifdef CONFIG_SONOS
+int proc_dointvec_sonos_ep(struct ctl_table *table, int write,
+		     void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+    return do_proc_dointvec(table,write,buffer,lenp,ppos,
+		    	    do_proc_dointvec_conv_sonos_ep,&sys_mdp.mdp_flags);
+}
+
+int proc_dointvec_sonos_lo(struct ctl_table *table, int write,
+		     void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+    return do_proc_dointvec(table,write,buffer,lenp,ppos,
+		    	    do_proc_dointvec_conv_sonos_lo,&sys_mdp.mdp_flags);
+}
+#endif	// CONFIG_SONOS
 
 /*
  * Taint values can only be increased

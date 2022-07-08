@@ -671,6 +671,10 @@ phy_err:
 	phy_error(phydev);
 }
 
+#ifdef CONFIG_SONOS
+int phy_power_down(struct phy_device *phydev, int on);
+#endif
+
 /**
  * phy_stop - Bring down the PHY link, and stop checking the status
  * @phydev: target phy_device struct
@@ -682,6 +686,9 @@ void phy_stop(struct phy_device *phydev)
 	if (PHY_HALTED == phydev->state)
 		goto out_unlock;
 
+#ifdef CONFIG_SONOS
+	phy_power_down(phydev, 1);
+#endif
 	if (phydev->irq != PHY_POLL) {
 		/* Disable PHY Interrupts */
 		phy_config_interrupt(phydev, PHY_INTERRUPT_DISABLED);
@@ -717,6 +724,9 @@ void phy_start(struct phy_device *phydev)
 {
 	mutex_lock(&phydev->lock);
 
+#ifdef CONFIG_SONOS
+	phy_power_down(phydev, 0);
+#endif
 	switch (phydev->state) {
 		case PHY_STARTING:
 			phydev->state = PHY_PENDING;
@@ -781,6 +791,11 @@ void phy_state_machine(struct work_struct *work)
 			/* Check if negotiation is done.  Break
 			 * if there's an error */
 			err = phy_aneg_done(phydev);
+#if defined(CONFIG_SONOS) && defined(CONFIG_MV88E6020_PHY)
+			/* for switch always set negotiation is done */
+			/* find root cause late*/
+			err = BMSR_ANEGCOMPLETE;
+#endif
 			if (err < 0)
 				break;
 

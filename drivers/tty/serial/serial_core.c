@@ -487,6 +487,10 @@ static void uart_flush_chars(struct tty_struct *tty)
 	uart_start(tty);
 }
 
+#ifdef CONFIG_SONOS_SECBOOT
+extern int enable_console;
+#endif // CONFIG_SONOS_SECBOOT
+
 static int uart_write(struct tty_struct *tty,
 					const unsigned char *buf, int count)
 {
@@ -513,6 +517,15 @@ static int uart_write(struct tty_struct *tty,
 
 	spin_lock_irqsave(&port->lock, flags);
 	while (1) {
+
+#ifdef CONFIG_SONOS_SECBOOT
+		if (!(enable_console) && (port->line == 0)) {
+			/* pretend all bytes were written */
+			ret = count;
+			break;
+		}
+#endif // CONFIG_SONOS_SECBOOT
+
 		c = CIRC_SPACE_TO_END(circ->head, circ->tail, UART_XMIT_SIZE);
 		if (count < c)
 			c = count;
@@ -2610,7 +2623,11 @@ int uart_add_one_port(struct uart_driver *drv, struct uart_port *uport)
 	tty_dev = tty_port_register_device_attr(port, drv->tty_driver,
 			uport->line, uport->dev, port, tty_dev_attr_groups);
 	if (likely(!IS_ERR(tty_dev))) {
+#ifdef CONFIG_SONOS
+		device_init_wakeup(tty_dev, 1);
+#else
 		device_set_wakeup_capable(tty_dev, 1);
+#endif
 	} else {
 		printk(KERN_ERR "Cannot register tty device on line %d\n",
 		       uport->line);
@@ -2787,6 +2804,13 @@ void uart_insert_char(struct uart_port *port, unsigned int status,
 		 unsigned int overrun, unsigned int ch, unsigned int flag)
 {
 	struct tty_port *tport = &port->state->port;
+
+#ifdef CONFIG_SONOS_SECBOOT
+	if (!(enable_console) && (port->line == 0)) {
+		/* ignore the char */
+		return;
+	}
+#endif // CONFIG_SONOS_SECBOOT
 
 	if ((status & port->ignore_status_mask & ~overrun) == 0)
 		if (tty_insert_flip_char(tport, ch, flag) == 0)

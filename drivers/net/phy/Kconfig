@@ -106,6 +106,16 @@ config MICREL_PHY
 	---help---
 	  Supports the KSZ9021, VSC8201, KS8001 PHYs.
 
+config TER21X3_PHY
+	tristate "Drivers for Teridian 21x3 PHYs"
+	---help---
+	  Currently supports the Ter21x3 model
+
+config TI83822_PHY
+	tristate "Drivers for Texas Instruments 83822 PHYs"
+	---help---
+	  Currently supports the TI83822 model
+
 config FIXED_PHY
 	bool "Driver for MDIO Bus/PHY emulation with fixed speed/link PHYs"
 	depends on PHYLIB=y
@@ -143,6 +153,12 @@ config MDIO_OCTEON
 	  It is required by the Octeon Ethernet device drivers.
 
 	  If in doubt, say Y.
+
+config MV88E6020_PHY
+	tristate "Support for Marvell 88E6020 switch in RMII mode"
+	default n
+	help
+	  Support for the Marvell 88E6020 switch IC in RMII mode.
 
 config MDIO_BUS_MUX
 	tristate

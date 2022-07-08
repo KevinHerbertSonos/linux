@@ -601,7 +601,27 @@ static void __init imx6sx_clocks_init(struct device_node *ccm_node)
 	imx_clk_set_rate(clks[IMX6SX_CLK_ENET2_REF], 125000000);
 
 	/* Audio clocks */
+#ifdef CONFIG_SONOS
+	/* NOTE:
+	 * Audio clock rates should ONLY be set here in the CCM driver.  This driver
+	 * is executed very early in Linux boot while the system is still single threaded.
+	 * Setting the rates elsewhere may cause subtle race conditions to occur.
+	 *
+	 * We do not change the parents for the audio clocks.  The ESAI, SSI, and SPDIF
+	 * clocks are assumed to have been set to derive from PLL4 somewhere above.
+	 *
+	 * It may be possible to move these settings into the DTB, just so long as the
+	 * setup only occurs here.
+	 */
+
+	/* The Audio PLL rate must be within the range of 650mhz - 1300mhz and
+	 * be a 2^n multiple of the ESAI rate.
+	 * Here we get PLL4 = ESAI x 16.
+	 */
+	imx_clk_set_rate(clks[IMX6SX_CLK_PLL4_AUDIO_DIV], 722534400);
+#else // CONFIG_SONOS
 	imx_clk_set_rate(clks[IMX6SX_CLK_PLL4_AUDIO_DIV], 393216000);
+#endif // CONFIG_SONOS
 
 	imx_clk_set_parent(clks[IMX6SX_CLK_SPDIF_SEL], clks[IMX6SX_CLK_PLL4_AUDIO_DIV]);
 	imx_clk_set_rate(clks[IMX6SX_CLK_SPDIF_PODF], 98304000);
@@ -650,6 +670,42 @@ static void __init imx6sx_clocks_init(struct device_node *ccm_node)
 		imx_clk_set_parent(clks[IMX6SX_CLK_UART_SEL], clks[IMX6SX_CLK_OSC]);
 	else
 		imx_clk_set_parent(clks[IMX6SX_CLK_UART_SEL], clks[IMX6SX_CLK_PLL3_80M]);
+
+#ifdef CONFIG_SONOS
+	/* PWM2 */
+	writel_relaxed(readl_relaxed(base + 0x78) | 3 << CCM_CCGR_OFFSET(9), base + 0x78);
+
+
+#if defined(CONFIG_SONOS_ROYALE) || defined(CONFIG_SONOS_CHAPLIN)
+	/* Royale uses I2S on the ESAI, 44.1kHz x 64 bits per frame */
+	imx_clk_set_rate(clks[IMX6SX_CLK_ESAI_EXTAL], 11289600);
+#elif defined(CONFIG_SONOS_NEPTUNE)
+	/* FIXME SWPBL-108852
+	 * Setting ESAI_EXTAL rate to 45.2MHz (as the code does below)
+	 * results in ~2.88MHz.  Setting it to 180.6MHz here results in
+	 * the 11.2MHz clock which is needed.  There must be a
+	 * correct way to handle this.
+	 */
+	imx_clk_set_rate(clks[IMX6SX_CLK_ESAI_EXTAL], 180633600);
+#else
+	/* DAC/Codec
+	 * 44.1khz x 32-bits per sample x
+	 * 8 samples per frame = 11.2896mhz
+	 * x 4
+	 */
+	imx_clk_set_rate(clks[IMX6SX_CLK_ESAI_EXTAL], 45158400);
+#endif
+
+#ifdef CONFIG_SONOS_ENCORE
+	/* Mics & Line-in
+	 * 44.1khz x 32-bits per sample x
+	 * 2 samples per frame = 2.8224mhz
+	 * x 2 x 8
+	 */
+	imx_clk_set_rate(clks[IMX6SX_CLK_SSI1], 45158400);
+	imx_clk_set_rate(clks[IMX6SX_CLK_SSI2], 45158400);
+#endif /* CONFIG_SONOS_ENCORE */
+#endif /* CONFIG_SONOS */
 
 	/* Set initial power mode */
 	imx6_set_lpm(WAIT_CLOCKED);

@@ -38,6 +38,11 @@ struct mtd_oob_buf {
 	unsigned char __user *ptr;
 };
 
+struct partition_geometry {
+	__u32 start;
+	__u32 length;
+};
+
 struct mtd_oob_buf64 {
 	__u64 start;
 	__u32 pad;
@@ -132,6 +137,16 @@ struct mtd_info_user {
 	__u64 padding;	/* Old obsolete field; do not use */
 };
 
+struct mtd_special_info {
+	__u32 datalen;
+	void *databuf;
+	__u32 preop_cmdlen;
+	__u8 preop_cmd[8];
+	__u32 addrlen;
+	__u8 addr[8];
+	__u32 alternate_read;
+};
+
 struct region_info_user {
 	__u32 offset;		/* At which this region starts,
 				 * from the beginning of the MTD */
@@ -202,6 +217,13 @@ struct otp_info {
  * without OOB, e.g., NOR flash.
  */
 #define MEMWRITE		_IOWR('M', 24, struct mtd_write_req)
+#define MEMSNAP                 _IO('M', 32)
+#define MEMUNSNAP               _IO('M', 33)
+#define MEMSETGEOMETRY          _IOW('M', 34, struct partition_geometry)
+#define MEMREADSPECIAL          _IOW('M', 35, struct mtd_special_info)
+#define MEMGETDEVID             _IOR('M', 36, uint32_t)
+#define MEMWRITESPECIAL         _IOW('M', 37, struct mtd_special_info)
+#define MTDSETLASTBLOCK         _IO('M', 38)
 
 /*
  * Obsolete legacy interface. Keep it in order not to break userspace

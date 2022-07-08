@@ -25,6 +25,10 @@
 #include <linux/slab.h>
 #include <linux/rtnetlink.h>
 #include <linux/sched.h>
+#ifdef CONFIG_SONOS_SOLBASE
+#include "mdp.h"
+extern struct manufacturing_data_page sys_mdp;
+#endif
 
 /*
  * Some useful ethtool_ops methods that're device independent.
@@ -1423,6 +1427,49 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	int rc;
 	netdev_features_t old_features;
 
+#ifdef CONFIG_SONOS
+	{
+		/* Encore has 1 external ethernet port. In order to report right
+		   link status, use Sonos link status in the phy drive */
+		extern void sonos_get_port_status(unsigned int port, struct ethtool_cmd *cmd);
+#ifdef CONFIG_MV88E6020_PHY
+		/* SolBase (before proto4), Paramount, and Neptune have 2 external ethernet ports but they are
+		   connected to an ethernet switch chip instead of a PHY. A third internal ethernet
+		   port connects the switch chip to a single FEC on the iMX6. Thus linux only sees
+		   one ethernet port. This hack intercepts the ETHTOOL_GSET ioctl and get the external
+		   port status from the MV88E6020 switch driver directly. */
+		extern void mv88e6020_sonos_get_port_status(unsigned int port, struct ethtool_cmd *cmd);
+#endif
+		struct ethtool_cmd cmd = { .cmd = ETHTOOL_GSET };
+		int port;
+
+		if (copy_from_user(&ethcmd, useraddr, sizeof(ethcmd))) {
+			return -EFAULT;
+		}
+		if (ethcmd == ETHTOOL_GSET) {
+			if (strcmp("eth0", ifr->ifr_name) == 0)
+				port = 0;
+			else if (strcmp("eth1", ifr->ifr_name) == 0)
+				port = 1;
+			else
+				return -ENODEV;
+
+#ifdef CONFIG_SONOS_SOLBASE
+			if ( sys_mdp.mdp_revision < MDP_REVISION_SOLBASE_PROTO4 )
+				mv88e6020_sonos_get_port_status(port, &cmd);
+			else
+				sonos_get_port_status(port, &cmd);
+#elif defined(CONFIG_MV88E6020_PHY)
+			mv88e6020_sonos_get_port_status(port, &cmd);
+#else
+			sonos_get_port_status(port, &cmd);
+#endif
+			if (copy_to_user(useraddr, &cmd, sizeof(cmd)))
+				return -EFAULT;
+			return 0;
+		}
+	}
+#endif
 	if (!dev || !netif_device_present(dev))
 		return -ENODEV;
 

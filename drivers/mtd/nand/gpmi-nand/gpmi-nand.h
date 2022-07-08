@@ -275,6 +275,9 @@ extern int start_dma_with_bch_irq(struct gpmi_nand_data *,
 
 /* GPMI-NAND helper function library */
 extern int gpmi_init(struct gpmi_nand_data *);
+#ifdef CONFIG_SONOS
+extern int gpmi_power_down(struct gpmi_nand_data *);
+#endif
 extern int gpmi_extra_init(struct gpmi_nand_data *);
 extern void gpmi_clear_bch(struct gpmi_nand_data *);
 extern void gpmi_dump_info(struct gpmi_nand_data *);

@@ -349,6 +349,8 @@ CFLAGS_KERNEL	=
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
+UPTO_ROOT := $(srctree)/../..
+include $(UPTO_ROOT)/sonos_common.mk
 
 # Use USERINCLUDE when you must reference the UAPI directories only.
 USERINCLUDE    := \
@@ -361,9 +363,12 @@ USERINCLUDE    := \
 # Use LINUXINCLUDE when you must reference the include/ directory.
 # Needed to be compatible with the O= option
 LINUXINCLUDE    := \
+		$(SONOS_PLATFORMS_INCLUDES) \
 		-I$(srctree)/arch/$(hdr-arch)/include \
 		-Iarch/$(hdr-arch)/include/generated \
 		$(if $(KBUILD_SRC), -I$(srctree)/include) \
+		-I$(srctree)/../../common/psoc4 \
+		-I$(srctree)/../../common/button_event \
 		-Iinclude \
 		$(USERINCLUDE)
 

@@ -17,7 +17,7 @@
 #define __MCC_CLINUX_CONFIG_
 
 /* base address of shared memory */
-#define MCC_BASE_ADDRESS               (0xBFF00000)
+#define MCC_BASE_ADDRESS               (0x008F8000)
 
 /* size (in bytes) and number of receive buffers */
 #define MCC_ATTR_NUM_RECEIVE_BUFFERS   (10)

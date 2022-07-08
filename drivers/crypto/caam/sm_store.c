@@ -986,6 +986,9 @@ int caam_sm_startup(struct platform_device *pdev)
 	dev_set_drvdata(smdev, smpriv);
 	ctrlpriv->smdev = smdev;
 
+	/* Initialize the spin_lock for future use */
+	spin_lock_init(&smpriv->kslock);
+
 	/*
 	 * Collect configuration limit data for reference
 	 * This batch comes from the partition data/vid registers in perfmon

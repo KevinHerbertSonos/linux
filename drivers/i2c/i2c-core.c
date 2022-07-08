@@ -285,6 +285,26 @@ static void i2c_device_shutdown(struct device *dev)
 	struct i2c_client *client = i2c_verify_client(dev);
 	struct i2c_driver *driver;
 
+#ifdef CONFIG_SONOS
+	/* Make sure i2c bus is idle before soft reset */
+	if (dev->type == &i2c_adapter_type) {
+		int error;
+		int detect_deadlock = 1;
+		struct i2c_adapter *adapter = to_i2c_adapter(dev);
+		static struct hrtimer_sleeper bus_sleeper;
+		ktime_t timeout = ktime_set(4,0); /* 4 seconds */
+
+		hrtimer_init_on_stack(&bus_sleeper.timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
+		hrtimer_init_sleeper(&bus_sleeper, current);
+		timeout = ktime_add(ktime_get_real(), timeout);
+		hrtimer_set_expires(&bus_sleeper.timer, timeout);
+		error = rt_mutex_timed_lock(&adapter->bus_lock, &bus_sleeper, detect_deadlock);
+		if (error) {
+			printk("i2c bus %s could not be locked, error %d\n", adapter->name, error);
+		}
+	}
+#endif
+
 	if (!client || !dev->driver)
 		return;
 	driver = to_i2c_driver(dev->driver);

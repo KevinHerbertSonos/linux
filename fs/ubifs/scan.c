@@ -342,7 +342,6 @@ struct ubifs_scan_leb *ubifs_scan(const struct ubifs_info *c, int lnum,
 					  lnum, offs);
 			goto corrupted;
 		}
-
 	return sleb;
 
 corrupted:

@@ -116,6 +116,11 @@ static inline void imx2_wdt_setup(void)
 	__raw_writew(val, imx2_wdt.base + IMX2_WDT_WCR);
 }
 
+#ifdef CONFIG_SONOS
+#include "sonos_imx_wdt.c.inc"
+#endif
+
+#ifndef CONFIG_SONOS
 static inline void imx2_wdt_ping(void)
 {
 	__raw_writew(IMX2_WDT_SEQ1, imx2_wdt.base + IMX2_WDT_WSR);
@@ -124,10 +129,10 @@ static inline void imx2_wdt_ping(void)
 
 static void imx2_wdt_timer_ping(unsigned long arg)
 {
-	/* ping it every imx2_wdt.timeout / 2 seconds to prevent reboot */
 	imx2_wdt_ping();
 	mod_timer(&imx2_wdt.timer, jiffies + imx2_wdt.timeout * HZ / 2);
 }
+#endif
 
 static void imx2_wdt_start(void)
 {
@@ -307,6 +312,7 @@ static struct miscdevice imx2_wdt_miscdev = {
 	.fops = &imx2_wdt_fops,
 };
 
+#ifndef CONFIG_SONOS
 static int __init imx2_wdt_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -324,19 +330,6 @@ static int __init imx2_wdt_probe(struct platform_device *pdev)
 		return PTR_ERR(imx2_wdt.clk);
 	}
 
-	irq = platform_get_irq(pdev, 0);
-	if (irq < 0) {
-		ret = irq;
-		goto fail;
-	}
-
-	ret = devm_request_irq(&pdev->dev, irq, imx2_wdt_isr, 0,
-			       dev_name(&pdev->dev), NULL);
-	if (ret) {
-		dev_err(&pdev->dev, "can't get irq %d\n", irq);
-		goto fail;
-	}
-
 	imx2_wdt.timeout = clamp_t(unsigned, timeout, 1, IMX2_WDT_MAX_TIME);
 	if (imx2_wdt.timeout != timeout)
 		dev_warn(&pdev->dev, "Initial timeout out of range! "
@@ -350,7 +343,7 @@ static int __init imx2_wdt_probe(struct platform_device *pdev)
 		goto fail;
 
 	dev_info(&pdev->dev,
-		"IMX2+ Watchdog Timer enabled. timeout=%ds (nowayout=%d)\n",
+		"IMX2+ Watchdog Timer driver registered. timeout=%ds (nowayout=%d)\n",
 						imx2_wdt.timeout, nowayout);
 	return 0;
 
@@ -359,6 +352,7 @@ fail:
 	clk_put(imx2_wdt.clk);
 	return ret;
 }
+#endif
 
 static int __exit imx2_wdt_remove(struct platform_device *pdev)
 {

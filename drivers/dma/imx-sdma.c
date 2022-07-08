@@ -17,6 +17,7 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
+#include <linux/string.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/types.h>
@@ -39,6 +40,8 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/of_dma.h>
+#include <linux/proc_fs.h>
+#include <linux/uaccess.h>
 
 #include <asm/irq.h>
 #include <linux/mfd/syscon.h>
@@ -47,6 +50,21 @@
 #include <linux/platform_data/dma-imx.h>
 
 #include "dmaengine.h"
+
+#ifdef CONFIG_SONOS
+/*
+ * Enables files in procfs for debugging
+ */
+#define SDMA_PROCFS
+/*
+ * Bypasses the tasklet and services the completed BDs in the ISR directly.
+ */
+#define SDMA_TASKLET_BYPASS
+/*
+ * Additional functions needed for Sonos.
+ */
+#define SDMA_SONOS_API
+#endif // CONFIG_SONOS
 
 /* SDMA registers */
 #define SDMA_H_C0PTR		0x000
@@ -245,6 +263,45 @@ enum sdma_mode {
 	SDMA_MODE_NO_BD,
 };
 
+//~ #define SONOS_DMA_STATS
+#ifdef SONOS_DMA_STATS
+
+#include <linux/ktime.h>
+#include <linux/math64.h>
+
+#define SONOS_STAT_HISTO_SIZE	16
+
+// Per-channel DMA completion IRQ stats
+// All times are in nanoseconds
+struct sonos_channel_stats {
+	// Procfs name and entry
+	char			name[32];
+	struct proc_dir_entry	*procfs;
+
+	// Total number of IRQs associated with this channel
+	u64			irqs;
+
+	// IRQ execution stats for this channel
+	u64			irq_exec_time_total;
+	u64			irq_exec_time_lo;
+	u64			irq_exec_time_hi;
+
+	// Interval times between IRQs for this channel
+	u64			irq_interval_last;
+	u64			irq_interval_total;
+	u64			irq_interval_lo;
+	u64			irq_interval_hi;
+
+	// Number of BDs serviced in the IRQ
+	u64			irq_bds_srv_total;
+	u64			irq_bds_srv_lo;
+	u64			irq_bds_srv_hi;
+
+	// Histogram of BDs serviced
+	u32			irq_bds_srv_histo[SONOS_STAT_HISTO_SIZE];
+};
+#endif // SONOS_DMA_STATS
+
 /**
  * struct sdma_channel - housekeeping for a SDMA channel
  *
@@ -263,7 +320,7 @@ enum sdma_mode {
 struct sdma_channel {
 	struct sdma_engine		*sdma;
 	unsigned int			channel;
-	enum dma_transfer_direction		direction;
+	enum dma_transfer_direction	direction;
 	enum sdma_peripheral_type	peripheral_type;
 	unsigned int			event_id0;
 	unsigned int			event_id1;
@@ -291,6 +348,9 @@ struct sdma_channel {
 	unsigned int			chn_count;
 	unsigned int			chn_real_count;
 	struct tasklet_struct		tasklet;
+#ifdef SONOS_DMA_STATS
+	struct sonos_channel_stats	stats;
+#endif // SONOS_DMA_STATS
 };
 
 #define MAX_DMA_CHANNELS 32
@@ -336,6 +396,7 @@ enum sdma_devtype {
 	IMX31_SDMA,	/* runs on i.mx31 */
 	IMX35_SDMA,	/* runs on i.mx35 and later */
 	IMX6SX_SDMA,	/* runs on i.mx6sx */
+	IMX6Q_SDMA,	/* runs on i.mx6q */
 };
 
 struct sdma_engine {
@@ -343,6 +404,7 @@ struct sdma_engine {
 	struct device_dma_parameters	dma_parms;
 	struct sdma_channel		channel[MAX_DMA_CHANNELS];
 	struct sdma_channel_control	*channel_control;
+	dma_addr_t			channel_control_phys;
 	u32				save_regs[MXC_SDMA_SAVED_REG_NUM];
 	const char			*fw_name;
 	void __iomem			*regs;
@@ -369,6 +431,9 @@ static struct platform_device_id sdma_devtypes[] = {
 		.name = "imx6sx-sdma",
 		.driver_data = IMX6SX_SDMA,
 	}, {
+		.name = "imx6q-sdma",
+		.driver_data = IMX6Q_SDMA,
+	}, {
 		/* sentinel */
 	}
 };
@@ -378,6 +443,7 @@ static const struct of_device_id sdma_dt_ids[] = {
 	{ .compatible = "fsl,imx31-sdma", .data = &sdma_devtypes[IMX31_SDMA], },
 	{ .compatible = "fsl,imx35-sdma", .data = &sdma_devtypes[IMX35_SDMA], },
 	{ .compatible = "fsl,imx6sx-sdma", .data = &sdma_devtypes[IMX6SX_SDMA], },
+	{ .compatible = "fsl,imx6q-sdma", .data = &sdma_devtypes[IMX6Q_SDMA], },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, sdma_dt_ids);
@@ -393,6 +459,323 @@ static inline u32 chnenbl_ofs(struct sdma_engine *sdma, unsigned int event)
 						      SDMA_CHNENBL0_IMX35);
 	return chnenbl0 + event * 4;
 }
+
+#ifdef SDMA_PROCFS
+
+#ifdef SONOS_DMA_STATS
+static int procfs_channel_stats_show(struct seq_file *m, void *v)
+{
+	struct sdma_channel *sdmac = m->private;
+	struct sonos_channel_stats *stats = &(sdmac->stats);
+	int idx;
+
+	seq_printf(m, "Channel %02d Statistics\n\n", sdmac->channel);
+	if (stats->irqs) {
+		seq_printf(m, "IRQs                 = %llu\n", stats->irqs);
+		seq_printf(m, "IRQ Execution Total  = %llu\n", stats->irq_exec_time_total);
+		seq_printf(m, "IRQ Execution Avg    = %llu\n", div64_u64(stats->irq_exec_time_total, stats->irqs));
+		seq_printf(m, "IRQ Execution Hi     = %llu\n", stats->irq_exec_time_hi);
+		seq_printf(m, "IRQ Execution Lo     = %llu\n", stats->irq_exec_time_lo);
+		seq_printf(m, "IRQ Interval Avg     = %llu\n", div64_u64(stats->irq_interval_total, stats->irqs));
+		seq_printf(m, "IRQ Interval Hi      = %llu\n", stats->irq_interval_hi);
+		seq_printf(m, "IRQ Interval Lo      = %llu\n", stats->irq_interval_lo);
+
+	}
+	if (stats->irq_bds_srv_total) {
+		seq_printf(m, "\n");
+		seq_printf(m, "BDs Serviced         = %llu\n", stats->irq_bds_srv_total);
+		seq_printf(m, "BDs Serviced/IRQ Avg = %llu\n", div64_u64(stats->irq_bds_srv_total, stats->irqs));
+		seq_printf(m, "BDs Serviced/IRQ Hi  = %llu\n", stats->irq_bds_srv_hi);
+		seq_printf(m, "BDs Serviced/IRQ Lo  = %llu\n", stats->irq_bds_srv_lo);
+		seq_printf(m, "\n");
+		seq_printf(m, "BD Service Histogram:\n");
+		for (idx = 0; idx < SONOS_STAT_HISTO_SIZE; idx++) {
+			if (stats->irq_bds_srv_histo[idx]) {
+				seq_printf(m, "\t%2d BDs = %u\n", idx, stats->irq_bds_srv_histo[idx]);
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int procfs_channel_stats_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, procfs_channel_stats_show, PDE_DATA(inode));
+}
+
+static const struct file_operations procfs_channel_stats_ops = {
+	.owner = THIS_MODULE,
+	.open = procfs_channel_stats_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+#endif // SONOS_DMA_STATS
+
+#define case_enum_ret_str(e) \
+		case e: \
+			return #e
+
+static const char *_dir_to_str(enum dma_transfer_direction dir)
+{
+	switch (dir) {
+		case_enum_ret_str(DMA_MEM_TO_MEM);
+		case_enum_ret_str(DMA_MEM_TO_DEV);
+		case_enum_ret_str(DMA_DEV_TO_MEM);
+		case_enum_ret_str(DMA_DEV_TO_DEV);
+		case_enum_ret_str(DMA_TRANS_NONE);
+		default:
+			return "?";
+	}
+}
+
+static const char *_perf_to_str(enum sdma_peripheral_type ptype)
+{
+	switch (ptype) {
+		case_enum_ret_str(IMX_DMATYPE_SSI);
+		case_enum_ret_str(IMX_DMATYPE_SSI_SP);
+		case_enum_ret_str(IMX_DMATYPE_MMC);
+		case_enum_ret_str(IMX_DMATYPE_SDHC);
+		case_enum_ret_str(IMX_DMATYPE_UART);
+		case_enum_ret_str(IMX_DMATYPE_UART_SP);
+		case_enum_ret_str(IMX_DMATYPE_FIRI);
+		case_enum_ret_str(IMX_DMATYPE_CSPI);
+		case_enum_ret_str(IMX_DMATYPE_CSPI_SP);
+		case_enum_ret_str(IMX_DMATYPE_SIM);
+		case_enum_ret_str(IMX_DMATYPE_ATA);
+		case_enum_ret_str(IMX_DMATYPE_CCM);
+		case_enum_ret_str(IMX_DMATYPE_EXT);
+		case_enum_ret_str(IMX_DMATYPE_MSHC);
+		case_enum_ret_str(IMX_DMATYPE_MSHC_SP);
+		case_enum_ret_str(IMX_DMATYPE_DSP);
+		case_enum_ret_str(IMX_DMATYPE_MEMORY);
+		case_enum_ret_str(IMX_DMATYPE_FIFO_MEMORY);
+		case_enum_ret_str(IMX_DMATYPE_SPDIF);
+		case_enum_ret_str(IMX_DMATYPE_IPU_MEMORY);
+		case_enum_ret_str(IMX_DMATYPE_ASRC);
+		case_enum_ret_str(IMX_DMATYPE_ESAI);
+		case_enum_ret_str(IMX_DMATYPE_HDMI);
+		default:
+			return "?";
+	}
+}
+
+static const char *_mode_to_str(enum sdma_mode mode)
+{
+	switch (mode) {
+		case_enum_ret_str(SDMA_MODE_INVALID);
+		case_enum_ret_str(SDMA_MODE_LOOP);
+		case_enum_ret_str(SDMA_MODE_NORMAL);
+		case_enum_ret_str(SDMA_MODE_P2P);
+		case_enum_ret_str(SDMA_MODE_NO_BD);
+		default:
+			return "?";
+	}
+}
+
+static const char *_status_to_str(enum dma_status status)
+{
+	switch (status) {
+		case_enum_ret_str(DMA_SUCCESS);
+		case_enum_ret_str(DMA_IN_PROGRESS);
+		case_enum_ret_str(DMA_PAUSED);
+		case_enum_ret_str(DMA_ERROR);
+		default:
+			return "?";
+	}
+}
+
+static int procfs_channels_show(struct seq_file *m, void *v)
+{
+	struct sdma_engine *sdma = m->private;
+	struct sdma_channel *sdmac;
+	int index, offset;
+	int config_cnt = 0;
+
+	/* Per channel output:
+	 * 	channel #
+	 * 	event id
+	 * 	direction
+	 * 	peripheral type
+	 * 	# of BDs
+	 * 	per addr
+	 * 	shp addr
+	 * 	mode
+	 * 	status
+	 */
+	for (index = 0; index < MAX_DMA_CHANNELS; index++) {
+		offset = SDMA_CHNPRI_0 + (index * 4);
+		if (readl_relaxed(sdma->regs + offset)) {
+			sdmac = &(sdma->channel[index]);
+			seq_printf(m, "%d \t", sdmac->channel);
+			seq_printf(m, "%d \t", sdmac->event_id0);
+			seq_printf(m, "%s \t", _dir_to_str(sdmac->direction));
+			seq_printf(m, "%s \t", _perf_to_str(sdmac->peripheral_type));
+			seq_printf(m, "%d \t", sdmac->num_bd);
+			seq_printf(m, "%08x \t", sdmac->per_addr);
+			seq_printf(m, "%08x \t", sdmac->shp_addr);
+			seq_printf(m, "%s \t", _mode_to_str(sdmac->mode));
+			seq_printf(m, "%s \t", _status_to_str(sdmac->status));
+			seq_printf(m, "\n");
+			config_cnt++;
+		}
+	}
+	seq_printf(m, "configured channels: %d\n", config_cnt);
+
+	return 0;
+}
+
+static int procfs_channels_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, procfs_channels_show, PDE_DATA(inode));
+}
+
+static const struct file_operations procfs_channels_ops = {
+	.owner = THIS_MODULE,
+	.open = procfs_channels_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int procfs_regs_show(struct seq_file *m, void *v)
+{
+	struct sdma_engine *sdma = m->private;
+	int index, offset;
+	int channels = 0;
+	char rname[12];
+
+	#define _SEQ_PRINTREG(name, off) seq_printf(m, "[%03x] SDMAARM_%-16s = %08x\n", off, name, readl_relaxed(sdma->regs + off))
+
+	if ((sdma->devtype == IMX6SX_SDMA) || (sdma->devtype == IMX6Q_SDMA)) {
+		_SEQ_PRINTREG("MC0PTR",		SDMA_H_C0PTR);
+		_SEQ_PRINTREG("INTR",		SDMA_H_INTR);
+		_SEQ_PRINTREG("STOP_STAT",	SDMA_H_STATSTOP);
+		_SEQ_PRINTREG("HSTART",		SDMA_H_START);
+		_SEQ_PRINTREG("EVTOVR",		SDMA_H_EVTOVR);
+		_SEQ_PRINTREG("DSPOVR",		SDMA_H_DSPOVR);
+		_SEQ_PRINTREG("HOSTOVR",	SDMA_H_HOSTOVR);
+		_SEQ_PRINTREG("EVTPEND",	SDMA_H_EVTPEND);
+		_SEQ_PRINTREG("RESET",		SDMA_H_RESET);
+		_SEQ_PRINTREG("EVTERR",		SDMA_H_EVTERR);
+		_SEQ_PRINTREG("INTRMASK",	SDMA_H_INTRMSK);
+		_SEQ_PRINTREG("PSW",		SDMA_H_PSW);
+		_SEQ_PRINTREG("EVTERRDBG",	SDMA_H_EVTERRDBG);
+		_SEQ_PRINTREG("CONFIG",		SDMA_H_CONFIG);
+		_SEQ_PRINTREG("SDMA_LOCK",	0x03c);
+		// Skip all the OnCE Registers
+		_SEQ_PRINTREG("ILLINSTADDR",	SDMA_ILLINSTADDR);
+		_SEQ_PRINTREG("CHN0ADDR",	SDMA_CHN0ADDR);
+		_SEQ_PRINTREG("EVT_MIRROR",	0x060);
+		_SEQ_PRINTREG("EVT_MIRROR2",	0x064);
+		_SEQ_PRINTREG("XTRIG_CONF1",	SDMA_XTRIG_CONF1);
+		_SEQ_PRINTREG("XTRIG_CONF2",	SDMA_XTRIG_CONF2);
+
+		for (index = 0; index < MAX_DMA_CHANNELS; index++) {
+			offset = SDMA_CHNPRI_0 + (index * 4);
+			if (readl_relaxed(sdma->regs + offset)) {
+				snprintf(rname, sizeof(rname), "CHNPRI%i", index);
+				_SEQ_PRINTREG(rname, offset);
+				channels++;
+			}
+		}
+		// These registers are not readable if there are no allocated channels
+		// because the SDMA clock is disabled.
+		if (channels > 1) {
+			for (index = 0; index < sdma->num_events; index++) {
+				offset = chnenbl_ofs(sdma, index);
+				if (readl_relaxed(sdma->regs + offset)) {
+					snprintf(rname, sizeof(rname), "CHNENBL%i", index);
+					_SEQ_PRINTREG(rname, offset);
+				}
+			}
+		}
+	}
+	else {
+		seq_printf(m, "<device not supported>\n");
+	}
+
+	return 0;
+}
+
+static int procfs_regs_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, procfs_regs_show, PDE_DATA(inode));
+}
+
+static const struct file_operations procfs_regs_ops= {
+	.owner = THIS_MODULE,
+	.open = procfs_regs_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int procfs_ctrl_show(struct seq_file *m, void *v)
+{
+	struct sdma_engine *sdma = m->private;
+	seq_write(m, sdma->channel_control,
+			(MAX_DMA_CHANNELS * sizeof(struct sdma_channel_control)) + sizeof(struct sdma_context_data));
+	return 0;
+}
+
+static int procfs_ctrl_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, procfs_ctrl_show, PDE_DATA(inode));
+}
+
+static const struct file_operations procfs_ctrl_ops= {
+	.owner = THIS_MODULE,
+	.open = procfs_ctrl_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+struct proc_dir_entry *procfs_dir = NULL;
+struct proc_dir_entry *procfs_channels = NULL;
+struct proc_dir_entry *procfs_regs = NULL;
+struct proc_dir_entry *procfs_ctrl = NULL;
+
+#define PROCFS_DIR		"driver/sdma"
+#define PROCFS_CHANNELS_FILE	"channels"
+#define PROCFS_REGS_FILE	"regs"
+#define PROCFS_CTRL_FILE	"control"
+
+static int procfs_init(struct platform_device *pdev, struct sdma_engine *sdma)
+{
+	// Setup procfs dir
+	procfs_dir = proc_mkdir(PROCFS_DIR, NULL);
+	if (!procfs_dir) {
+		dev_err(&pdev->dev, "failed to create procfs dir %s/n", PROCFS_DIR);
+		goto failed_procfs;
+	}
+
+	// Setup procfs files
+	procfs_channels = proc_create_data(PROCFS_CHANNELS_FILE, (S_IRUSR | S_IRGRP | S_IROTH), procfs_dir, &procfs_channels_ops, sdma);
+	if (!procfs_channels) {
+		dev_err(&pdev->dev, "failed to create procfs file %s\n", PROCFS_CHANNELS_FILE);
+		goto failed_procfs;
+	}
+
+	procfs_regs = proc_create_data(PROCFS_REGS_FILE, (S_IRUSR | S_IRGRP | S_IROTH), procfs_dir, &procfs_regs_ops, sdma);
+	if (!procfs_regs) {
+		dev_err(&pdev->dev, "failed to create procfs file %s\n", PROCFS_REGS_FILE);
+		goto failed_procfs;
+	}
+
+	procfs_ctrl = proc_create_data(PROCFS_CTRL_FILE, (S_IRUSR | S_IRGRP | S_IROTH), procfs_dir, &procfs_ctrl_ops, sdma);
+	if (!procfs_ctrl) {
+		dev_err(&pdev->dev, "failed to create procfs file %s\n", PROCFS_CTRL_FILE);
+		goto failed_procfs;
+	}
+
+	return 0;
+failed_procfs:
+	return -1;
+}
+#endif // SDMA_PROCFS
 
 static int sdma_config_ownership(struct sdma_channel *sdmac,
 		bool event_override, bool mcu_override, bool dsp_override)
@@ -528,6 +911,10 @@ static void sdma_event_disable(struct sdma_channel *sdmac, unsigned int event)
 static void sdma_handle_channel_loop(struct sdma_channel *sdmac)
 {
 	struct sdma_buffer_descriptor *bd;
+#ifdef SONOS_DMA_STATS
+	struct sonos_channel_stats *stats = &(sdmac->stats);
+	int bds_serviced = 0;
+#endif // SONOS_DMA_STATS
 
 	/*
 	 * loop mode. Iterate over descriptors, re-setup them and
@@ -551,9 +938,28 @@ static void sdma_handle_channel_loop(struct sdma_channel *sdmac)
 			bd->mode.count = sdmac->chn_count;
 		}
 
+
+#ifdef SONOS_DMA_STATS
+		bds_serviced++;
+#endif // SONOS_DMA_STATS
+
 		if (sdmac->desc.callback)
 			sdmac->desc.callback(sdmac->desc.callback_param);
 	}
+
+#ifdef SONOS_DMA_STATS
+	if (sdmac->channel) {
+		stats->irq_bds_srv_total += bds_serviced;
+		if (stats->irq_bds_srv_hi < bds_serviced) stats->irq_bds_srv_hi = bds_serviced;
+		if (stats->irq_bds_srv_lo > bds_serviced) stats->irq_bds_srv_lo = bds_serviced;
+
+		if (bds_serviced > (SONOS_STAT_HISTO_SIZE - 1)) {
+			stats->irq_bds_srv_histo[SONOS_STAT_HISTO_SIZE - 1]++;
+		} else {
+			stats->irq_bds_srv_histo[bds_serviced]++;
+		}
+	}
+#endif // SONOS_DMA_STATS
 }
 
 static void mxc_sdma_handle_channel_normal(struct sdma_channel *sdmac)
@@ -635,10 +1041,52 @@ static irqreturn_t sdma_int_handler(int irq, void *dev_id)
 		int channel = fls(stat) - 1;
 		struct sdma_channel *sdmac = &sdma->channel[channel];
 
+#ifdef SONOS_DMA_STATS
+		u64 irq_start;
+		struct sonos_channel_stats *stats = &(sdmac->stats);
+		if (channel) {
+			irq_start = ktime_to_ns(ktime_get());
+			if (stats->irq_interval_last) {
+				u64 elapsed = irq_start - stats->irq_interval_last;
+				stats->irq_interval_total += elapsed;
+				stats->irqs++;
+				if (stats->irq_interval_hi < elapsed) stats->irq_interval_hi = elapsed;
+				if (stats->irq_interval_lo > elapsed) stats->irq_interval_lo = elapsed;
+			}
+			stats->irq_interval_last = irq_start;
+		}
+#endif // SONOS_DMA_STATS
+
+#ifdef SDMA_TASKLET_BYPASS
+		/*
+		 * The SDMA driver normally schedules a tasklet to
+		 * handle the DMA completions (and call the registered
+		 * callbacks).  However this can incur a lot of latency
+		 * since a tasklet is a very low priority (software)
+		 * interrupt.  So instead we call the tasklet function
+		 * directly while still in HW IRQ context.  On the one
+		 * hand this means we stay in the IRQ a lot longer but
+		 * on the other we are less likely to be deferred to the
+		 * point where the SDMA engine overtakes the end of a
+		 * ring buffer and stalls out.
+		 */
+		sdma_tasklet((unsigned long)sdmac);
+		(void)flags;	// Silence unused var warning
+#else // SDMA_TASKLET_BYPASS
 		spin_lock_irqsave(&sdmac->lock, flags);
 		if (sdmac->status == DMA_IN_PROGRESS || sdmac->mode == SDMA_MODE_LOOP)
 			tasklet_schedule(&sdmac->tasklet);
 		spin_unlock_irqrestore(&sdmac->lock, flags);
+#endif // SDMA_TASKLET_BYPASS
+
+#ifdef SONOS_DMA_STATS
+		if (channel) {
+			u64 elapsed = ktime_to_ns(ktime_get()) - irq_start;
+			stats->irq_exec_time_total += elapsed;
+			if (stats->irq_exec_time_hi < elapsed) stats->irq_exec_time_hi = elapsed;
+			if (stats->irq_exec_time_lo > elapsed) stats->irq_exec_time_lo = elapsed;
+		}
+#endif // SONOS_DMA_STATS
 
 		__clear_bit(channel, &stat);
 	}
@@ -801,6 +1249,7 @@ static int sdma_load_context(struct sdma_channel *sdmac)
 	bd0->mode.count = sizeof(*context) / 4;
 	bd0->buffer_addr = sdma->context_phys;
 	bd0->ext_buffer_addr = 2048 + (sizeof(*context) / 4) * channel;
+
 	ret = sdma_run_channel0(sdma);
 
 	spin_unlock_irqrestore(&sdma->channel_0_lock, flags);
@@ -1010,6 +1459,23 @@ static struct sdma_channel *to_sdma_chan(struct dma_chan *chan)
 	return container_of(chan, struct sdma_channel, chan);
 }
 
+#ifdef SDMA_SONOS_API
+
+dma_addr_t sdma_sonos_swap_data_pointer(struct dma_chan *chan,
+		u32 index, dma_addr_t data_phys)
+{
+	struct sdma_channel *sdmac = to_sdma_chan(chan);
+	dma_addr_t original;
+
+	original = sdmac->bd[index].buffer_addr;
+	sdmac->bd[index].buffer_addr = data_phys;
+
+	return original;
+}
+EXPORT_SYMBOL(sdma_sonos_swap_data_pointer);
+
+#endif // SDMA_SONOS_API
+
 static dma_cookie_t sdma_tx_submit(struct dma_async_tx_descriptor *tx)
 {
 	unsigned long flags;
@@ -1070,6 +1536,23 @@ static int sdma_alloc_chan_resources(struct dma_chan *chan)
 	/* Set SDMA channel mode to unvalid to avoid misconfig */
 	sdmac->mode = SDMA_MODE_INVALID;
 
+#ifdef SONOS_DMA_STATS
+	// Channel 0 has no stats
+	if (sdmac->channel) {
+		struct sonos_channel_stats *stats = &(sdmac->stats);
+
+		// Initialize stats (lo values to ~infitite)
+		memset(stats, 0, sizeof(struct sonos_channel_stats));
+		stats->irq_exec_time_lo	= -1;
+		stats->irq_interval_lo	= -1;
+		stats->irq_bds_srv_lo	= -1;
+
+		// Open procfs file
+		snprintf(sdmac->stats.name, sizeof(sdmac->stats.name), "ch%02d_stats", sdmac->channel);
+		sdmac->stats.procfs = proc_create_data(sdmac->stats.name, (S_IRUSR | S_IRGRP | S_IROTH), procfs_dir, &procfs_channel_stats_ops, sdmac);
+	}
+#endif // SONOS_DMA_STATS
+
 	return 0;
 }
 
@@ -1077,6 +1560,13 @@ static void sdma_free_chan_resources(struct dma_chan *chan)
 {
 	struct sdma_channel *sdmac = to_sdma_chan(chan);
 	struct sdma_engine *sdma = sdmac->sdma;
+
+#ifdef SONOS_DMA_STATS
+	// Channel 0 has no stats
+	if (sdmac->channel) {
+		remove_proc_entry(sdmac->stats.name, procfs_dir);
+	}
+#endif // SONOS_DMA_STATS
 
 	sdma_disable_channel(sdmac);
 
@@ -1574,8 +2064,8 @@ static int __init sdma_event_remap(struct sdma_engine *sdma)
 	u32 reg, val, shift, num_map, i;
 	int ret = 0;
 
-	/* Only apply to imx6sx platform */
-	if (sdma->devtype != IMX6SX_SDMA || IS_ERR(np))
+	/* Only apply to imx6sx/q platform */
+	if (((sdma->devtype != IMX6SX_SDMA) && (sdma->devtype != IMX6Q_SDMA)) || IS_ERR(np))
 		goto out;
 
 	if (IS_ERR(gpr_np)) {
@@ -1650,7 +2140,6 @@ static int sdma_get_firmware(struct sdma_engine *sdma,
 static int __init sdma_init(struct sdma_engine *sdma)
 {
 	int i, ret, ccbsize;
-	dma_addr_t ccb_phys;
 
 	switch (sdma->devtype) {
 	case IMX31_SDMA:
@@ -1658,6 +2147,7 @@ static int __init sdma_init(struct sdma_engine *sdma)
 		break;
 	case IMX35_SDMA:
 	case IMX6SX_SDMA:
+	case IMX6Q_SDMA:
 		sdma->num_events = 48;
 		break;
 	default:
@@ -1675,10 +2165,10 @@ static int __init sdma_init(struct sdma_engine *sdma)
 	ccbsize = MAX_DMA_CHANNELS * sizeof (struct sdma_channel_control)
 		+ sizeof(struct sdma_context_data);
 
-	sdma->channel_control = gen_pool_dma_alloc(sdma->iram_pool, ccbsize, &ccb_phys);
+	sdma->channel_control = gen_pool_dma_alloc(sdma->iram_pool, ccbsize, &(sdma->channel_control_phys));
 	if (!sdma->channel_control) {
 		sdma->channel_control = dma_alloc_coherent(NULL, ccbsize,
-						&ccb_phys, GFP_KERNEL);
+						&(sdma->channel_control_phys), GFP_KERNEL);
 		if (!sdma->channel_control) {
 			ret = -ENOMEM;
 			goto err_dma_alloc;
@@ -1687,7 +2177,7 @@ static int __init sdma_init(struct sdma_engine *sdma)
 
 	sdma->context = (void *)sdma->channel_control +
 		MAX_DMA_CHANNELS * sizeof (struct sdma_channel_control);
-	sdma->context_phys = ccb_phys +
+	sdma->context_phys = sdma->channel_control_phys +
 		MAX_DMA_CHANNELS * sizeof (struct sdma_channel_control);
 
 	/* Zero-out the CCB structures array just allocated */
@@ -1715,7 +2205,7 @@ static int __init sdma_init(struct sdma_engine *sdma)
 	/* FIXME: Check whether to set ACR bit depending on clock ratios */
 	writel_relaxed(0, sdma->regs + SDMA_H_CONFIG);
 
-	writel_relaxed(ccb_phys, sdma->regs + SDMA_H_C0PTR);
+	writel_relaxed(sdma->channel_control_phys, sdma->regs + SDMA_H_C0PTR);
 
 	/* Set bits of CONFIG register with given context switching mode */
 	writel_relaxed(SDMA_H_CONFIG_CSM, sdma->regs + SDMA_H_CONFIG);
@@ -1813,6 +2303,8 @@ static int __init sdma_probe(struct platform_device *pdev)
 
 	clk_prepare(sdma->clk_ipg);
 	clk_prepare(sdma->clk_ahb);
+	dev_dbg(&pdev->dev, "clk_ipg rate = %ld\n", clk_get_rate(sdma->clk_ipg));
+	dev_dbg(&pdev->dev, "clk_ahb rate = %ld\n", clk_get_rate(sdma->clk_ahb));
 
 	sdma->regs = ioremap(iores->start, resource_size(iores));
 	if (!sdma->regs) {
@@ -1933,6 +2425,10 @@ static int __init sdma_probe(struct platform_device *pdev)
 		}
 	}
 
+#ifdef SDMA_PROCFS
+	procfs_init(pdev, sdma);
+#endif // SDMA_PROCFS
+
 	platform_set_drvdata(pdev, sdma);
 	dev_info(sdma->dev, "initialized\n");
 
@@ -1967,8 +2463,8 @@ static int sdma_suspend(struct device *dev)
 	struct sdma_engine *sdma = platform_get_drvdata(pdev);
 	int i;
 
-	/* Do nothing if not i.MX6SX */
-	if (sdma->devtype != IMX6SX_SDMA)
+	/* Do nothing if not i.MX6SX/Q */
+	if ((sdma->devtype != IMX6SX_SDMA) && (sdma->devtype != IMX6Q_SDMA))
 		return 0;
 
 	clk_enable(sdma->clk_ipg);
@@ -1999,8 +2495,8 @@ static int sdma_resume(struct device *dev)
 	struct sdma_engine *sdma = platform_get_drvdata(pdev);
 	int i, ret;
 
-	/* Do nothing if not i.MX6SX */
-	if (sdma->devtype != IMX6SX_SDMA)
+	/* Do nothing if not i.MX6SX/Q */
+	if ((sdma->devtype != IMX6SX_SDMA) && (sdma->devtype != IMX6Q_SDMA))
 		return 0;
 
 	clk_enable(sdma->clk_ipg);

@@ -17,6 +17,13 @@
 #include "br_private.h"
 #include "br_private_stp.h"
 
+#if defined(CONFIG_SONOS)
+#include "br_mcast.h"
+#include "br_proxy.h"
+#include "br_sonos.h"
+#include "br_stp_sonos.h"
+#endif
+
 /* called under bridge lock */
 static int br_is_designated_for_some_port(const struct net_bridge *br)
 {
@@ -36,13 +43,13 @@ static void br_hello_timer_expired(unsigned long arg)
 	struct net_bridge *br = (struct net_bridge *)arg;
 
 	br_debug(br, "hello timer expired\n");
-	spin_lock(&br->lock);
+	SONOS_SPINLOCK(&br->lock);
 	if (br->dev->flags & IFF_UP) {
 		br_config_bpdu_generation(br);
 
 		mod_timer(&br->hello_timer, round_jiffies(jiffies + br->hello_time));
 	}
-	spin_unlock(&br->lock);
+	SONOS_SPINUNLOCK(&br->lock);
 }
 
 static void br_message_age_timer_expired(unsigned long arg)
@@ -55,16 +62,22 @@ static void br_message_age_timer_expired(unsigned long arg)
 	if (p->state == BR_STATE_DISABLED)
 		return;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	br_info(br, "neighbor %.2x%.2x.%pM lost on port %u(%s)\n",
+		id->prio[0], id->prio[1], &id->addr,
+		(unsigned int) p->port_no, p->dev->name);
+#else
 	br_info(br, "port %u(%s) neighbor %.2x%.2x.%pM lost\n",
 		(unsigned int) p->port_no, p->dev->name,
 		id->prio[0], id->prio[1], &id->addr);
+#endif
 
 	/*
 	 * According to the spec, the message age timer cannot be
 	 * running when we are the root bridge. So..  this was_root
 	 * check is redundant. I'm leaving it in for now, though.
 	 */
-	spin_lock(&br->lock);
+	SONOS_SPINLOCK(&br->lock);
 	if (p->state == BR_STATE_DISABLED)
 		goto unlock;
 	was_root = br_is_root_bridge(br);
@@ -75,7 +88,7 @@ static void br_message_age_timer_expired(unsigned long arg)
 	if (br_is_root_bridge(br) && !was_root)
 		br_become_root_bridge(br);
  unlock:
-	spin_unlock(&br->lock);
+	SONOS_SPINUNLOCK(&br->lock);
 }
 
 static void br_forward_delay_timer_expired(unsigned long arg)
@@ -85,7 +98,7 @@ static void br_forward_delay_timer_expired(unsigned long arg)
 
 	br_debug(br, "port %u(%s) forward delay timer\n",
 		 (unsigned int) p->port_no, p->dev->name);
-	spin_lock(&br->lock);
+	SONOS_SPINLOCK(&br->lock);
 	if (p->state == BR_STATE_LISTENING) {
 		p->state = BR_STATE_LEARNING;
 		mod_timer(&p->forward_delay_timer,
@@ -94,11 +107,15 @@ static void br_forward_delay_timer_expired(unsigned long arg)
 		p->state = BR_STATE_FORWARDING;
 		if (br_is_designated_for_some_port(br))
 			br_topology_change_detection(br);
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
 		netif_carrier_on(br->dev);
+#endif
 	}
 	br_log_state(p);
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
 	br_ifinfo_notify(RTM_NEWLINK, p);
-	spin_unlock(&br->lock);
+#endif
+	SONOS_SPINUNLOCK(&br->lock);
 }
 
 static void br_tcn_timer_expired(unsigned long arg)
@@ -106,13 +123,17 @@ static void br_tcn_timer_expired(unsigned long arg)
 	struct net_bridge *br = (struct net_bridge *) arg;
 
 	br_debug(br, "tcn timer expired\n");
-	spin_lock(&br->lock);
+	SONOS_SPINLOCK(&br->lock);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651 */
+	if (br->dev->flags & IFF_UP) {
+#else
 	if (!br_is_root_bridge(br) && (br->dev->flags & IFF_UP)) {
+#endif
 		br_transmit_tcn(br);
 
 		mod_timer(&br->tcn_timer,jiffies + br->bridge_hello_time);
 	}
-	spin_unlock(&br->lock);
+	SONOS_SPINUNLOCK(&br->lock);
 }
 
 static void br_topology_change_timer_expired(unsigned long arg)
@@ -120,10 +141,10 @@ static void br_topology_change_timer_expired(unsigned long arg)
 	struct net_bridge *br = (struct net_bridge *) arg;
 
 	br_debug(br, "topo change timer expired\n");
-	spin_lock(&br->lock);
+	SONOS_SPINLOCK(&br->lock);
 	br->topology_change_detected = 0;
 	br->topology_change = 0;
-	spin_unlock(&br->lock);
+	SONOS_SPINUNLOCK(&br->lock);
 }
 
 static void br_hold_timer_expired(unsigned long arg)
@@ -133,10 +154,10 @@ static void br_hold_timer_expired(unsigned long arg)
 	br_debug(p->br, "port %u(%s) hold timer expired\n",
 		 (unsigned int) p->port_no, p->dev->name);
 
-	spin_lock(&p->br->lock);
+	SONOS_SPINLOCK(&p->br->lock);
 	if (p->config_pending)
 		br_transmit_config(p);
-	spin_unlock(&p->br->lock);
+	SONOS_SPINUNLOCK(&p->br->lock);
 }
 
 void br_stp_timer_init(struct net_bridge *br)
@@ -151,7 +172,11 @@ void br_stp_timer_init(struct net_bridge *br)
 		      br_topology_change_timer_expired,
 		      (unsigned long) br);
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-19651, SWPBL-65582 */
+	sonos_stp_timer_init(br);
+#else
 	setup_timer(&br->gc_timer, br_fdb_cleanup, (unsigned long) br);
+#endif
 }
 
 void br_stp_port_timer_init(struct net_bridge_port *p)

@@ -146,6 +146,7 @@ int utf8s_to_utf16s(const u8 *s, int inlen, enum utf16_endian endian,
 			inlen -= size;
 
 			if (u >= PLANE_SIZE) {
+				printk(KERN_WARNING "Non-plane 0 unicode character in path - access may not work.\n");
 				if (maxout < 2)
 					break;
 				u -= PLANE_SIZE;
