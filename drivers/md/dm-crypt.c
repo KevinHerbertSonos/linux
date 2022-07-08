@@ -31,6 +31,9 @@
 #include <crypto/skcipher.h>
 
 #include <linux/device-mapper.h>
+#ifdef CONFIG_SONOS_SECBOOT
+#include <linux/sonos_sec_fs_keys.h>
+#endif
 
 #define DM_MSG_PREFIX "crypt"
 
@@ -1411,7 +1414,7 @@ static void kcryptd_queue_crypt(struct dm_crypt_io *io)
 /*
  * Decode key from its hex representation
  */
-static int crypt_decode_key(u8 *key, char *hex, unsigned int size)
+int crypt_decode_key(u8 *key, char *hex, unsigned int size)
 {
 	char buffer[3];
 	unsigned int i;
@@ -1431,6 +1434,7 @@ static int crypt_decode_key(u8 *key, char *hex, unsigned int size)
 
 	return 0;
 }
+EXPORT_SYMBOL(crypt_decode_key);
 
 static void crypt_free_tfms(struct crypt_config *cc)
 {
@@ -1502,6 +1506,12 @@ static int crypt_set_key(struct crypt_config *cc, char *key)
 	/* Hyphen (which gives a key_size of zero) means there is no key. */
 	if (!cc->key_size && strcmp(key, "-"))
 		goto out;
+
+#ifdef CONFIG_SONOS_SECBOOT
+	if (!sonos_replace_luks_key_if_sentinel(key)) {
+		goto out;
+	}
+#endif
 
 	/* clear the flag since following operations may invalidate previously valid key */
 	clear_bit(DM_CRYPT_KEY_VALID, &cc->flags);
