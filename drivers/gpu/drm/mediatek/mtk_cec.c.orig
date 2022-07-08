@@ -900,7 +900,7 @@ static void mtk_cec_get_rx_data(struct mtk_cec *cec, struct cec_frame *rx_frame)
 	data_eom = readl(cec->regs + RX_HEADER) & RXING_D_EOM;
 	mtk_cec_trigger_rx_hw(cec);
 
-	for (i = 0; i < msg_data_size; i++)
+	for (i = 0; (i < msg_data_size) && (rx_frame->offset < CEC_MAX_MSG_SIZE); i++)
 		rx_msg->msg[rx_frame->offset++] = (msg_data >> (i * 8)) & 0xff;
 
 	if (data_eom) {
