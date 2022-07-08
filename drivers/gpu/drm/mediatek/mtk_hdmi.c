@@ -1602,6 +1602,7 @@ static int mtk_hdmi_audio_hw_params(struct device *dev, void *data,
 	struct mtk_hdmi *hdmi = dev_get_drvdata(dev);
 	struct hdmi_audio_param hdmi_params;
 	unsigned int chan = hparms->cea.channels;
+	(void)data;
 
 	dev_dbg(hdmi->dev, "%s: %u Hz, %d bit, %d channels, fmt=%d\n", __func__,
 		hparms->sample_rate, hparms->sample_width, chan, fmt->fmt);
@@ -1673,6 +1674,7 @@ static int mtk_hdmi_audio_hw_params(struct device *dev, void *data,
 static int mtk_hdmi_audio_startup(struct device *dev, void *data)
 {
 	struct mtk_hdmi *hdmi = dev_get_drvdata(dev);
+	(void)data;
 
 	dev_dbg(dev, "%s\n", __func__);
 
@@ -1684,6 +1686,7 @@ static int mtk_hdmi_audio_startup(struct device *dev, void *data)
 static void mtk_hdmi_audio_shutdown(struct device *dev, void *data)
 {
 	struct mtk_hdmi *hdmi = dev_get_drvdata(dev);
+	(void)data;
 
 	dev_dbg(dev, "%s\n", __func__);
 
@@ -1693,6 +1696,7 @@ static void mtk_hdmi_audio_shutdown(struct device *dev, void *data)
 int mtk_hdmi_audio_digital_mute(struct device *dev, void *data, bool enable)
 {
 	struct mtk_hdmi *hdmi = dev_get_drvdata(dev);
+	(void)data;
 
 	dev_dbg(dev, "%s(%d)\n", __func__, enable);
 
@@ -1709,6 +1713,7 @@ static int mtk_hdmi_audio_get_eld(struct device *dev, void *data,
 
 {
 	struct mtk_hdmi *hdmi = dev_get_drvdata(dev);
+	(void)data;
 
 	dev_dbg(dev, "%s\n", __func__);
 
