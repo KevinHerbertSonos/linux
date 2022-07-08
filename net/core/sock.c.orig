@@ -960,12 +960,6 @@ set_rcvbuf:
 		sock_valbool_flag(sk, SOCK_RXQ_OVFL, valbool);
 		break;
 
-#ifdef CONFIG_SONOS
-	case SO_SONOS_OPTIONS:
-		sk->sonos_options = (unsigned short) val;
-		break;
-#endif	// CONFIG_SONOS
-
 	case SO_WIFI_STATUS:
 		sock_valbool_flag(sk, SOCK_WIFI_STATUS, valbool);
 		break;
