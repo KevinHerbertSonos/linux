@@ -267,6 +267,188 @@ static inline u32 afe_read_bits(u32 addr, int bits, int len)
 
 	return (u4CurrValue & u4TargetBitField) >> bits;
 }
+void afe_i2s_out_asrc_clock_sel(enum afe_i2s_out_id id, enum afe_i2s_asrc_clock_source source)
+{
+	switch (id) {
+	case AFE_I2S_OUT_1:
+		switch (source) {
+		case CLK_ASM_HIGH:
+			/* i2s-out1 asrc clock is from asm_ck(high) */
+			afe_msk_write(PWR1_ASM_CON1, 0x2 << 6, 0x3 << 6);
+			break;
+		case CLK_ASM_MID:
+			/* i2s-out1 asrc clock is from asm_ck(mid) */
+			afe_msk_write(PWR1_ASM_CON1, 0x1 << 6, 0x3 << 6);
+			break;
+		case CLK_ASM_LOW:
+			/* i2s-out1 asrc clock is from asm_ck(low) */
+			afe_msk_write(PWR1_ASM_CON1, 0x0 << 6, 0x3 << 6);
+			/* asm_ck(low) is from ckgen */
+			/* it affects both i2s-out1 and i2s-out2 */
+			afe_msk_write(AUDIO_TOP_CON3, 0x0 << 20, 0x1 << 20);
+			break;
+		case CLK_A1SYS:
+			/* i2s-out1 asrc clock is from asm_ck(low) */
+			afe_msk_write(PWR1_ASM_CON1, 0x0 << 6, 0x3 << 6);
+			/* asm_ck(low) is from a1sys */
+			/* it affects both i2s-out1 and i2s-out2 */
+			afe_msk_write(AUDIO_TOP_CON3,
+				(0x0 << 21) | (0x1 << 20),
+				(0x1 << 21) | (0x1 << 20));
+			break;
+		case CLK_A2SYS:
+			/* i2s-out1 asrc clock is from asm_ck(low) */
+			afe_msk_write(PWR1_ASM_CON1, 0x0 << 6, 0x3 << 6);
+			/* asm_ck(low) is from a2sys */
+			/* it affects both i2s-out1 and i2s-out2 */
+			afe_msk_write(AUDIO_TOP_CON3,
+				(0x1 << 21) | (0x1 << 20),
+				(0x1 << 21) | (0x1 << 20));
+			break;
+		default:
+			break;
+		}
+		break;
+	case AFE_I2S_OUT_2:
+		switch (source) {
+		case CLK_ASM_HIGH:
+			/* i2s-out2 asrc clock is from asm_ck(high) */
+			afe_msk_write(PWR1_ASM_CON1, 0x2 << 9, 0x3 << 9);
+			break;
+		case CLK_ASM_MID:
+			/* i2s-out2 asrc clock is from asm_ck(mid) */
+			afe_msk_write(PWR1_ASM_CON1, 0x1 << 9, 0x3 << 9);
+			break;
+		case CLK_ASM_LOW:
+			/* i2s-out2 asrc clock is from asm_ck(low) */
+			afe_msk_write(PWR1_ASM_CON1, 0x0 << 9, 0x3 << 9);
+			/* asm_ck(low) is from ckgen */
+			/* it affects both i2s-out1 and i2s-out2 */
+			afe_msk_write(AUDIO_TOP_CON3, 0x0 << 20, 0x1 << 20);
+			break;
+		case CLK_A1SYS:
+			/* i2s-out2 asrc clock is from asm_ck(low) */
+			afe_msk_write(PWR1_ASM_CON1, 0x0 << 9, 0x3 << 9);
+			/* asm_ck(low) is from a1sys */
+			/* it affects both i2s-out1 and i2s-out2 */
+			afe_msk_write(AUDIO_TOP_CON3,
+				(0x0 << 21) | (0x1 << 20),
+				(0x1 << 21) | (0x1 << 20));
+			break;
+		case CLK_A2SYS:
+			/* i2s-out2 asrc clock is from asm_ck(low) */
+			afe_msk_write(PWR1_ASM_CON1, 0x0 << 9, 0x3 << 9);
+			/* asm_ck(low) is from a2sys */
+			/* it affects both i2s-out1 and i2s-out2 */
+			afe_msk_write(AUDIO_TOP_CON3,
+				(0x1 << 21) | (0x1 << 20),
+				(0x1 << 21) | (0x1 << 20));
+			break;
+		default:
+			break;
+		}
+		break;
+	case AFE_I2S_OUT_3:
+		switch (source) {
+		case CLK_ASM_HIGH:
+			/* i2s-out3 asrc clock is from asm_ck(high) */
+			afe_msk_write(PWR2_ASM_CON1, 0x2 << 12, 0x3 << 12);
+			break;
+		case CLK_ASM_MID:
+			/* i2s-out3 asrc clock is from asm_ck(mid) */
+			afe_msk_write(PWR2_ASM_CON1, 0x1 << 12, 0x3 << 12);
+			break;
+		case CLK_ASM_LOW:
+			/* i2s-out3 asrc clock is from asm_ck(low) */
+			afe_msk_write(PWR2_ASM_CON1, 0x0 << 12, 0x3 << 12);
+			break;
+		case CLK_A1SYS:
+			pr_err("%s() error: i2s-out3 asrc clock can't select CLK_A1SYS\n", __func__);
+			break;
+		case CLK_A2SYS:
+			pr_err("%s() error: i2s-out3 asrc clock can't select CLK_A2SYS\n", __func__);
+			break;
+		default:
+			break;
+		}
+		break;
+	case AFE_I2S_OUT_4:
+		switch (source) {
+		case CLK_ASM_HIGH:
+			/* i2s-out4 asrc clock is from asm_ck(high) */
+			afe_msk_write(PWR2_ASM_CON1, 0x2 << 15, 0x3 << 15);
+			break;
+		case CLK_ASM_MID:
+			/* i2s-out4 asrc clock is from asm_ck(mid) */
+			afe_msk_write(PWR2_ASM_CON1, 0x1 << 15, 0x3 << 15);
+			break;
+		case CLK_ASM_LOW:
+			/* i2s-out4 asrc clock is from asm_ck(low) */
+			afe_msk_write(PWR2_ASM_CON1, 0x0 << 15, 0x3 << 15);
+			break;
+		case CLK_A1SYS:
+			pr_err("%s() error: i2s-out4 asrc clock can't select CLK_A1SYS\n", __func__);
+			break;
+		case CLK_A2SYS:
+			pr_err("%s() error: i2s-out4 asrc clock can't select CLK_A2SYS\n", __func__);
+			break;
+		default:
+			break;
+		}
+		break;
+	case AFE_I2S_OUT_5:
+		switch (source) {
+		case CLK_ASM_HIGH:
+			/* i2s-out5 asrc clock is from asm_ck(high) */
+			afe_msk_write(PWR2_ASM_CON1, 0x2 << 18, 0x3 << 18);
+			break;
+		case CLK_ASM_MID:
+			/* i2s-out5 asrc clock is from asm_ck(mid) */
+			afe_msk_write(PWR2_ASM_CON1, 0x1 << 18, 0x3 << 18);
+			break;
+		case CLK_ASM_LOW:
+			/* i2s-out5 asrc clock is from asm_ck(low) */
+			afe_msk_write(PWR2_ASM_CON1, 0x0 << 18, 0x3 << 18);
+			break;
+		case CLK_A1SYS:
+			pr_err("%s() error: i2s-out5 asrc clock can't select CLK_A1SYS\n", __func__);
+			break;
+		case CLK_A2SYS:
+			pr_err("%s() error: i2s-out5 asrc clock can't select CLK_A2SYS\n", __func__);
+			break;
+		default:
+			break;
+		}
+		break;
+	case AFE_I2S_OUT_6:
+		switch (source) {
+		case CLK_ASM_HIGH:
+			/* i2s-out6 asrc clock is from asm_ck(high) */
+			afe_msk_write(PWR2_ASM_CON1, 0x2 << 21, 0x3 << 21);
+			break;
+		case CLK_ASM_MID:
+			/* i2s-out6 asrc clock is from asm_ck(mid) */
+			afe_msk_write(PWR2_ASM_CON1, 0x1 << 21, 0x3 << 21);
+			break;
+		case CLK_ASM_LOW:
+			/* i2s-out6 asrc clock is from asm_ck(low) */
+			afe_msk_write(PWR2_ASM_CON1, 0x0 << 21, 0x3 << 21);
+			break;
+		case CLK_A1SYS:
+			pr_err("%s() error: i2s-out6 asrc clock can't select CLK_A1SYS\n", __func__);
+			break;
+		case CLK_A2SYS:
+			pr_err("%s() error: i2s-out6 asrc clock can't select CLK_A2SYS\n", __func__);
+			break;
+		default:
+			break;
+		}
+		break;
+	case AFE_I2S_OUT_NUM:
+		pr_err("%s() error: i2s-AFE_I2S_OUT_NUM\n", __func__);
+		break;
+	}
+}
 
 void afe_enable(int en)
 {
@@ -4033,8 +4215,8 @@ void afe_loopback_set(int en)
 
 /**************** ultra low-power ****************/
 
-int lp_configurate(volatile struct lp_info *lp, u32 base, u32 size,
-		   unsigned int rate, unsigned int channels, unsigned int bitwidth)
+int lp_configurate(volatile struct lp_info *lp, u32 base, u32 size, unsigned int rate, unsigned int channels,
+		    unsigned int bitwidth, int i2s_id, enum audio_irq_id irq_id, int slave_clock)
 {
 	memset((void *)lp, 0x00, sizeof(struct lp_info));
 	lp->m.mode = LP_MODE_NORMAL;
@@ -4043,6 +4225,9 @@ int lp_configurate(volatile struct lp_info *lp, u32 base, u32 size,
 	lp->rate = rate;
 	lp->channels = channels;
 	lp->bitwidth = bitwidth;
+	lp->i2s_id = i2s_id;
+	lp->irq_id = irq_id;
+	lp->use_i2s_slave_clock = slave_clock;
 	return 0;
 }
 
