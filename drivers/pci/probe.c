@@ -2528,3 +2528,184 @@ void __init pci_sort_breadthfirst(void)
 {
 	bus_sort_breadthfirst(&pci_bus_type, &pci_sort_bf_cmp);
 }
+
+#ifdef CONFIG_PCIE_MEDIATEK
+static int pci_register_host_bridge(struct pci_host_bridge *bridge)
+{
+	struct device *parent = bridge->dev.parent;
+	struct resource_entry *window, *n;
+	struct pci_bus *bus, *b;
+	resource_size_t offset;
+	LIST_HEAD(resources);
+	struct resource *res;
+	char addr[64], *fmt;
+	const char *name;
+	int err;
+
+	bus = pci_alloc_bus(NULL);
+	if (!bus)
+		return -ENOMEM;
+
+	bridge->bus = bus;
+
+	/* temporarily move resources off the list */
+	list_splice_init(&bridge->windows, &resources);
+	bus->sysdata = bridge->sysdata;
+	bus->msi = bridge->msi;
+	bus->ops = bridge->ops;
+	bus->number = bus->busn_res.start = bridge->busnr;
+#ifdef CONFIG_PCI_DOMAINS_GENERIC
+	bus->domain_nr = pci_bus_find_domain_nr(bus, parent);
+#endif
+
+	b = pci_find_bus(pci_domain_nr(bus), bridge->busnr);
+	if (b) {
+		/* If we already got to this bus through a different bridge, ignore it */
+		dev_dbg(&b->dev, "bus already known\n");
+		err = -EEXIST;
+		goto free;
+	}
+
+	dev_set_name(&bridge->dev, "pci%04x:%02x", pci_domain_nr(bus),
+		     bridge->busnr);
+
+	err = pcibios_root_bridge_prepare(bridge);
+	if (err)
+		goto free;
+
+	err = device_register(&bridge->dev);
+	if (err)
+		put_device(&bridge->dev);
+
+	bus->bridge = get_device(&bridge->dev);
+	device_enable_async_suspend(bus->bridge);
+	pci_set_bus_of_node(bus);
+	pci_set_bus_msi_domain(bus);
+
+	if (!parent)
+		set_dev_node(bus->bridge, pcibus_to_node(bus));
+
+	bus->dev.class = &pcibus_class;
+	bus->dev.parent = bus->bridge;
+
+	dev_set_name(&bus->dev, "%04x:%02x", pci_domain_nr(bus), bus->number);
+	name = dev_name(&bus->dev);
+
+	err = device_register(&bus->dev);
+	if (err)
+		goto unregister;
+
+	pcibios_add_bus(bus);
+
+	/* Create legacy_io and legacy_mem files for this bus */
+	pci_create_legacy_files(bus);
+
+	if (parent)
+		dev_info(parent, "PCI host bridge to bus %s\n", name);
+	else
+		pr_info("PCI host bridge to bus %s\n", name);
+
+	/* Add initial resources to the bus */
+	resource_list_for_each_entry_safe(window, n, &resources) {
+		list_move_tail(&window->node, &bridge->windows);
+		offset = window->offset;
+		res = window->res;
+
+		if (res->flags & IORESOURCE_BUS)
+			pci_bus_insert_busn_res(bus, bus->number, res->end);
+		else
+			pci_bus_add_resource(bus, res, 0);
+
+		if (offset) {
+			if (resource_type(res) == IORESOURCE_IO)
+				fmt = " (bus address [%#06llx-%#06llx])";
+			else
+				fmt = " (bus address [%#010llx-%#010llx])";
+
+			snprintf(addr, sizeof(addr), fmt,
+				 (unsigned long long)(res->start - offset),
+				 (unsigned long long)(res->end - offset));
+		} else
+			addr[0] = '\0';
+
+		dev_info(&bus->dev, "root bus resource %pR%s\n", res, addr);
+	}
+
+	down_write(&pci_bus_sem);
+	list_add_tail(&bus->node, &pci_root_buses);
+	up_write(&pci_bus_sem);
+
+	return 0;
+
+unregister:
+	put_device(&bridge->dev);
+	device_unregister(&bridge->dev);
+
+free:
+	kfree(bus);
+	return err;
+}
+
+int pci_scan_root_bus_bridge(struct pci_host_bridge *bridge)
+{
+	struct resource_entry *window;
+	bool found = false;
+	struct pci_bus *b;
+	int max, bus, ret;
+
+	if (!bridge)
+		return -EINVAL;
+
+	resource_list_for_each_entry(window, &bridge->windows)
+		if (window->res->flags & IORESOURCE_BUS) {
+			found = true;
+			break;
+		}
+
+	ret = pci_register_host_bridge(bridge);
+	if (ret < 0)
+		return ret;
+
+	b = bridge->bus;
+	bus = bridge->busnr;
+
+	if (!found) {
+		dev_info(&b->dev,
+		 "No busn resource found for root bus, will use [bus %02x-ff]\n",
+			bus);
+		pci_bus_insert_busn_res(b, bus, 255);
+	}
+
+	max = pci_scan_child_bus(b);
+
+	if (!found)
+		pci_bus_update_busn_res_end(b, max);
+
+	return 0;
+}
+EXPORT_SYMBOL(pci_scan_root_bus_bridge);
+
+static void devm_pci_release_host_bridge_dev(struct device *dev)
+{
+	struct pci_host_bridge *bridge = to_pci_host_bridge(dev);
+
+	if (bridge->release_fn)
+		bridge->release_fn(bridge);
+}
+
+struct pci_host_bridge *devm_pci_alloc_host_bridge(struct device *dev,
+						   size_t priv)
+{
+	struct pci_host_bridge *bridge;
+
+	bridge = devm_kzalloc(dev, sizeof(*bridge) + priv, GFP_KERNEL);
+	if (!bridge)
+		return NULL;
+
+	INIT_LIST_HEAD(&bridge->windows);
+	bridge->dev.release = devm_pci_release_host_bridge_dev;
+
+	return bridge;
+}
+EXPORT_SYMBOL(devm_pci_alloc_host_bridge);
+#endif
