@@ -431,7 +431,7 @@ struct am_osd_plane *am_osd_plane_create(struct meson_drm *priv, u32 type)
 				 &am_osd_plane_funs,
 				 supported_drm_formats,
 				 ARRAY_SIZE(supported_drm_formats),
-				 type, "%s", plane_name);
+				 NULL, type, "%s", plane_name);
 
 	drm_plane_helper_add(plane, &am_osd_helper_funcs);
 	osd_drm_debugfs_add(&(osd_plane->plane_debugfs_dir),
