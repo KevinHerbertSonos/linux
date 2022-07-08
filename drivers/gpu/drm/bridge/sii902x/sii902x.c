@@ -986,6 +986,9 @@ static int sii9022_cec_adap_transmit(struct cec_adapter *adap, u8 attempts,
 
 	//~ sii9022_print_cec_frame(msg);
 
+	/* Override the programmed initiator address to be whatever the message uses */
+	SiIRegioWrite(REG_CEC_TX_INIT, (msg->msg[0] & 0xf0) >> 4);
+
 	if (msg->len == 1) {
 		pr_debug("cec msg header only\n");
 		SI_CpiSendPing(msg->msg[0] & 0xf);//send polling msg
