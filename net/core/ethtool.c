@@ -2458,6 +2458,35 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	int rc;
 	netdev_features_t old_features;
 
+#ifdef CONFIG_SONOS
+#ifdef CONFIG_MV88E6020_PHY
+	if (of_find_compatible_node(NULL, NULL, "Sonos,mv88e6020_phy")) {
+		extern void mv88e6020_sonos_get_port_status(unsigned int port,
+			struct ethtool_cmd *cmd);
+		struct ethtool_cmd cmd = { .cmd = ETHTOOL_GSET };
+		int port;
+
+		if (copy_from_user(&ethcmd, useraddr, sizeof(ethcmd))) {
+			return -EFAULT;
+		}
+		if (ethcmd == ETHTOOL_GSET) {
+			if (strcmp("eth0", ifr->ifr_name) == 0)
+				port = 0;
+			else if (strcmp("eth1", ifr->ifr_name) == 0)
+				port = 1;
+			else
+				return -ENODEV;
+
+			mv88e6020_sonos_get_port_status(port, &cmd);
+
+			if (copy_to_user(useraddr, &cmd, sizeof(cmd)))
+				return -EFAULT;
+			return 0;
+		}
+	}
+#endif
+#endif
+
 	if (!dev || !netif_device_present(dev))
 		return -ENODEV;
 
