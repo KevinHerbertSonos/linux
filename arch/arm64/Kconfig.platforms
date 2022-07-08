@@ -92,6 +92,46 @@ config ARCH_MEDIATEK
 	help
 	  Support for Mediatek MT65xx & MT81xx ARMv8 SoCs
 
+config MACH_MT8518
+	bool "MediaTek MT8518"
+	select ARCH_MEDIATEK
+	select GENERIC_TIME
+	select GENERIC_CLOCKEVENTS
+	select ARCH_HAS_CPUFREQ
+	select ARM_AMBA
+	select CPU_V7
+	select HAVE_SMP
+	select NEED_MACH_MEMORY_H
+	select IRQ_DOMAIN
+	select IRQ_DOMAIN_DEBUG
+	select GENERIC_SCHED_CLOCK
+	select ARMV7_COMPAT
+	select ARMV7_COMPAT_CPUINFO
+	select CPU_IDLE
+	select ARM_CPUIDLE
+	select PINCTRL
+	select PINCTRL_MT8518
+	select MFD_SYSCON
+	select MTK_BASE_POWER
+	select MTK_GIC_V3_EXT
+	select MTK_SYSIRQ
+	select MTK_SYSTRACKER_V2
+	select MTK_BOUNCING_CHECK if AEE_FEATURE
+	select PM_DEVFREQ
+	select MTK_EMI
+	select MTK_SYS_CIRQ
+	select FAST_CIRQ_CLONE_FLUSH
+	select MTK_DEBUG_LATCH
+	select MTK_DFD_INTERNAL_DUMP
+	select MTK_PLAT_SRAM_FLAG
+	select MTK_L2C_PARITY_CHECK
+	select DEBUG_TIMEKEEPING
+	help
+	  This enables support for MediaTek MT8518.
+	  If you need support for MediaTek MT8518, say Y here.
+	  This including the basic selections,
+	  But not all of them.
+
 config ARCH_MESON
 	bool "Amlogic Platforms"
 	select PINCTRL
