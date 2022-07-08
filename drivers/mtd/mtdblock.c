@@ -42,6 +42,11 @@ struct mtdblk_dev {
 	unsigned long cache_offset;
 	unsigned int cache_size;
 	enum { STATE_EMPTY, STATE_CLEAN, STATE_DIRTY } cache_state;
+#ifdef CONFIG_SONOS
+	int bmshift;
+	unsigned long size;
+	unsigned int *badmap;
+#endif
 };
 
 static struct mutex mtdblks_lock;
@@ -260,7 +265,20 @@ static int mtdblock_readsect(struct mtd_blktrans_dev *dev,
 			      unsigned long block, char *buf)
 {
 	struct mtdblk_dev *mtdblk = container_of(dev, struct mtdblk_dev, mbd);
-	return do_cached_read(mtdblk, block<<9, 512, buf);
+	int ret;
+
+#ifdef CONFIG_SONOS
+	if (mtdblk->badmap) {
+		unsigned long newblock;
+
+		newblock = mtdblk->badmap[block >> (mtdblk->bmshift - 9)]
+			+ ((block & ((1 << (mtdblk->bmshift - 9)) - 1)) << 9);
+               ret = do_cached_read(mtdblk, newblock, 512, buf);
+	} else
+#endif
+		ret = do_cached_read(mtdblk, block<<9, 512, buf);
+	
+	return ret;
 }
 
 static int mtdblock_writesect(struct mtd_blktrans_dev *dev,
@@ -362,6 +380,31 @@ static void mtdblock_add_mtd(struct mtd_blktrans_ops *tr, struct mtd_info *mtd)
 
 	if (!(mtd->flags & MTD_WRITEABLE))
 		dev->mbd.readonly = 1;
+
+#ifdef CONFIG_SONOS
+	if (mtd->type == MTD_NANDFLASH) {
+		int x;
+		int j;
+		dev->bmshift = 14; /*erase blocks are 16k*/
+		dev->badmap = kmalloc(sizeof(unsigned int) * (mtd->size >> dev->bmshift), GFP_KERNEL);
+		if (dev->badmap == 0) {
+			kfree(dev);
+			return;
+		}
+		printk("Scanning NAND flash mtd %p (%llu eraseblocks) "
+			"for bad blocks\n", mtd, (mtd->size >> dev->bmshift));
+		j = 0;
+		for (x = 0; x < (mtd->size >> dev->bmshift); x++) {
+			if ((mtd->block_isbad(mtd, (x << dev->bmshift)))) {
+				printk("block %d is bad\n",x);
+				continue;
+			}
+			dev->badmap[j++] = x << dev->bmshift;
+		}
+		dev->size = j << (dev->bmshift - 9);
+		printk("After accounting for bad blocks, mtd %p size (in 512 byte blocks) is %ld\n", mtd, dev->size);
+	}
+#endif
 
 	if (add_mtd_blktrans_dev(&dev->mbd))
 		kfree(dev);

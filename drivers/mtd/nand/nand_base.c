@@ -486,6 +486,19 @@ static int nand_block_checkbad(struct mtd_info *mtd, loff_t ofs, int getchip,
 	return nand_isbad_bbt(mtd, ofs, allowbbt);
 }
 
+#ifdef CONFIG_SONOS
+int nand_get_device_exp(struct nand_chip *chip,
+		struct mtd_info *mtd, int new_state)
+{
+	return nand_get_device(chip, mtd, new_state);
+}
+
+void nand_release_device_exp(struct mtd_info *mtd)
+{
+	nand_release_device(mtd);
+}
+#endif
+
 /**
  * panic_nand_wait_ready - [GENERIC] Wait for the ready pin after commands.
  * @mtd:	MTD device structure
@@ -2932,6 +2945,9 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 	/* Read manufacturer and device IDs */
 	*maf_id = chip->read_byte(mtd);
 	*dev_id = chip->read_byte(mtd);
+#ifdef CONFIG_SONOS
+	mtd->devid = (*maf_id << 8) | *dev_id;
+#endif
 
 	/* Try again to make sure, as some systems the bus-hold or other
 	 * interface concerns can cause random data which looks like a

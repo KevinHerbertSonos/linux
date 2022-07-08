@@ -30,6 +30,10 @@ static char * __initdata root_device_name;
 static char __initdata saved_root_name[64];
 static int __initdata root_wait;
 
+#ifdef CONFIG_SONOS
+extern char nandroot[64];
+#endif
+
 dev_t ROOT_DEV;
 
 static int __init load_ramdisk(char *str)
@@ -455,6 +459,10 @@ void __init prepare_namespace(void)
 
 	md_run_setup();
 
+#ifdef CONFIG_SONOS
+	if (nandroot[0])
+		strlcpy(saved_root_name, nandroot, sizeof(saved_root_name));
+#endif
 	if (saved_root_name[0]) {
 		root_device_name = saved_root_name;
 		if (!strncmp(root_device_name, "mtd", 3) ||

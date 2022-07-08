@@ -28,6 +28,10 @@
 
 #include <sysdev/fsl_soc.h>
 #include <sysdev/cpm2_pic.h>
+#ifdef CONFIG_SONOS
+#include <linux/of_gpio.h>
+#include <linux/mtd/nand-gpio.h>
+#endif
 
 #include "pq2.h"
 
@@ -58,6 +62,12 @@ static struct cpm_pin mpc8272_ads_pins[] = {
 	{0, 12, CPM_PIN_OUTPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY}, /* Green or Red */
 	{0, 13, CPM_PIN_OUTPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY}, /* Yellow */
 	{3, 30, CPM_PIN_OUTPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY}, /* White */
+
+	/* NAND */
+	{2, 29, CPM_PIN_INPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY},  /* rdy */
+	{2, 28, CPM_PIN_OUTPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY}, /* nce */
+	{0, 23, CPM_PIN_OUTPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY}, /* ale */
+	{0, 22, CPM_PIN_OUTPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY}, /* cle */
 
 	/* FCC1 */
 	{0, 14, CPM_PIN_INPUT | CPM_PIN_PRIMARY},
@@ -97,8 +107,9 @@ static struct cpm_pin mpc8272_ads_pins[] = {
 	{2, 17, CPM_PIN_INPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY},
 
 	/* MDIO */
-	{3, 14, CPM_PIN_INPUT | CPM_PIN_SECONDARY},
-	{3, 15, CPM_PIN_INPUT | CPM_PIN_SECONDARY},
+	{3, 23, CPM_PIN_OUTPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY},
+	{3, 24, CPM_PIN_OUTPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY},
+	{3, 25, CPM_PIN_OUTPUT | CPM_PIN_GPIO | CPM_PIN_PRIMARY},
 #else
 	/* SCC1 */
 	{3, 30, CPM_PIN_OUTPUT | CPM_PIN_SECONDARY},
@@ -186,6 +197,73 @@ static void __init init_ioports(void)
 	cpm2_clk_setup(CPM_CLK_FCC2, CPM_CLK16, CPM_CLK_TX);
 #endif
 }
+
+#ifdef CONFIG_SONOS
+#if defined(CONFIG_MTD_NAND_GPIO) || defined(CONFIG_MTD_NAND_GPIO_MODULE)
+static struct resource mpc8272_nand_resource = {
+	.start = 0,
+};
+
+struct gpio_nand_platdata mpc8272_nand_platdata = {
+};
+
+static struct platform_device mpc8272_nand_device = {
+	.name		= "gpio-nand",
+	.id		= -1,
+	.resource	= &mpc8272_nand_resource,
+	.num_resources	= 1,
+	.dev		= {
+			.platform_data = &mpc8272_nand_platdata,
+			},
+};
+
+static int __init mpc8272_init_nand(void)
+{
+	struct device_node *np;
+	const u32 *data;
+	int len;
+	struct gpio_nand_platdata *plat = &mpc8272_nand_platdata;
+
+	np = of_find_compatible_node(NULL, NULL, "gpio-control-nand");
+	if ( !np ) {
+                return -ENODEV;
+	}
+
+	if ( of_address_to_resource(np, 0, &mpc8272_nand_resource) ) {
+		pr_err("mpc8272-nand: resource failed\n");
+                return -ENODEV;
+	}
+
+	plat->gpio_rdy = of_get_gpio(np, 0);
+	plat->gpio_nce = of_get_gpio(np, 1);
+	plat->gpio_ale = of_get_gpio(np, 2);
+	plat->gpio_cle = of_get_gpio(np, 3);
+
+        data = of_get_property(np, "chip-delay", &len);
+        if (data && len == 4) {
+                plat->chip_delay = *data;
+	}
+
+        data = of_get_property(np, "bank-width", &len);
+        if (data && len == 4) {
+		u32 val = *data;
+		if (val == 2) {
+			plat->options |= NAND_BUSWIDTH_16;
+		} else if (val != 1) {
+			printk("invalid bank-width %u\n", val);
+		}
+	}
+	platform_device_register(&mpc8272_nand_device);
+	return 0;
+}
+#else
+static inline int mpc8272_init_nand(void)
+{
+	return 0;
+}
+#endif
+module_init(mpc8272_init_nand);
+#endif
 
 static void __init mpc8272_ads_setup_arch(void)
 {

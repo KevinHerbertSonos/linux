@@ -941,6 +941,51 @@ static int mtd_ioctl(struct file *file, u_int cmd, u_long arg)
 		break;
 	}
 
+#ifdef CONFIG_SONOS
+       case MEMREADSPECIAL:
+        {
+                struct mtd_special_info rsi;
+                void *b;
+                if (copy_from_user(&rsi, argp, sizeof(rsi)))
+                        return -EFAULT;
+                if (!mtd->read_special)
+                        return -EOPNOTSUPP;
+
+                b = kmalloc(rsi.datalen, GFP_KERNEL);
+                if (!b) return -ENOMEM;
+                if ((rsi.preop_cmdlen > 8) || (rsi.addrlen > 8)) {
+                        ret = -EFAULT;
+                        goto readscrub;
+                }
+
+                ret = mtd->read_special(mtd, &rsi, b);
+                if (ret) {
+                        goto readscrub;
+                }
+                ret = (access_ok(VERIFY_WRITE, (char *)rsi.databuf, rsi.datalen))? 0 : (-EFAULT);
+                if (ret) {
+                        goto readscrub;
+                }
+                if (copy_to_user((void *)rsi.databuf, b, rsi.datalen)) {
+                        ret = -EFAULT;
+                        goto readscrub;
+                }
+
+                ret = 0;
+readscrub:
+                memset((void *)b, 0, rsi.datalen);
+                kfree(b);
+                memset((void *)&rsi, 0, sizeof(rsi));
+                return ret;
+                break;
+        }
+	case MEMGETDEVID:
+	{
+		if (copy_to_user((void *)arg, &(mtd->devid), sizeof(u_int32_t))) return -EFAULT;
+		return 0;
+	}
+#endif	// CONFIG_SONOS
+
 #ifdef CONFIG_MTD_PARTITIONS
 	case BLKPG:
 	{

@@ -90,6 +90,16 @@ struct mtd_info_user {
 	__u32 eccsize;
 };
 
+struct mtd_special_info {
+	__u32 datalen;
+	void *databuf;
+	__u32 preop_cmdlen;
+	__u8 preop_cmd[8];
+	__u32 addrlen;
+	__u8 addr[8];
+	__u32 alternate_read;
+};
+
 struct region_info_user {
 	__u32 offset;		/* At which this region starts,
 					 * from the beginning of the MTD */
@@ -127,6 +137,16 @@ struct otp_info {
 #define MEMWRITEOOB64		_IOWR('M', 21, struct mtd_oob_buf64)
 #define MEMREADOOB64		_IOWR('M', 22, struct mtd_oob_buf64)
 #define MEMISLOCKED		_IOR('M', 23, struct erase_info_user)
+
+#define MEMSNAP                 _IO('M', 32)
+#define MEMUNSNAP               _IO('M', 33)
+#define MEMSETGEOMETRY          _IOW('M', 34, struct partition_geometry)
+#define MEMREADSPECIAL          _IOW('M', 35, struct mtd_special_info)
+#define MEMGETDEVID             _IOR('M', 36, uint32_t)
+#define MEMWRITESPECIAL         _IOW('M', 37, struct mtd_special_info)
+
+#define MTDSETLASTBLOCK         _IO('M', 38)
+#define MTDWRITEPHYSICAL        _IOW('M', 39, struct mtd_write_physical)
 
 /*
  * Obsolete legacy interface. Keep it in order not to break userspace
