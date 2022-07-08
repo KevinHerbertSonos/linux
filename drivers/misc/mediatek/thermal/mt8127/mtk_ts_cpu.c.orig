@@ -26,6 +26,7 @@
 #include <linux/slab.h>
 #include <linux/clk.h>
 #include <linux/reboot.h>
+#include <linux/nvmem-consumer.h>
 #include "mtk_thermal_typedefs.h"
 /* #include <mach/mt_ptp.h> */
 /* #include "../../base/power/mt2701/mt_spm.h" */
@@ -61,8 +62,6 @@ struct clk *clk_auxadc;
 #endif
 
 #define THERMAL_DEVICE_NAME_2701	"mediatek,mt2701-thermal"
-#define THERMAL_DEVICE_NAME_8127	"mediatek,mt8127-thermal"
-
 
 /* 1: turn on adaptive AP cooler; 0: turn off */
 #define CPT_ADAPTIVE_AP_COOLER (0)
@@ -693,56 +692,75 @@ void mtkts_dump_cali_info(void)
 }
 
 
-static void thermal_cal_prepare(void)
+static void thermal_cal_prepare(struct device *dev)
 {
-	U32 temp0 = 0, temp1 = 0;
+	U32 *buf;
+	struct nvmem_cell *cell;
+	size_t len;
 
-	temp0 = get_devinfo_with_index(7);
-	temp1 = get_devinfo_with_index(8);
-	/* temp2 = get_devinfo_with_index(9); */
+	g_adc_ge_t = 512;
+	g_adc_oe_t = 512;
+	g_degc_cali = 40;
+	g_o_slope = 0;
+	g_o_slope_sign = 0;
+	g_o_vtsmcu1 = 287;
+	g_o_vtsmcu2 = 287;
+	g_o_vtsabb = 287;
 
-	pr_debug("[Power/CPU_Thermal] [Thermal calibration] temp0=0x%x, temp1=0x%x\n", temp0, temp1);
+	cell = nvmem_cell_get(dev, "calibration-data");
+	if (IS_ERR(cell))
+		return;
 
-	g_adc_ge_t      = ((temp1 & 0xFFC00000)>>22);/*ADC_GE_T [9:0] *(0x10206104)[31:22]*/
-	g_adc_oe_t      = ((temp1 & 0x003FF000)>>12);/*ADC_OE_T [9:0] *(0x10206104)[21:12]*/
+	buf = (u32 *)nvmem_cell_read(cell, &len);
 
-	g_o_vtsmcu1     = (temp0 & 0x03FE0000)>>17;  /*O_VTSMCU1    (9b) *(0x10206100)[25:17]*/
-	g_o_vtsmcu2     = (temp0 & 0x0001FF00)>>8;   /*O_VTSMCU2    (9b) *(0x10206100)[16:8]*/
+	nvmem_cell_put(cell);
 
-	g_o_vtsabb      = (temp1 & 0x000001FF);      /*O_VTSABB     (9b) *(0x10206104)[8:0]*/
+	if (IS_ERR(buf))
+		return;
 
-	g_degc_cali     = (temp0 & 0x0000007E)>>1;   /*DEGC_cali    (6b) *(0x10206100)[6:1]*/
-	g_adc_cali_en_t = (temp0 & 0x00000001);      /*ADC_CALI_EN_T(1b) *(0x10206100)[0]*/
-	g_o_slope       = (temp0 & 0xFC000000)>>26;  /*O_SLOPE      (6b) *(0x10206100)[31:26]*/
-	g_o_slope_sign  = (temp0 & 0x00000080)>>7;   /*O_SLOPE_SIGN (1b) *(0x10206100)[7]*/
-
-	g_id            = (temp1 & 0x00000200)>>9;   /*ID           (1b) *(0x10206104)[9]*/
-
-	if (g_id == 0)
-		g_o_slope = 0;
-
-	if (g_adc_cali_en_t != 1) {
-		pr_debug("This sample is not Thermal calibrated\n");
-		g_adc_ge_t = 512;
-		g_adc_oe_t = 512;
-		g_degc_cali = 40;
-		g_o_slope = 0;
-		g_o_slope_sign = 0;
-		g_o_vtsmcu1 = 260;
-		g_o_vtsmcu2 = 260;
-		g_o_vtsabb = 260;
+	if (len < 3 * sizeof(u32)) {
+		dev_err(dev, "invalid calibration data\n");
+		goto out;
 	}
 
-	pr_debug("[Power/CPU_Thermal] [Thermal calibration] g_adc_ge_t      = 0x%x\n", g_adc_ge_t);
-	pr_debug("[Power/CPU_Thermal] [Thermal calibration] g_adc_oe_t      = 0x%x\n", g_adc_oe_t);
-	pr_debug("[Power/CPU_Thermal] [Thermal calibration] g_degc_cali     = 0x%x\n", g_degc_cali);
-	pr_debug("[Power/CPU_Thermal] [Thermal calibration] g_adc_cali_en_t = 0x%x\n", g_adc_cali_en_t);
-	pr_debug("[Power/CPU_Thermal] [Thermal calibration] g_o_slope       = 0x%x\n", g_o_slope);
-	pr_debug("[Power/CPU_Thermal] [Thermal calibration] g_o_slope_sign  = 0x%x\n", g_o_slope_sign);
-	pr_debug("[Power/CPU_Thermal] [Thermal calibration] g_id            = 0x%x\n", g_id);
-	pr_debug("[Power/CPU_Thermal] [Thermal calibration] g_o_vtsmcu1     = 0x%x\n", g_o_vtsmcu1);
-	pr_debug("[Power/CPU_Thermal] [Thermal calibration] g_o_vtsmcu2     = 0x%x\n", g_o_vtsmcu2);
-	pr_debug("[Power/CPU_Thermal] [Thermal calibration] g_o_vtsabb      = 0x%x\n", g_o_vtsabb);
+	calefuse1 = buf[0];
+	calefuse2 = buf[1];
+	calefuse3 = buf[2];
+	pr_err("[Thermal calibration] buf[0]=0x%x, buf[1]=0x%x, , buf[2]=0x%x\n", buf[0], buf[1], buf[2]);
+
+	g_adc_cali_en_t  = (buf[2] & 0x01000000)>>24;    /* ADC_CALI_EN_T(1b) *(0x1020642c)[24] */
+
+	if (g_adc_cali_en_t) {
+		g_adc_ge_t		= (buf[0] & 0x003FF000)>>12;	/*ADC_GE_T [9:0] *(0x10206424)[21:12] */
+		g_adc_oe_t		= (buf[0] & 0xFFC00000)>>22;	/*ADC_OE_T [9:0] *(0x10206424)[31:22] */
+		g_o_vtsmcu1		= (buf[1] & 0x000001FF);	/* O_VTSMCU1    (9b) *(0x10206428)[8:0] */
+		g_o_vtsmcu2		= (buf[1] & 0x0003FE00)>>9;	/* O_VTSMCU2    (9b) *(0x10206428)[17:9] */
+		g_o_vtsabb		= (buf[2] & 0x0003FE00)>>9;	/* O_VTSABB     (9b) *(0x1020642c)[17:9] */
+		g_degc_cali		= (buf[2] & 0x00FC0000)>>18;	/* DEGC_cali    (6b) *(0x1020642c)[23:18] */
+		g_o_slope		= (buf[2] & 0xFC000000)>>26;	/* O_SLOPE      (6b) *(0x1020642c)[31:26] */
+		g_o_slope_sign		= (buf[2] & 0x02000000)>>25;	/* O_SLOPE_SIGN (1b) *(0x1020642c)[25] */
+		g_id			= (buf[1] & 0x08000000)>>27;
+		if (g_id == 0)
+			g_o_slope = 0;
+	} else {
+		dev_info(dev, "Device not calibrated, using default calibration values\n");
+	}
+
+	pr_err("[Power/CPU_Thermal] [Thermal calibration] g_adc_ge_t      = 0x%x\n", g_adc_ge_t);
+	pr_err("[Power/CPU_Thermal] [Thermal calibration] g_adc_oe_t      = 0x%x\n", g_adc_oe_t);
+	pr_err("[Power/CPU_Thermal] [Thermal calibration] g_degc_cali     = 0x%x\n", g_degc_cali);
+	pr_err("[Power/CPU_Thermal] [Thermal calibration] g_adc_cali_en_t = 0x%x\n", g_adc_cali_en_t);
+	pr_err("[Power/CPU_Thermal] [Thermal calibration] g_o_slope       = 0x%x\n", g_o_slope);
+	pr_err("[Power/CPU_Thermal] [Thermal calibration] g_o_slope_sign  = 0x%x\n", g_o_slope_sign);
+	pr_err("[Power/CPU_Thermal] [Thermal calibration] g_id            = 0x%x\n", g_id);
+	pr_err("[Power/CPU_Thermal] [Thermal calibration] g_o_vtsmcu1     = 0x%x\n", g_o_vtsmcu1);
+	pr_err("[Power/CPU_Thermal] [Thermal calibration] g_o_vtsmcu2     = 0x%x\n", g_o_vtsmcu2);
+	pr_err("[Power/CPU_Thermal] [Thermal calibration] g_o_vtsabb      = 0x%x\n", g_o_vtsabb);
+
+out:
+	kfree(buf);
+
+	return;
 }
 
 static void thermal_cal_prepare_2(U32 ret)
@@ -2497,7 +2515,7 @@ static int tscpu_thermal_probe(struct platform_device *pdev)
 		return 0;
 #endif
 
-	thermal_cal_prepare();
+	thermal_cal_prepare(&pdev->dev);
 
 	thermal_calibration();
 
@@ -2594,7 +2612,6 @@ err_unreg:
 #ifdef CONFIG_OF
 static const struct of_device_id mt_thermal_of_match[] = {
 	{.compatible = THERMAL_DEVICE_NAME_2701,},
-	{.compatible = THERMAL_DEVICE_NAME_8127,},
 	{},
 };
 #endif

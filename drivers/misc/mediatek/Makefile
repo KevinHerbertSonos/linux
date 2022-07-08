@@ -38,6 +38,7 @@ endif
 obj-$(CONFIG_MTK_SCHED_RQAVG_KS) += sched/
 obj-$(CONFIG_MTK_TURNKEY_THERMAL) += thermal/
 obj-$(CONFIG_MTK_THERMAL) += thermal/
+obj-$(CONFIG_MTK_SOC_THERMAL) += thermal/
 obj-$(CONFIG_MTK_IRRX) += irrx/
 ifeq ($(CONFIG_MTK_SENSOR_SUPPORT),y)
 obj-$(CONFIG_MTK_HWMON)	    += hwmon/

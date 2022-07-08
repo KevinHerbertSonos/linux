@@ -24,22 +24,22 @@ ccflags-y  += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/
 
 obj-  := dummy.o
 
-ifeq ($(CONFIG_MTK_SOC_THERMAL), y)
+ifeq ($(CONFIG_THERMAL), y)
 else
     obj-y += mtk_thermal_dummy.o
 endif
 
-#obj-$(CONFIG_MTK_THERMAL) += mtk_thermal_platform.o
-obj-$(CONFIG_MTK_THERMAL) += mtk_thermal_timer.o
+#obj-$(CONFIG_THERMAL) += mtk_thermal_platform.o
+obj-$(CONFIG_THERMAL) += mtk_thermal_timer.o
 
-obj-$(CONFIG_MTK_THERMAL) += mtk_ts_wmt.o
+obj-$(CONFIG_THERMAL) += mtk_ts_wmt.o
 
 # Only included in non-EVB projects
 ifneq ($(CONFIG_POWER_EXT), y)
-    obj-$(CONFIG_MTK_THERMAL) += mtk_cooler_bcct.o
-    obj-$(CONFIG_MTK_THERMAL) += mtk_ts_battery.o
+    obj-$(CONFIG_THERMAL) += mtk_cooler_bcct.o
+    obj-$(CONFIG_THERMAL) += mtk_ts_battery.o
 endif
 
-obj-$(CONFIG_MTK_THERMAL) += mtk_ts_bts.o
-obj-$(CONFIG_MTK_SOC_THERMAL) += mtk_ts_cpu.o
-obj-$(CONFIG_MTK_THERMAL) += mtk_ts_abb.o
+obj-$(CONFIG_THERMAL) += mtk_ts_bts.o
+obj-$(CONFIG_THERMAL) += mtk_ts_cpu.o
+obj-$(CONFIG_THERMAL) += mtk_ts_abb.o
