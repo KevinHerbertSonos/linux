@@ -43,14 +43,27 @@ static enum fpga_mgr_states ice40_fpga_ops_state(struct fpga_manager *mgr)
 static int ice40_fpga_ops_write_init(struct fpga_manager *mgr, u32 flags,
 				     const char *buf, size_t count)
 {
+	uint8_t dummy_buff = 0;
 	struct ice40_fpga_priv *priv = mgr->priv;
 	struct spi_device *dev = priv->dev;
 	struct spi_message message;
+	/**
+	 * Need to provide a valid buffer(non-NULL) to make the "bufferless transfer" working.
+	 * Without that the MTK backend driver refuses to pull the CS low. It simply returns
+	 * when the buffers are empty or length 0
+	 */
 	struct spi_transfer assert_cs_then_reset_delay = {
+		.len = sizeof(dummy_buff),
+		.tx_buf = (void*)&dummy_buff,
 		.cs_change   = 1,
 		.delay_usecs = ICE40_SPI_RESET_DELAY
 	};
+	/**
+	 * CS line should stay low and should not go high since the ice40x programming guide mandates CS
+	 * line to be low during the entire process
+	 */
 	struct spi_transfer housekeeping_delay_then_release_cs = {
+		.cs_change   = 1,
 		.delay_usecs = ICE40_SPI_HOUSEKEEPING_DELAY
 	};
 	int ret;
@@ -165,7 +178,7 @@ static int ice40_fpga_probe(struct spi_device *spi)
 		return ret;
 	}
 
-	priv->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
+	priv->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(priv->reset)) {
 		ret = PTR_ERR(priv->reset);
 		dev_err(dev, "Failed to get CRESET_B GPIO: %d\n", ret);

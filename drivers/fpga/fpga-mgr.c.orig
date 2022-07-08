@@ -114,16 +114,10 @@ int fpga_mgr_firmware_load(struct fpga_manager *mgr, u32 flags,
 
 	mgr->state = FPGA_MGR_STATE_FIRMWARE_REQ;
 
-#ifdef CONFIG_SONOS
-	/* Use the request_firmware_direct() function instead of request_firmware() so that
-	 * it returns immedietly instead of waiting for a timeout */
-	ret = request_firmware_direct(&fw, image_name, dev);
-#else
 	ret = request_firmware(&fw, image_name, dev);
-#endif
 	if (ret) {
 		mgr->state = FPGA_MGR_STATE_FIRMWARE_REQ_ERR;
-		dev_err(dev, "Requested firmware '%s' not found, try again\n", image_name);
+		dev_err(dev, "Error requesting firmware %s\n", image_name);
 		return ret;
 	}
 
