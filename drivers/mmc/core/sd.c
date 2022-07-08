@@ -215,7 +215,7 @@ static int mmc_decode_scr(struct mmc_card *card)
 static int mmc_read_ssr(struct mmc_card *card)
 {
 	unsigned int au, es, et, eo;
-	int err, i;
+	int err, i, max_au;
 	u32 *ssr;
 
 	if (!(card->csd.cmdclass & CCC_APP_SPEC)) {
@@ -239,12 +239,15 @@ static int mmc_read_ssr(struct mmc_card *card)
 	for (i = 0; i < 16; i++)
 		ssr[i] = be32_to_cpu(ssr[i]);
 
+	/* SD3.0 increases max AU size to 64MB (0xF) from 4MB (0x9) */
+	max_au = card->scr.sda_spec3 ? 0xF : 0x9;
+
 	/*
 	 * UNSTUFF_BITS only works with four u32s so we have to offset the
 	 * bitfield positions accordingly.
 	 */
 	au = UNSTUFF_BITS(ssr, 428 - 384, 4);
-	if (au > 0 && au <= 9) {
+	if (au > 0 && au <= max_au) {
 		card->ssr.au = 1 << (au + 4);
 		es = UNSTUFF_BITS(ssr, 408 - 384, 16);
 		et = UNSTUFF_BITS(ssr, 402 - 384, 6);
@@ -511,6 +514,13 @@ static int sd_set_bus_speed_mode(struct mmc_card *card, u8 *status)
 	else {
 		mmc_set_timing(card->host, timing);
 		mmc_set_clock(card->host, card->sw_caps.uhs_max_dtr);
+
+		/*
+		 * FIXME: Sandisk SD3.0 cards DDR50 mode requires such
+		 * delay to get stable, without this delay we may encounter
+		 * CRC errors after switch to DDR50 mode
+		 */
+		mmc_delay(100);
 	}
 
 	return 0;
@@ -646,8 +656,13 @@ static int mmc_sd_init_uhs_card(struct mmc_card *card)
 	if (err)
 		goto out;
 
-	/* SPI mode doesn't define CMD19 */
-	if (!mmc_host_is_spi(card->host) && card->host->ops->execute_tuning) {
+	/*
+	 * SPI mode doesn't define CMD19 and tuning is only valid for SDR50 and
+	 * SDR104 mode SD-cards. Note that tuning is mandatory for SDR104.
+	 */
+	if (!mmc_host_is_spi(card->host) && card->host->ops->execute_tuning &&
+			(card->sd_bus_speed == UHS_SDR50_BUS_SPEED ||
+			 card->sd_bus_speed == UHS_SDR104_BUS_SPEED)) {
 		mmc_host_clk_hold(card->host);
 		err = card->host->ops->execute_tuning(card->host,
 						      MMC_SEND_TUNING_BLOCK);

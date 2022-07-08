@@ -65,7 +65,7 @@ config USB_EHCI_HCD
 
 config USB_EHCI_ROOT_HUB_TT
 	bool "Root Hub Transaction Translators"
-	depends on USB_EHCI_HCD || USB_CHIPIDEA_HOST
+	depends on USB_EHCI_HCD
 	---help---
 	  Some EHCI chips have vendor-specific extensions to integrate
 	  transaction translators, so that no OHCI or UHCI companion
@@ -77,7 +77,7 @@ config USB_EHCI_ROOT_HUB_TT
 
 config USB_EHCI_TT_NEWSCHED
 	bool "Improved Transaction Translator scheduling"
-	depends on USB_EHCI_HCD || USB_CHIPIDEA_HOST
+	depends on USB_EHCI_HCD
 	default y
 	---help---
 	  This changes the periodic scheduling code to fill more of the low
@@ -188,7 +188,6 @@ config USB_EHCI_HCD_AT91
 config USB_EHCI_MSM
 	tristate "Support for Qualcomm QSD/MSM on-chip EHCI USB controller"
 	depends on ARCH_MSM
-	depends on USB_PHY
 	select USB_EHCI_ROOT_HUB_TT
 	select USB_MSM_OTG
 	---help---
@@ -702,3 +701,20 @@ config USB_HCD_SSB
 	  for ehci and ohci.
 
 	  If unsure, say N.
+
+config USB_HCD_TEST_MODE
+	bool "HCD test mode support"
+	---help---
+	  Say 'Y' to enable additional software test modes that may be
+	  supported by the host controller drivers.
+
+	  One such test mode is the Embedded High-speed Host Electrical Test
+	  (EHSET) for EHCI host controller hardware, specifically the "Single
+	  Step Set Feature" test.  Typically this will be enabled for On-the-Go
+	  or embedded hosts that need to undergo USB-IF compliance testing with
+	  the aid of special testing hardware.  In the future, this may expand
+	  to include other tests that require support from a HCD driver.
+
+	  This option is of interest only to developers who need to validate
+	  their USB hardware designs.  It is not needed for normal use.  If
+	  unsure, say N.

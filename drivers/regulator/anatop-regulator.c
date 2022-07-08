@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2011-2015 Freescale Semiconductor, Inc. All Rights Reserved.
  */
 
 /*
@@ -34,6 +34,23 @@
 #define LDO_RAMP_UP_UNIT_IN_CYCLES      64 /* 64 cycles per step */
 #define LDO_RAMP_UP_FREQ_IN_MHZ         24 /* cycle based on 24M OSC */
 
+#define REG_SET         0x4
+#define REG_CLR         0x8
+#define SOC_PU_FIELD_OFFSET   0x9
+#define ANATOP_CORE_REG_OFFSET	0x140
+
+/*
+ * for CORE, SOC and PU regulator, the register field
+ * has following definition: 00001 -- Target core voltage
+ * = 0.725V, which means the lowest setting in this
+ * field is 0.725V once the regulator is enabled. So
+ * when these regulators are turned on from off status,
+ * we need to count the voltage step of 0V to 0.7V, it will
+ * need additional delay, so the additional step number is
+ * 700mV / 25mV = 28.
+ */
+#define CORE_REG_ENABLE_STEP_ADD 28
+
 struct anatop_regulator {
 	const char *name;
 	u32 control_reg;
@@ -48,6 +65,7 @@ struct anatop_regulator {
 	int max_voltage;
 	struct regulator_desc rdesc;
 	struct regulator_init_data *initdata;
+	u32 enable_bit;
 };
 
 static int anatop_regmap_set_voltage_sel(struct regulator_dev *reg,
@@ -97,12 +115,110 @@ static int anatop_regmap_get_voltage_sel(struct regulator_dev *reg)
 	return regulator_get_voltage_sel_regmap(reg);
 }
 
+/*
+ * currently on anatop regulators, only PU regulator supports
+ * enable/disable function, and its voltage must be equal
+ * to SOC voltage, so we need to get SOC voltage then set
+ * into PU regulator. Other regulators are always on due
+ * to hardware design, so enable/disable/is_enabled/enable_time
+ * functions are only used by PU regulator.
+ */
+static int anatop_regmap_enable(struct regulator_dev *reg)
+{
+	struct anatop_regulator *anatop_reg = rdev_get_drvdata(reg);
+	u32 val;
+
+	if (!anatop_reg->control_reg)
+		return -ENOTSUPP;
+
+	regmap_read(anatop_reg->anatop, anatop_reg->control_reg, &val);
+	if (anatop_reg->control_reg == ANATOP_CORE_REG_OFFSET) {
+		val &= ((1 << anatop_reg->vol_bit_width) - 1) <<
+			(anatop_reg->vol_bit_shift + SOC_PU_FIELD_OFFSET);
+		val >>= SOC_PU_FIELD_OFFSET;
+	} else {
+		/* Only non-core regulator has enable bit */
+		val = 1 << anatop_reg->enable_bit;
+	}
+	regmap_write(anatop_reg->anatop, anatop_reg->control_reg + REG_SET,
+			val);
+
+	return 0;
+}
+
+static int anatop_regmap_disable(struct regulator_dev *reg)
+{
+	struct anatop_regulator *anatop_reg = rdev_get_drvdata(reg);
+	u32 val;
+
+	if (!anatop_reg->control_reg)
+		return -ENOTSUPP;
+
+	if (anatop_reg->control_reg == ANATOP_CORE_REG_OFFSET)
+		val = ((1 << anatop_reg->vol_bit_width) - 1)
+			<< anatop_reg->vol_bit_shift;
+	else
+		val = 1 << anatop_reg->enable_bit;
+	regmap_write(anatop_reg->anatop, anatop_reg->control_reg + REG_CLR,
+			val);
+
+	return 0;
+}
+
+static int anatop_regmap_is_enabled(struct regulator_dev *reg)
+{
+	struct anatop_regulator *anatop_reg = rdev_get_drvdata(reg);
+	u32 val;
+
+	if (!anatop_reg->control_reg)
+		return -ENOTSUPP;
+
+	regmap_read(anatop_reg->anatop, anatop_reg->control_reg, &val);
+	if (anatop_reg->control_reg == ANATOP_CORE_REG_OFFSET) {
+		val = (val >> anatop_reg->vol_bit_shift) &
+			((1 << anatop_reg->vol_bit_width) - 1);
+		/*
+		 * look internal pu regulator as disabled
+		 * in ldo-bypass mode(0x1f)
+		 */
+		if ((!strcmp(reg->desc->name, "vddpu")) && (val == 0x1f))
+			val = 0;
+		else
+			val = val ? 1 : 0;
+	} else {
+		val = !!(val & (1 << anatop_reg->enable_bit));
+	}
+
+	return val;
+}
+
+static int anatop_regmap_enable_time(struct regulator_dev *reg)
+{
+	struct anatop_regulator *anatop_reg = rdev_get_drvdata(reg);
+	u32 val, soc_val;
+
+	if (!anatop_reg->control_reg)
+		return -ENOTSUPP;
+
+	regmap_read(anatop_reg->anatop, anatop_reg->control_reg, &val);
+	soc_val = (val >> (anatop_reg->vol_bit_shift +
+		SOC_PU_FIELD_OFFSET)) &
+		((1 << anatop_reg->vol_bit_width) - 1);
+
+	return anatop_regmap_set_voltage_time_sel(reg, 0,
+		soc_val + CORE_REG_ENABLE_STEP_ADD);
+}
+
 static struct regulator_ops anatop_rops = {
 	.set_voltage_sel = anatop_regmap_set_voltage_sel,
 	.set_voltage_time_sel = anatop_regmap_set_voltage_time_sel,
 	.get_voltage_sel = anatop_regmap_get_voltage_sel,
+	.enable = anatop_regmap_enable,
+	.disable = anatop_regmap_disable,
+	.is_enabled = anatop_regmap_is_enabled,
 	.list_voltage = regulator_list_voltage_linear,
 	.map_voltage = regulator_map_voltage_linear,
+	.enable_time = anatop_regmap_enable_time,
 };
 
 static int anatop_regulator_probe(struct platform_device *pdev)
@@ -183,6 +299,8 @@ static int anatop_regulator_probe(struct platform_device *pdev)
 			     &sreg->delay_bit_width);
 	of_property_read_u32(np, "anatop-delay-bit-shift",
 			     &sreg->delay_bit_shift);
+	/* Only non-core regulator (3p0, 2p5, and 1p1) has enable bit */
+	of_property_read_u32(np, "anatop-enable-bit", &sreg->enable_bit);
 
 	rdesc->n_voltages = (sreg->max_voltage - sreg->min_voltage) / 25000 + 1
 			    + sreg->min_bit_val;

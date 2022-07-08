@@ -23,6 +23,7 @@
 #include <linux/list.h>
 #include <linux/err.h>
 #include <linux/dma-mapping.h>
+#include <linux/workqueue.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
@@ -101,11 +102,18 @@ EXPORT_SYMBOL_GPL(usb_gadget_unmap_request);
 
 /* ------------------------------------------------------------------------- */
 
+static void usb_gadget_state_work(struct work_struct *work)
+{
+	struct usb_gadget	*gadget = work_to_gadget(work);
+
+	sysfs_notify(&gadget->dev.kobj, NULL, "status");
+}
+
 void usb_gadget_set_state(struct usb_gadget *gadget,
 		enum usb_device_state state)
 {
 	gadget->state = state;
-	sysfs_notify(&gadget->dev.kobj, NULL, "state");
+	schedule_work(&gadget->work);
 }
 EXPORT_SYMBOL_GPL(usb_gadget_set_state);
 
@@ -192,6 +200,7 @@ int usb_add_gadget_udc_release(struct device *parent, struct usb_gadget *gadget,
 		goto err1;
 
 	dev_set_name(&gadget->dev, "gadget");
+	INIT_WORK(&gadget->work, usb_gadget_state_work);
 	gadget->dev.parent = parent;
 
 	dma_set_coherent_mask(&gadget->dev, parent->coherent_dma_mask);
@@ -309,6 +318,7 @@ found:
 		usb_gadget_remove_driver(udc);
 
 	kobject_uevent(&udc->dev.kobj, KOBJ_REMOVE);
+	flush_work(&gadget->work);
 	device_unregister(&udc->dev);
 	device_unregister(&gadget->dev);
 }
@@ -411,6 +421,8 @@ int usb_gadget_unregister_driver(struct usb_gadget_driver *driver)
 	list_for_each_entry(udc, &udc_list, list)
 		if (udc->driver == driver) {
 			usb_gadget_remove_driver(udc);
+			usb_gadget_set_state(udc->gadget,
+					USB_STATE_NOTATTACHED);
 			ret = 0;
 			break;
 		}
@@ -493,6 +505,7 @@ static USB_UDC_ATTR(is_a_peripheral);
 static USB_UDC_ATTR(b_hnp_enable);
 static USB_UDC_ATTR(a_hnp_support);
 static USB_UDC_ATTR(a_alt_hnp_support);
+static USB_UDC_ATTR(is_selfpowered);
 
 static struct attribute *usb_udc_attrs[] = {
 	&dev_attr_srp.attr,
@@ -506,6 +519,7 @@ static struct attribute *usb_udc_attrs[] = {
 	&dev_attr_b_hnp_enable.attr,
 	&dev_attr_a_hnp_support.attr,
 	&dev_attr_a_alt_hnp_support.attr,
+	&dev_attr_is_selfpowered.attr,
 	NULL,
 };
 

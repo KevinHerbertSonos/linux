@@ -3,6 +3,7 @@
  *
  * Copyright 2007, 2008 Wolfson Microelectronics PLC.
  * Copyright 2008 SlimLogic Ltd.
+ * Copyright (C) 2015 Freescale Semiconductor, Inc.
  *
  * Author: Liam Girdwood <lrg@slimlogic.co.uk>
  *
@@ -1619,6 +1620,7 @@ static int _regulator_do_enable(struct regulator_dev *rdev)
 	}
 
 	trace_regulator_enable_complete(rdev_get_name(rdev));
+	_notifier_call_chain(rdev, REGULATOR_EVENT_ENABLE, NULL);
 
 	return 0;
 }
@@ -1667,6 +1669,7 @@ static int _regulator_enable(struct regulator_dev *rdev)
  * NOTE: the output value can be set by other drivers, boot loader or may be
  * hardwired in the regulator.
  */
+extern struct mutex set_cpufreq_lock;
 int regulator_enable(struct regulator *regulator)
 {
 	struct regulator_dev *rdev = regulator->rdev;
@@ -1681,9 +1684,15 @@ int regulator_enable(struct regulator *regulator)
 			return ret;
 	}
 
+	if (!strcmp(rdev->desc->name, "vddpu"))
+		mutex_lock(&set_cpufreq_lock);
+
 	mutex_lock(&rdev->mutex);
 	ret = _regulator_enable(rdev);
 	mutex_unlock(&rdev->mutex);
+
+	if (!strcmp(rdev->desc->name, "vddpu"))
+		mutex_unlock(&set_cpufreq_lock);
 
 	if (ret != 0 && rdev->supply)
 		regulator_disable(rdev->supply);
@@ -1696,6 +1705,7 @@ static int _regulator_do_disable(struct regulator_dev *rdev)
 {
 	int ret;
 
+	_notifier_call_chain(rdev, REGULATOR_EVENT_PRE_DISABLE, NULL);
 	trace_regulator_disable(rdev_get_name(rdev));
 
 	if (rdev->ena_pin) {
@@ -1773,9 +1783,15 @@ int regulator_disable(struct regulator *regulator)
 	if (regulator->always_on)
 		return 0;
 
+	if (!strcmp(rdev->desc->name, "vddpu"))
+		mutex_lock(&set_cpufreq_lock);
+
 	mutex_lock(&rdev->mutex);
 	ret = _regulator_disable(rdev);
 	mutex_unlock(&rdev->mutex);
+
+	if (!strcmp(rdev->desc->name, "vddpu"))
+		mutex_unlock(&set_cpufreq_lock);
 
 	if (ret == 0 && rdev->supply)
 		regulator_disable(rdev->supply);

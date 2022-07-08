@@ -32,6 +32,7 @@ struct device_node *of_allnodes;
 EXPORT_SYMBOL(of_allnodes);
 struct device_node *of_chosen;
 struct device_node *of_aliases;
+static struct device_node *of_stdout;
 
 DEFINE_MUTEX(of_aliases_mutex);
 
@@ -1080,6 +1081,15 @@ int of_property_count_strings(struct device_node *np, const char *propname)
 }
 EXPORT_SYMBOL_GPL(of_property_count_strings);
 
+void of_print_phandle_args(const char *msg, const struct of_phandle_args *args)
+{
+	int i;
+	printk("%s %s", msg, of_node_full_name(args->np));
+	for (i = 0; i < args->args_count; i++)
+		printk(i ? ",%08x" : ":%08x", args->args[i]);
+	printk("\n");
+}
+
 /**
  * of_parse_phandle - Resolve a phandle property to a device_node pointer
  * @np: Pointer to device node holding phandle property
@@ -1578,6 +1588,35 @@ static void of_alias_add(struct alias_prop *ap, struct device_node *np,
 		 ap->alias, ap->stem, ap->id, of_node_full_name(np));
 }
 
+/*
+ * of_alias_max_index() - get the maximum index for a given alias stem
+ * @stem:   The alias stem for which the maximum index is searched for
+ *
+ * Given an alias stem (the alias without the number) this function
+ * returns the maximum number for which an alias exists.
+ *
+ * Return: The maximum existing alias index or -ENODEV if no alias
+ *         exists for this stem.
+ */
+int of_alias_max_index(const char *stem)
+{
+	struct alias_prop *app;
+	int max = -ENODEV;
+
+	mutex_lock(&of_aliases_mutex);
+
+	list_for_each_entry(app, &aliases_lookup, link) {
+		if (strcmp(app->stem, stem))
+			continue;
+		if (app->id > max)
+			max = app->id;
+	}
+
+	mutex_unlock(&of_aliases_mutex);
+
+	return max;
+}
+
 /**
  * of_alias_scan - Scan all properties of 'aliases' node
  *
@@ -1595,6 +1634,15 @@ void of_alias_scan(void * (*dt_alloc)(u64 size, u64 align))
 	of_chosen = of_find_node_by_path("/chosen");
 	if (of_chosen == NULL)
 		of_chosen = of_find_node_by_path("/chosen@0");
+
+	if (of_chosen) {
+		const char *name;
+
+		name = of_get_property(of_chosen, "linux,stdout-path", NULL);
+		if (name)
+			of_stdout = of_find_node_by_path(name);
+	}
+
 	of_aliases = of_find_node_by_path("/aliases");
 	if (!of_aliases)
 		return;
@@ -1704,3 +1752,19 @@ const char *of_prop_next_string(struct property *prop, const char *cur)
 	return curv;
 }
 EXPORT_SYMBOL_GPL(of_prop_next_string);
+
+/**
+ * of_device_is_stdout_path - check if a device node matches the
+ *                            linux,stdout-path property
+ *
+ * Check if this device node matches the linux,stdout-path property
+ * in the chosen node. return true if yes, false otherwise.
+ */
+int of_device_is_stdout_path(struct device_node *dn)
+{
+	if (!of_stdout)
+		return false;
+
+	return of_stdout == dn;
+}
+EXPORT_SYMBOL_GPL(of_device_is_stdout_path);

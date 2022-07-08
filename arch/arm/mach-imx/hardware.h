@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2007 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright 2004-2014 Freescale Semiconductor, Inc.
  * Copyright 2008 Juergen Beisert, kernel@pengutronix.de
  *
  * This program is free software; you can redistribute it and/or
@@ -20,6 +20,9 @@
 #ifndef __ASM_ARCH_MXC_HARDWARE_H__
 #define __ASM_ARCH_MXC_HARDWARE_H__
 
+#ifndef __ASSEMBLY__
+#include <asm/io.h>
+#endif
 #include <asm/sizes.h>
 
 #define addr_in_module(addr, mod) \
@@ -86,17 +89,21 @@
  *	AIPS1	0x53f00000+0x100000	->	0xf5700000+0x100000
  *	AIPS2	0x63f00000+0x100000	->	0xf5300000+0x100000
  * mx6q:
- *	SCU	0x00a00000+0x004000	->	0xf4000000+0x004000
+ *	OCRAMS	0x008f8000+0x004000	->	0xf48f8000+0x004000
+ *	IRAM	0x00900000+0x040000	->	0xf4900000+0x040000
+ *	SCU	0x00a00000+0x004000	->	0xf4a00000+0x004000
+ *	AIPS1	0x02000000+0x100000	->	0xf4200000+0x100000
+ *	AIPS2	0x02100000+0x100000	->	0xf4300000+0x100000
  *	CCM	0x020c4000+0x004000	->	0xf42c4000+0x004000
  *	ANATOP	0x020c8000+0x004000	->	0xf42c8000+0x004000
- *	UART4	0x021f0000+0x004000	->	0xf42f0000+0x004000
+ *	UART4	0x021f0000+0x004000	->	0xf43f0000+0x004000
  */
 #define IMX_IO_P2V(x)	(						\
-			(((x) & 0x80000000) >> 7) |			\
 			(0xf4000000 +					\
-			(((x) & 0x50000000) >> 6) +			\
-			(((x) & 0x0b000000) >> 4) +			\
-			(((x) & 0x000fffff))))
+			(((x) & 0x50000000) >> 4) +			\
+			(((x) & 0x0a000000) >> 4) +			\
+			(((x) & 0x00ffffff))))
+
 
 #define IMX_IO_ADDRESS(x)	IOMEM(IMX_IO_P2V(x))
 
@@ -104,6 +111,7 @@
 
 #include "mx51.h"
 #include "mx53.h"
+#include "mx6.h"
 #include "mx3x.h"
 #include "mx31.h"
 #include "mx35.h"
