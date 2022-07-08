@@ -44,6 +44,7 @@
 #include "truncate.h"
 
 #include <trace/events/ext4.h>
+#include <trace/events/android_fs.h>
 
 #define MPAGE_DA_EXTENT_TAIL 0x01
 
@@ -1172,6 +1173,40 @@ static int ext4_block_write_begin(struct page *page, loff_t pos, unsigned len,
 	return err;
 }
 #endif
+
+
+#ifdef CONFIG_AMLOGIC_VMAP
+noinline void trace_android_fs_datawrite_wrap(struct inode *inode,
+					 loff_t pos, unsigned int len)
+{
+	if (trace_android_fs_datawrite_start_enabled()) {
+		char *path, pathbuf[MAX_TRACE_PATHBUF_LEN];
+
+		path = android_fstrace_get_pathname(pathbuf,
+						    MAX_TRACE_PATHBUF_LEN,
+						    inode);
+		trace_android_fs_datawrite_start(inode, pos, len,
+						 current->pid, path,
+						 current->comm);
+	}
+}
+
+noinline void trace_android_fs_dataread_wrap(struct inode *inode,
+					 loff_t pos, unsigned int len)
+{
+	if (trace_android_fs_dataread_start_enabled()) {
+		char *path, pathbuf[MAX_TRACE_PATHBUF_LEN];
+
+		path = android_fstrace_get_pathname(pathbuf,
+						    MAX_TRACE_PATHBUF_LEN,
+						    inode);
+		trace_android_fs_dataread_start(inode, pos, len,
+						current->pid, path,
+						current->comm);
+	}
+}
+#endif
+
 
 static int ext4_write_begin(struct file *file, struct address_space *mapping,
 			    loff_t pos, unsigned len, unsigned flags,
