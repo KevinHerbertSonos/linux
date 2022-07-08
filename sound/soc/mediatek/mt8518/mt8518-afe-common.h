@@ -539,6 +539,7 @@ struct mt8518_afe_private {
 	u32 dl8_max_main_channels;
 	/* locks */
 	spinlock_t afe_ctrl_lock;
+	struct timer_list spdifin_detect_err_timer;
 	struct regmap *topckgen;
 	struct regmap *scpsys;
 	int block_dpidle_ref_cnt;
