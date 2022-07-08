@@ -53,6 +53,7 @@ int mtk_crypto_driver_init(void)
 
 	return 0;
 }
+EXPORT_SYMBOL(mtk_crypto_driver_init);
 
 /*
 *    un-initialize mtk crypto driver
@@ -71,6 +72,7 @@ int mtk_crypto_driver_uninit(void)
 
 	return 0;
 }
+EXPORT_SYMBOL(mtk_crypto_driver_uninit);
 
 /*
 *    initialize mtk crypto driver context
