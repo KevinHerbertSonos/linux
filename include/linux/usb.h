@@ -651,8 +651,9 @@ struct usb_device {
 	struct usb3_lpm_parameters u2_params;
 	unsigned lpm_disable_count;
 #ifdef CONFIG_AMLOGIC_USB
-	struct delayed_work		portstatus_work;
+	struct delayed_work portstatus_work;
 #endif
+ 
 };
 #define	to_usb_device(d) container_of(d, struct usb_device, dev)
 
@@ -677,7 +678,7 @@ extern struct usb_device *usb_hub_find_child(struct usb_device *hdev,
 			port1 <= hdev->maxchild; \
 			child = usb_hub_find_child(hdev, ++port1)) \
 		if (!child) \
-			continue; else
+			 continue; else
 
 /* USB device locking */
 #define usb_lock_device(udev)			device_lock(&(udev)->dev)

@@ -608,6 +608,14 @@ unsigned long read_word_at_a_time(const void *addr)
 # define nokprobe_inline	inline
 #endif
 
+#ifndef __norecordmcount
+#define __norecordmcount
+#endif
+
+#ifndef __nocfi
+#define __nocfi
+#endif
+
 /*
  * This is needed in functions which generate the stack canary, see
  * arch/x86/kernel/smpboot.c::start_secondary() for an example.
