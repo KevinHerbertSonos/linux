@@ -26,6 +26,9 @@
 #include <linux/task_work.h>
 #include "pnode.h"
 #include "internal.h"
+#if defined(CONFIG_SONOS_SECBOOT)
+#include <linux/sonos_sec_lock.h>
+#endif
 
 /* Maximum number of mounts in a mount namespace */
 unsigned int sysctl_mount_max __read_mostly = 100000;
@@ -2865,10 +2868,17 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	/* Separate the per-mountpoint flags */
 	if (flags & MS_NOSUID)
 		mnt_flags |= MNT_NOSUID;
+#if defined(CONFIG_SONOS_SECBOOT)
+	if ((flags & MS_NODEV) || !sonos_allow_mount_dev())
+		mnt_flags |= MNT_NODEV;
+	if ((flags & MS_NOEXEC) || !sonos_allow_mount_exec())
+		mnt_flags |= MNT_NOEXEC;
+#else
 	if (flags & MS_NODEV)
 		mnt_flags |= MNT_NODEV;
 	if (flags & MS_NOEXEC)
 		mnt_flags |= MNT_NOEXEC;
+#endif
 	if (flags & MS_NOATIME)
 		mnt_flags |= MNT_NOATIME;
 	if (flags & MS_NODIRATIME)
