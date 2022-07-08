@@ -2034,6 +2034,46 @@ static int mtk_add_mac(struct mtk_eth *eth, struct device_node *np)
 	return 0;
 }
 
+/* driver bus management functions */
+
+#ifdef CONFIG_PM_SLEEP
+static int mtk_suspend(struct device *dev)
+{
+	struct mtk_eth *eth = dev_get_drvdata(dev);
+	int i;
+
+	for (i = 0; i < MTK_MAC_COUNT; i++) {
+		struct net_device *netdev = eth->netdev[i];
+		if (!netdev)
+			continue;
+		if (netif_running(netdev)) {
+			netif_device_detach(netdev);
+			mtk_stop(netdev);
+		}
+	}
+	return 0;
+}
+
+static int mtk_resume(struct device *dev)
+{
+	struct mtk_eth *eth = dev_get_drvdata(dev);
+	int i;
+
+	for (i = 0; i < MTK_MAC_COUNT; i++) {
+		struct net_device *netdev = eth->netdev[i];
+		if (!netdev)
+			continue;
+		if (netif_running(netdev)) {
+			mtk_open(netdev);
+			netif_device_attach(netdev);
+		}
+	}
+	return 0;
+}
+#endif
+
+static SIMPLE_DEV_PM_OPS(mtk_pm_ops, mtk_suspend, mtk_resume);
+
 struct mtk_eth_cb cb = {
 	.mtk_mdio_read = _mtk_mdio_read,
 	.mtk_mdio_write = _mtk_mdio_write,
@@ -2093,6 +2133,7 @@ static int mtk_probe(struct platform_device *pdev)
 					  "mediatek,switch", 0);
 
 	eth->dev = &pdev->dev;
+	dev_set_drvdata(eth->dev, eth);
 	eth->msg_enable = netif_msg_init(mtk_msg_level, MTK_DEFAULT_MSG_ENABLE);
 	INIT_WORK(&eth->pending_work, mtk_pending_work);
 
@@ -2247,6 +2288,7 @@ static struct platform_driver mtk_driver = {
 		.name = DRIVER_NAME,
 		.owner = THIS_MODULE,
 		.of_match_table = of_mtk_match,
+		.pm = &mtk_pm_ops,
 	},
 };
 
