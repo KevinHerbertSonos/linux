@@ -97,6 +97,12 @@ static int mtk_wdt_set_timeout(struct watchdog_device *wdt_dev,
 	void __iomem *wdt_base = mtk_wdt->wdt_base;
 	u32 reg;
 
+	/*
+	* Ensure the hardware watchdog gives the lockup detection system enough
+	* time to trigger a panic. As a last resort do we want the watchdog to reboot
+	*/
+	timeout = min((timeout*5), (unsigned int)WDT_MAX_TIMEOUT);
+
 	wdt_dev->timeout = timeout;
 
 	/*
