@@ -587,6 +587,9 @@ static int wmt_thz_get_temp(struct thermal_zone_device *thz_dev, int *pv)
 	int temp = 0;
 	int i;
 	int temp_ts[NR_TS_SENSORS];
+#ifdef CONFIG_MTK_WCN_THERMAL_STUB
+	int wifi_ra00, wifi_ra01;
+#endif
 	/* int temp_ts4 = 0; */
 	/* int temp_abb = 0, temp_cpu = 0, temp_gpu = 0, temp_soc = 0; */
 
@@ -595,8 +598,23 @@ static int wmt_thz_get_temp(struct thermal_zone_device *thz_dev, int *pv)
 	/* FIXME: temp_ts[0] (mtk_wcn_cmb_stub_query_ctrl) uses unit of degree,
 	 * while others temp_ts[x] use milli degree
 	 */
+
+#ifdef CONFIG_MTK_WCN_THERMAL_STUB
+	/* WIFI card ra00 */
+	wifi_ra00 = temp_ts[0] & 0xffff;
+	/* WIFI card ra01 */
+	wifi_ra01 = (temp_ts[0] >> 16) & 0xffff;
+
+	if (wifi_ra00 > wifi_ra01)
+		temp = wifi_ra00 * 1000;
+	else
+		temp = wifi_ra01 * 1000;
+
+	wmt_tm_dprintk("%s: ra00 = %d ra01 = %d\n", __func__, wifi_ra00, wifi_ra01);
+#else
 	temp_ts[0] *= 1000;
 	temp = temp_ts[0];
+#endif
 
 	wmt_tm_dprintk("%s: TS1 %d TS2 %d TS3 %d\n", __func__, temp_ts[1], temp_ts[2], temp_ts[3]);
 	wmt_tm_dprintk("%s: WIFI temp %d\n", __func__, temp);
@@ -610,8 +628,11 @@ static int wmt_thz_get_temp(struct thermal_zone_device *thz_dev, int *pv)
 		sensor_select = 0;
 	}
 
+#ifdef CONFIG_MTK_WCN_THERMAL_STUB
+	g_curr_temp = temp;
+#else
 	g_curr_temp = temp_ts[sensor_select];
-
+#endif
 
 	if (temp >= 255000)	/* dummy values */
 		temp = -127000;
@@ -1415,7 +1436,7 @@ static struct thermal_cooling_device_ops mtktspa_cooling_pa2_ops = {
 
 static int wmt_tm_thz_cl_register(void)
 {
-	#define DEFAULT_POLL_TIME 2000	/*Default disable, turn on by thermal policy */
+	#define DEFAULT_POLL_TIME 200	/*Default disable, turn on by thermal policy */
 
 	struct linux_thermal_ctrl_if *p_linux_if = 0;
 

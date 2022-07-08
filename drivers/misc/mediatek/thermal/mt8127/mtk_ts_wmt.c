@@ -36,7 +36,8 @@
 int __attribute__ ((weak))
 mtk_wcn_cmb_stub_query_ctrl(void)
 {
-	pr_err("E_WF: %s doesn't exist\n", __func__);
+	/* MTK recommend to disable it until wifi driver is ready */
+	/* pr_err("E_WF: %s doesn't exist\n", __func__); */
 	return 0;
 }
 
