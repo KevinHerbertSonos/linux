@@ -253,9 +253,6 @@ struct caam_perfmon {
 	u32 faultliodn;	/* FALR - Fault Address LIODN	*/
 	u32 faultdetail;	/* FADR - Fault Addr Detail	*/
 	u32 rsvd3;
-#define CSTA_MOO_0             BIT(8)
-#define CSTA_MOO_1             BIT(9)
-#define CSTA_MOO_SHIFT         8
 	u32 status;		/* CSTA - CAAM Status */
 	u32 smpart;		/* Secure Memory Partition Parameters */
 	u32 smvid;		/* Secure Memory Version ID */

@@ -17,9 +17,6 @@
 #include "ctrl.h"
 #include "sm.h"
 
-uint32_t caam_moo;
-EXPORT_SYMBOL(caam_moo);
-
 /*
  * Descriptor to instantiate RNG State Handle 0 in normal mode and
  * load the JDKEK, TDKEK and TDSK registers
@@ -538,9 +535,6 @@ static int caam_probe(struct platform_device *pdev)
 	pr_debug("%s caam_aclk clock:%d\n", __func__,
 		(int)clk_get_rate(ctrlpriv->caam_aclk));
 #endif
-
-	caam_moo = rd_reg32(&topregs->ctrl.perfmon.status) & (CSTA_MOO_0 | CSTA_MOO_1);
-	caam_moo = caam_moo >> CSTA_MOO_SHIFT;
 
 	/*
 	 * Enable DECO watchdogs and, if this is a PHYS_ADDR_T_64BIT kernel,
