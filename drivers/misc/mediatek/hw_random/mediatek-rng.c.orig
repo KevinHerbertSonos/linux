@@ -33,21 +33,11 @@ static struct hwrng mediatek_rng = {
 
 static int __init rng_init(void)
 {
-	int result;
-
-	result = mtk_crypto_driver_init();
-	if (result != 0) {
-		printk(KERN_CRIT "mediatek-rng: mtk_crypto_driver_init failed: %d\n", result);
-		return -ENODEV;
-	}
-
 	return hwrng_register(&mediatek_rng);
 }
 
 static void __exit rng_exit(void)
 {
-	// no need to call mtk_crypto_driver_uninit(),
-	// since this is a built-in driver
 	hwrng_unregister(&mediatek_rng);
 }
 
