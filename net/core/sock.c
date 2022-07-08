@@ -740,6 +740,11 @@ set_rcvbuf:
 		else
 			sock_reset_flag(sk, SOCK_RXQ_OVFL);
 		break;
+#ifdef CONFIG_SONOS
+	case SO_SONOS_OPTIONS:
+		sk->sonos_options = (unsigned short) val;
+		break;
+#endif
 	default:
 		ret = -ENOPROTOOPT;
 		break;

@@ -336,6 +336,10 @@ struct sock {
 #ifdef CONFIG_SECURITY
 	void			*sk_security;
 #endif
+#if defined(CONFIG_SONOS) || defined(__SONOS_LINUX__)
+	unsigned short sonos_options;
+	unsigned short sonos_options_pad;
+#endif
 	__u32			sk_mark;
 	u32			sk_classid;
 	void			(*sk_state_change)(struct sock *sk);
