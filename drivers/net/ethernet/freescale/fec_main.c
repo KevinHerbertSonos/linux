@@ -69,6 +69,9 @@
 
 #include <asm/cacheflush.h>
 #include <soc/imx/cpuidle.h>
+#if CONFIG_SONOS
+#include <linux/sonos_kernel.h>
+#endif
 
 #include "fec.h"
 
@@ -115,11 +118,16 @@ static struct platform_device_id fec_devtype[] = {
 		.driver_data = FEC_QUIRK_ENET_MAC | FEC_QUIRK_HAS_RACC,
 	}, {
 		.name = "imx6sx-fec",
+#if CONFIG_SONOS
+		.driver_data = FEC_QUIRK_ENET_MAC | FEC_QUIRK_SINGLE_MDIO | FEC_QUIRK_HAS_RACC 
+				,
+#else
 		.driver_data = FEC_QUIRK_ENET_MAC | FEC_QUIRK_HAS_GBIT |
 				FEC_QUIRK_HAS_BUFDESC_EX | FEC_QUIRK_HAS_CSUM |
 				FEC_QUIRK_HAS_VLAN | FEC_QUIRK_HAS_AVB |
 				FEC_QUIRK_ERR007885 | FEC_QUIRK_BUG_CAPTURE |
 				FEC_QUIRK_HAS_RACC | FEC_QUIRK_HAS_COALESCE,
+#endif
 	}, {
 		.name = "imx6ul-fec",
 		.driver_data = FEC_QUIRK_ENET_MAC | FEC_QUIRK_HAS_GBIT |
@@ -237,7 +245,11 @@ MODULE_PARM_DESC(macaddr, "FEC Ethernet MAC address");
 #define FEC_ECR_MAGICEN		(1 << 2)
 #define FEC_ECR_SLEEP		(1 << 3)
 
+#ifdef CONFIG_SONOS
+#define FEC_MII_TIMEOUT		40000 /* us */
+#else
 #define FEC_MII_TIMEOUT		30000 /* us */
+#endif
 
 /* Transmitter timeout */
 #define TX_TIMEOUT (2 * HZ)
@@ -941,6 +953,9 @@ fec_restart(struct net_device *ndev)
 	u32 temp_mac[2];
 	u32 rcntl = OPT_FRAME_SIZE | 0x04;
 	u32 ecntl = FEC_ENET_ETHEREN; /* ETHEREN */
+#ifdef CONFIG_SONOS
+	u32 ftrl = PKT_MAXBUF_SIZE;
+#endif
 
 	/* Whack a reset.  We should wait for this.
 	 * For i.MX6SX SOC, enet use AXI bus, we use disable MAC
@@ -985,6 +1000,13 @@ fec_restart(struct net_device *ndev)
 
 	/* Set MII speed */
 	writel(fep->phy_speed, fep->hwp + FEC_MII_SPEED);
+#if CONFIG_SONOS
+	if ( !(product_is_paramount() ||
+		product_is_neptune())) {
+		writel(readl(fep->hwp + FEC_MII_SPEED) | 0x200,
+			fep->hwp + FEC_MII_SPEED);
+	}
+#endif
 
 #if !defined(CONFIG_M5272)
 	if (fep->quirks & FEC_QUIRK_HAS_RACC) {
@@ -1008,7 +1030,11 @@ fec_restart(struct net_device *ndev)
 	 */
 	if (fep->quirks & FEC_QUIRK_ENET_MAC) {
 		/* Enable flow control and length check */
+#ifdef CONFIG_SONOS
+		rcntl |= 0x00000020;
+#else
 		rcntl |= 0x40000000 | 0x00000020;
+#endif
 
 		/* RGMII, RMII or MII */
 		if (fep->phy_interface == PHY_INTERFACE_MODE_RGMII ||
@@ -1075,6 +1101,14 @@ fec_restart(struct net_device *ndev)
 		rcntl &= ~FEC_ENET_FCE;
 	}
 #endif /* !defined(CONFIG_M5272) */
+
+#ifdef CONFIG_SONOS
+	writel(ftrl, fep->hwp + FEC_FTRL); // Truncate long packets
+
+	rcntl |= FEC_ENET_FCE;
+	if (ndev->flags & IFF_PROMISC)
+		rcntl |= 0x8;
+#endif
 
 	writel(rcntl, fep->hwp + FEC_R_CNTRL);
 
@@ -2503,6 +2537,64 @@ static int fec_enet_us_to_itr_clock(struct net_device *ndev, int us)
 	return us * (fep->itr_clk_rate / 64000) / 1000;
 }
 
+#ifdef CONFIG_SONOS
+/* Set threshold for interrupt coalescing */
+static void fec_enet_itr_coal_set(struct net_device *ndev)
+{
+	struct fec_enet_private *fep = netdev_priv(ndev);
+	const struct platform_device_id *id_entry =
+				platform_get_device_id(fep->pdev);
+	int rx_itr = 0;
+	int tx_itr = 0;
+
+	if (!(id_entry->driver_data & FEC_QUIRK_HAS_AVB))
+		return;
+
+	if (fep->tx_time_itr && fep->tx_pkts_itr) {
+		printk("%s: setting tx coalescing: tx-usecs: %d tx-frames: %d\n",
+			ndev->name, fep->tx_time_itr, fep->tx_pkts_itr);
+		/*
+		 * Select enet system clock as Interrupt Coalescing
+		 * timer Clock Source
+		 */
+		tx_itr = FEC_ITR_CLK_SEL;
+
+		/* set ICFT and ICTT */
+		tx_itr |= FEC_ITR_ICFT(fep->tx_pkts_itr);
+		tx_itr |= FEC_ITR_ICTT(fec_enet_us_to_itr_clock(ndev, fep->tx_time_itr));
+
+		tx_itr |= FEC_ITR_EN;
+	} else {
+		printk("%s: tx coalescing disabled\n", ndev->name);
+	}
+
+	writel(tx_itr, fep->hwp + FEC_TXIC0);
+	writel(tx_itr, fep->hwp + FEC_TXIC1);
+	writel(tx_itr, fep->hwp + FEC_TXIC2);
+
+	if (fep->rx_time_itr && fep->rx_pkts_itr) {
+		printk("%s: setting rx coalescing: rx-usecs: %d rx-frames: %d\n",
+			ndev->name, fep->rx_time_itr, fep->rx_pkts_itr);
+		/*
+		 * Select enet system clock as Interrupt Coalescing
+		 * timer Clock Source
+		 */
+		rx_itr = FEC_ITR_CLK_SEL;
+
+		/* set ICFT and ICTT */
+		rx_itr |= FEC_ITR_ICFT(fep->rx_pkts_itr);
+		rx_itr |= FEC_ITR_ICTT(fec_enet_us_to_itr_clock(ndev, fep->rx_time_itr));
+
+		rx_itr |= FEC_ITR_EN;
+	} else {
+		printk("%s: rx coalescing disabled\n", ndev->name);
+	}
+
+	writel(rx_itr, fep->hwp + FEC_RXIC0);
+	writel(rx_itr, fep->hwp + FEC_RXIC1);
+	writel(rx_itr, fep->hwp + FEC_RXIC2);
+}
+#else
 /* Set threshold for interrupt coalescing */
 static void fec_enet_itr_coal_set(struct net_device *ndev)
 {
@@ -2538,6 +2630,7 @@ static void fec_enet_itr_coal_set(struct net_device *ndev)
 		writel(rx_itr, fep->hwp + FEC_RXIC2);
 	}
 }
+#endif
 
 static int
 fec_enet_get_coalesce(struct net_device *ndev, struct ethtool_coalesce *ec)
@@ -2602,11 +2695,19 @@ static void fec_enet_itr_coal_init(struct net_device *ndev)
 {
 	struct ethtool_coalesce ec;
 
+#ifdef CONFIG_SONOS
+	ec.rx_coalesce_usecs = FEC_ITR_ICTT_RX_DEFAULT;
+	ec.rx_max_coalesced_frames = FEC_ITR_ICFT_RX_DEFAULT;
+
+	ec.tx_coalesce_usecs = FEC_ITR_ICTT_TX_DEFAULT;
+	ec.tx_max_coalesced_frames = FEC_ITR_ICFT_TX_DEFAULT;
+#else
 	ec.rx_coalesce_usecs = FEC_ITR_ICTT_DEFAULT;
 	ec.rx_max_coalesced_frames = FEC_ITR_ICFT_DEFAULT;
 
 	ec.tx_coalesce_usecs = FEC_ITR_ICTT_DEFAULT;
 	ec.tx_max_coalesced_frames = FEC_ITR_ICFT_DEFAULT;
+#endif
 
 	fec_enet_set_coalesce(ndev, &ec);
 }
@@ -3276,6 +3377,15 @@ static inline void fec_enet_set_netdev_features(struct net_device *netdev,
 	}
 }
 
+#ifdef CONFIG_SONOS
+static netdev_features_t fec_fix_features(struct net_device *netdev,
+	netdev_features_t features)
+{
+	features &= ~NETIF_F_GRO;
+	return features;
+}
+#endif
+
 static int fec_set_features(struct net_device *netdev,
 	netdev_features_t features)
 {
@@ -3342,6 +3452,9 @@ static const struct net_device_ops fec_netdev_ops = {
 	.ndo_do_ioctl		= fec_enet_ioctl,
 #ifdef CONFIG_NET_POLL_CONTROLLER
 	.ndo_poll_controller	= fec_poll_controller,
+#endif
+#ifdef CONFIG_SONOS
+	.ndo_fix_features	= fec_fix_features,
 #endif
 	.ndo_set_features	= fec_set_features,
 };
