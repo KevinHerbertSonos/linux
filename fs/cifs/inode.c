@@ -1086,8 +1086,9 @@ struct inode *cifs_root_iget(struct super_block *sb)
 
 iget_no_retry:
 	if (!inode) {
-		inode = ERR_PTR(rc);
-		goto out;
+		kfree(path);	/* sonos */
+		_free_xid(xid);
+		return ERR_PTR(-ENOMEM);
 	}
 
 #ifdef CONFIG_CIFS_FSCACHE
@@ -1106,11 +1107,12 @@ iget_no_retry:
 		inode->i_gid = cifs_sb->mnt_gid;
 		spin_unlock(&inode->i_lock);
 	} else if (rc) {
+		kfree(path);	/* sonos */
+		_free_xid(xid);
 		iget_failed(inode);
-		inode = ERR_PTR(rc);
+		return ERR_PTR(rc);
 	}
 
-out:
 	kfree(path);
 	/* can not call macro free_xid here since in a void func
 	 * TODO: This is no longer true
