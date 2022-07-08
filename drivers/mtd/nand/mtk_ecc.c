@@ -258,6 +258,7 @@ static irqreturn_t mtk_ecc_irq(int irq, void *id)
 		op = ECC_DECODE;
 		dec = readw(ECC_REG(ecc, ECC_DECDONE));
 		if (dec & ecc->sectors) {
+			dec = readw(ECC_REG(ecc, ECC_DECIRQ_STA));
 			ecc->sectors = 0;
 			complete(&ecc->done);
 		} else {

@@ -420,6 +420,12 @@ void mtk_ecc_release(struct mtk_ecc *ecc)
 }
 EXPORT_SYMBOL(mtk_ecc_release);
 
+struct clk *mtk_ecc_get_clk(struct mtk_ecc *ecc)
+{
+	return ecc->clk;
+}
+EXPORT_SYMBOL(mtk_ecc_get_clk);
+
 static void mtk_ecc_hw_init(struct mtk_ecc *ecc)
 {
 	mtk_ecc_wait_idle(ecc, ECC_ENCODE);
@@ -474,10 +480,13 @@ int mtk_ecc_enable(struct mtk_ecc *ecc, struct mtk_ecc_config *config)
 
 	mtk_ecc_wait_idle(ecc, op);
 	mtk_ecc_config(ecc, config);
-	writew(ECC_OP_ENABLE, ECC_CTL_REG(ecc, op));
 
-	init_completion(&ecc->done);
-	writew(ECC_IRQ_EN, ECC_IRQ_REG(ecc, op));
+	if (config->mode != ECC_NFI_MODE || op != ECC_ENCODE) {
+		init_completion(&ecc->done);
+		writew(ECC_IRQ_EN, ECC_IRQ_REG(ecc, op));
+	}
+
+	writew(ECC_OP_ENABLE, ECC_CTL_REG(ecc, op));
 
 	return 0;
 }
@@ -688,8 +697,6 @@ static int mtk_ecc_resume(struct device *dev)
 		dev_err(dev, "failed to enable clk\n");
 		return ret;
 	}
-
-	mtk_ecc_hw_init(ecc);
 
 	return 0;
 }
