@@ -40,6 +40,9 @@
 #include <linux/cpu.h>
 #include <linux/notifier.h>
 #include <linux/rculist.h>
+#ifdef CONFIG_SONOS
+#include "mdp.h"
+#endif
 
 #include <asm/uaccess.h>
 
@@ -1232,7 +1235,10 @@ void console_unlock(void)
 		con_start = log_end;		/* Flush */
 		spin_unlock(&logbuf_lock);
 		stop_critical_timings();	/* don't trace print latency */
-		call_console_drivers(_con_start, _log_end);
+#ifdef CONFIG_SONOS
+		if (sys_mdp.mdp_flags & MDP_KERNEL_PRINTK_ENABLE)
+#endif
+			call_console_drivers(_con_start, _log_end);
 		start_critical_timings();
 		local_irq_restore(flags);
 	}
