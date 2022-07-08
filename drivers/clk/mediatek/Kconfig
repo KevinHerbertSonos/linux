@@ -3,6 +3,7 @@
 #
 config COMMON_CLK_MEDIATEK
 	bool
+	select MFD_SYSCON
 	---help---
 	  Mediatek SoCs' clock support.
 
@@ -21,3 +22,17 @@ config COMMON_CLK_MT8173
 	default ARCH_MEDIATEK
 	---help---
 	  This driver supports Mediatek MT8173 clocks.
+
+config COMMON_CLK_MT8518
+	bool "Clock driver for MediaTek MT8518"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	select COMMON_CLK_MEDIATEK
+	default ARCH_MEDIATEK
+	---help---
+	  This driver supports MediaTek MT8518 basic clocks.
+
+config COMMON_CLK_MT8518_MMSYS
+	bool "Clock driver for MediaTek MT8518 mmsys"
+	depends on COMMON_CLK_MT8518
+	---help---
+	  This driver supports MediaTek MT8518 mmsys clocks.
