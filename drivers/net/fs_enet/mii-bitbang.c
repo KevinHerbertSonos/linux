@@ -116,6 +116,10 @@ static int __devinit fs_mii_bitbang_init(struct mii_bus *bus,
 	int mdio_pin, mdc_pin, len;
 	struct bb_info *bitbang = bus->priv;
 
+#ifdef CONFIG_SONOS
+	static int port = 0;
+#endif
+
 	int ret = of_address_to_resource(np, 0, &res);
 	if (ret)
 		return ret;
@@ -138,6 +142,11 @@ static int __devinit fs_mii_bitbang_init(struct mii_bus *bus,
 	if (!data || len != 4)
 		return -ENODEV;
 	mdc_pin = *data;
+
+#ifdef CONFIG_SONOS
+	snprintf(bus->id, MII_BUS_ID_SIZE, "%x_%d", res.start, port);
+	port++;
+#endif
 
 	bitbang->dir = ioremap(res.start, res.end - res.start + 1);
 	if (!bitbang->dir)

@@ -1054,6 +1054,10 @@ static int __devinit fs_enet_probe(struct platform_device *ofdev)
 	fep->fpi = fpi;
 	fep->ops = match->data;
 
+#ifdef CONFIG_SONOS
+	fep->msg_enable = NETIF_MSG_LINK;
+#endif
+
 	ret = fep->ops->setup_data(ndev);
 	if (ret)
 		goto out_free_dev;
