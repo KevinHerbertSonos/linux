@@ -1203,13 +1203,16 @@ static size_t print_time(u64 ts, char *buf)
 
 	rem_nsec = do_div(ts, 1000000000);
 
-	if (!buf)
-		return snprintf(NULL, 0, "[%5lu.000000] ", (unsigned long)ts);
-
 #if defined(CONFIG_SMP) && defined(CONFIG_AMLOGIC_DRIVER)
+	if (!buf)
+		return snprintf(NULL, 0, "[%5lu.000000@%d] ", (unsigned long)ts, current_cpu);
+
 	return sprintf(buf, "[%5lu.%06lu@%d] ",
 		       (unsigned long)ts, rem_nsec / 1000, current_cpu);
 #else
+	if (!buf)
+		return snprintf(NULL, 0, "[%5lu.000000] ", (unsigned long)ts);
+
 	return sprintf(buf, "[%5lu.%06lu] ",
 		       (unsigned long)ts, rem_nsec / 1000);
 #endif
