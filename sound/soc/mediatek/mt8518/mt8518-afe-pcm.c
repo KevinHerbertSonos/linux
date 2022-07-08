@@ -9689,7 +9689,6 @@ static void spdif_in_reset_and_clear_error(struct mtk_base_afe *afe,
 {
 	regmap_update_bits(afe->regmap,
 			   AFE_SPDIFIN_CFG0,
-			   AFE_SPDIFIN_CFG0_INT_EN |
 			   AFE_SPDIFIN_CFG0_EN,
 			   0x0);
 
@@ -9697,9 +9696,7 @@ static void spdif_in_reset_and_clear_error(struct mtk_base_afe *afe,
 
 	regmap_update_bits(afe->regmap,
 			   AFE_SPDIFIN_CFG0,
-			   AFE_SPDIFIN_CFG0_INT_EN |
 			   AFE_SPDIFIN_CFG0_EN,
-			   AFE_SPDIFIN_CFG0_INT_EN |
 			   AFE_SPDIFIN_CFG0_EN);
 }
 
@@ -9790,6 +9787,12 @@ static int spdif_in_detect_irq_handler(int irq, void *dev_id)
 	unsigned int err;
 	unsigned int rate;
 
+	/* disable spdif in irq */
+	regmap_update_bits(afe->regmap,
+			   AFE_SPDIFIN_CFG0,
+			   AFE_SPDIFIN_CFG0_INT_EN,
+			   0x0);
+
 	regmap_read(afe->regmap, AFE_SPDIFIN_INT_EXT2, &int_ext2);
 	regmap_read(afe->regmap, AFE_SPDIFIN_DEBUG1, &debug1);
 	regmap_read(afe->regmap, AFE_SPDIFIN_DEBUG2, &debug2);
@@ -9831,6 +9834,12 @@ static int spdif_in_detect_irq_handler(int irq, void *dev_id)
 	regmap_write(afe->regmap,
 		     AFE_SPDIFIN_EC,
 		     AFE_SPDIFIN_EC_CLEAR_ALL);
+
+	/* enable spdif in irq */
+	regmap_update_bits(afe->regmap,
+			   AFE_SPDIFIN_CFG0,
+			   AFE_SPDIFIN_CFG0_INT_EN,
+			   AFE_SPDIFIN_CFG0_INT_EN);
 
 	return 0;
 }
