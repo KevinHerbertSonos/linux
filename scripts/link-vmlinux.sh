@@ -113,7 +113,6 @@ vmlinux_link()
 	fi
 }
 
-
 # Create ${2} .o file with all symbols from the ${1} object file
 kallsyms()
 {

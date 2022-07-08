@@ -5,7 +5,6 @@ menu "USB Physical Layer drivers"
 
 config USB_PHY
 	def_bool n
-
 #
 # USB Transceiver Drivers
 #

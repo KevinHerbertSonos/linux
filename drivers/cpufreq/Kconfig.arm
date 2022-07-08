@@ -195,13 +195,23 @@ config ARM_SA1110_CPUFREQ
 
 config ARM_SCPI_CPUFREQ
         tristate "SCPI based CPUfreq driver"
-	depends on ARM_BIG_LITTLE_CPUFREQ && ARM_SCPI_PROTOCOL && COMMON_CLK_SCPI
+	depends on ARM_BIG_LITTLE_CPUFREQ && ARM_SCPI_PROTOCOL && (COMMON_CLK_SCPI || AMLOGIC_COMMON_CLK_SCPI)
         help
 	  This adds the CPUfreq driver support for ARM big.LITTLE platforms
 	  using SCPI protocol for CPU power management.
 
 	  This driver uses SCPI Message Protocol driver to interact with the
 	  firmware providing the CPU DVFS functionality.
+
+config AMLOGIC_MESON_CPUFREQ
+        tristate "MESON based CPUfreq driver"
+        depends on ARM_BIG_LITTLE_CPUFREQ
+        help
+          This adds the CPUfreq driver support for ARM big.LITTLE platforms
+          using MESON dt for CPU power management.
+
+          This driver uses meson cpufreq driver to interact with the
+          firmware providing the CPU DVFS functionality.
 
 config ARM_SPEAR_CPUFREQ
 	bool "SPEAr CPUFreq support"

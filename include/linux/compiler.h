@@ -236,6 +236,10 @@ static __always_inline void __write_once_size(volatile void *p, void *res, int s
 
 #endif /* __ASSEMBLY__ */
 
+#ifndef __norecordmcount
+#define __norecordmcount
+#endif
+
 #ifndef __optimize
 # define __optimize(level)
 #endif

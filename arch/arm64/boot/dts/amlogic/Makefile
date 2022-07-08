@@ -1,9 +1,5 @@
-dtb-$(CONFIG_ARCH_MESON) += meson-gxbb-odroidc2.dtb
-dtb-$(CONFIG_ARCH_MESON) += meson-gxbb-p200.dtb
-dtb-$(CONFIG_ARCH_MESON) += meson-gxbb-p201.dtb
-dtb-$(CONFIG_ARCH_MESON) += meson-gxbb-vega-s95-pro.dtb
-dtb-$(CONFIG_ARCH_MESON) += meson-gxbb-vega-s95-meta.dtb
-dtb-$(CONFIG_ARCH_MESON) += meson-gxbb-vega-s95-telos.dtb
+
+targets += dtbs
 
 dtb-$(CONFIG_SONOS) += dhuez.dtb dhuez_v0.dtb dhuez_v1.dtb dhuez_v2.dtb dhuez_v3.dtb
 dtb-$(CONFIG_SONOS) += tupelo_v4.dtb tupelo_v3.dtb tupelo_v2.dtb tupelo_v1.dtb tupelo_v0.dtb

@@ -100,7 +100,6 @@ vmlinux.o: FORCE
 $(symverfile):         __modpost ;
 $(modules:.ko=.mod.c): __modpost ;
 
-
 # Step 5), compile all *.mod.c files
 
 # modname is set to make c_flags define KBUILD_MODNAME

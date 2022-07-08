@@ -36,6 +36,9 @@
 #include <linux/highmem.h>
 #include <linux/io.h>
 #include <trace/events/cma.h>
+#ifdef CONFIG_AMLOGIC_CMA
+#include <linux/amlogic/aml_cma.h>
+#endif /* CONFIG_AMLOGIC_CMA */
 
 #include "cma.h"
 
@@ -367,6 +370,9 @@ struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align)
 	unsigned long bitmap_maxno, bitmap_no, bitmap_count;
 	struct page *page = NULL;
 	int ret;
+#ifdef CONFIG_AMLOGIC_CMA
+	int dummy;
+#endif /* CONFIG_AMLOGIC_CMA */
 
 	if (!cma || !cma->count)
 		return NULL;
@@ -384,6 +390,10 @@ struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align)
 
 	if (bitmap_count > bitmap_maxno)
 		return NULL;
+
+#ifdef CONFIG_AMLOGIC_CMA
+	aml_cma_alloc_pre_hook(&dummy, count);
+#endif /* CONFIG_AMLOGIC_CMA */
 
 	for (;;) {
 		mutex_lock(&cma->lock);
@@ -404,7 +414,11 @@ struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align)
 
 		pfn = cma->base_pfn + (bitmap_no << cma->order_per_bit);
 		mutex_lock(&cma_mutex);
+	#ifdef CONFIG_AMLOGIC_CMA
+		ret = aml_cma_alloc_range(pfn, pfn + count);
+	#else
 		ret = alloc_contig_range(pfn, pfn + count, MIGRATE_CMA);
+	#endif /* CONFIG_AMLOGIC_CMA */
 		mutex_unlock(&cma_mutex);
 		if (ret == 0) {
 			page = pfn_to_page(pfn);
@@ -417,12 +431,17 @@ struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align)
 
 		pr_debug("%s(): memory range at %p is busy, retrying\n",
 			 __func__, pfn_to_page(pfn));
+	#ifndef CONFIG_AMLOGIC_CMA
 		/* try again with a bit different memory target */
 		start = bitmap_no + mask + 1;
+	#endif /* CONFIG_AMLOGIC_CMA */
 	}
 
 	trace_cma_alloc(pfn, page, count, align);
 
+#ifdef CONFIG_AMLOGIC_CMA
+	aml_cma_alloc_post_hook(&dummy, count, page);
+#endif /* CONFIG_AMLOGIC_CMA */
 	pr_debug("%s(): returned %p\n", __func__, page);
 	return page;
 }
@@ -453,9 +472,15 @@ bool cma_release(struct cma *cma, const struct page *pages, unsigned int count)
 
 	VM_BUG_ON(pfn + count > cma->base_pfn + cma->count);
 
+#ifdef CONFIG_AMLOGIC_CMA
+	aml_cma_release_hook(count, (struct page *)pages);
+	aml_cma_free(pfn, count);
+#else
 	free_contig_range(pfn, count);
+#endif /* CONFIG_AMLOGIC_CMA */
 	cma_clear_bitmap(cma, pfn, count);
 	trace_cma_release(pfn, pages, count);
 
 	return true;
 }
+

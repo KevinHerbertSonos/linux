@@ -458,6 +458,9 @@ EXPORT_SYMBOL(kmem_cache_create);
 static int shutdown_cache(struct kmem_cache *s,
 		struct list_head *release, bool *need_rcu_barrier)
 {
+	/* free asan quarantined objects */
+	kasan_cache_shutdown(s);
+
 	if (__kmem_cache_shutdown(s) != 0)
 		return -EBUSY;
 
@@ -741,7 +744,6 @@ void kmem_cache_destroy(struct kmem_cache *s)
 	get_online_cpus();
 	get_online_mems();
 
-	kasan_cache_destroy(s);
 	mutex_lock(&slab_mutex);
 
 	s->refcount--;
@@ -1122,7 +1124,13 @@ static void print_slabinfo_header(struct seq_file *m)
 #else
 	seq_puts(m, "slabinfo - version: 2.1\n");
 #endif
+#ifdef CONFIG_AMLOGIC_MEMORY_EXTEND
+	/* add total bytes for each slab */
+	seq_puts(m, "# name                        <active_objs> <num_objs> ");
+	seq_puts(m, "<objsize> <objperslab> <pagesperslab> <total bytes>");
+#else
 	seq_puts(m, "# name            <active_objs> <num_objs> <objsize> <objperslab> <pagesperslab>");
+#endif /* CONFIG_AMLOGIC_MEMORY_EXTEND */
 	seq_puts(m, " : tunables <limit> <batchcount> <sharedfactor>");
 	seq_puts(m, " : slabdata <active_slabs> <num_slabs> <sharedavail>");
 #ifdef CONFIG_DEBUG_SLAB
@@ -1172,15 +1180,28 @@ memcg_accumulate_slabinfo(struct kmem_cache *s, struct slabinfo *info)
 static void cache_show(struct kmem_cache *s, struct seq_file *m)
 {
 	struct slabinfo sinfo;
+#ifdef CONFIG_AMLOGIC_MEMORY_EXTEND
+	char name[32];
+	long total;
+#endif
 
 	memset(&sinfo, 0, sizeof(sinfo));
 	get_slabinfo(s, &sinfo);
 
 	memcg_accumulate_slabinfo(s, &sinfo);
 
+#ifdef CONFIG_AMLOGIC_MEMORY_EXTEND
+	strncpy(name, cache_name(s), 31);
+	total = sinfo.num_objs * s->size;
+	seq_printf(m, "%-31s %6lu %6lu %6u %4u %4d %8lu",
+		   name, sinfo.active_objs, sinfo.num_objs, s->size,
+		   sinfo.objects_per_slab, (1 << sinfo.cache_order),
+		   total);
+#else
 	seq_printf(m, "%-17s %6lu %6lu %6u %4u %4d",
 		   cache_name(s), sinfo.active_objs, sinfo.num_objs, s->size,
 		   sinfo.objects_per_slab, (1 << sinfo.cache_order));
+#endif /* CONFIG_AMLOGIC_MEMORY_EXTEND */
 
 	seq_printf(m, " : tunables %4u %4u %4u",
 		   sinfo.limit, sinfo.batchcount, sinfo.shared);

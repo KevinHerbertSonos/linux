@@ -15,25 +15,8 @@ struct gadget_lock {
 	bool held;
 };
 static struct gadget_lock Gadget_Lock;
-
-#ifdef CONFIG_USB_CONFIGFS_UEVENT
-static void gadget_hold(struct gadget_lock *lock)
-{
-	if (!lock->held) {
-		__pm_stay_awake(&lock->wakesrc);
-		lock->held = true;
-	}
-}
-
-static void gadget_drop(struct gadget_lock *lock)
-{
-	if (lock->held) {
-		__pm_relax(&lock->wakesrc);
-		lock->held = false;
-	}
-}
 #endif
-#endif
+
 int check_user_usb_string(const char *name,
 		struct usb_gadget_strings *stringtab_dev)
 {
@@ -1490,6 +1473,7 @@ static struct config_group *gadgets_make(
 		goto err;
 
 	return &gi->group;
+
 err:
 	kfree(gi);
 	return ERR_PTR(-ENOMEM);
@@ -1537,6 +1521,7 @@ static int __init gadget_cfs_init(void)
 	config_group_init(&gadget_subsys.su_group);
 
 	ret = configfs_register_subsystem(&gadget_subsys);
+
 	return ret;
 }
 module_init(gadget_cfs_init);
