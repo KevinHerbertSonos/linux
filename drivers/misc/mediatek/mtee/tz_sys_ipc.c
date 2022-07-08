@@ -157,11 +157,15 @@ int KREE_ServSemaphoreDown(u32 op, u8 param[REE_SERVICE_BUFFER_SIZE])
 {
 	struct semaphore *sema;
 	unsigned long *in;
+	int ret;
 
 	in = (unsigned long *) &param[0];
 	sema = (struct semaphore *)*in;
 
-	down(sema);
+/* Using down_killable() here instead of down() will make the hung task
+ * detector ignore this kernel thread.
+ */
+	ret = down_killable(sema);
 
 	return TZ_RESULT_SUCCESS;
 }
