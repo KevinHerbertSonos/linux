@@ -1249,6 +1249,29 @@ static int i2c_imx_resume(struct device *dev)
 	return 0;
 }
 
+#ifdef CONFIG_SONOS
+void i2c_imx_shutdown(struct platform_device *pdev)
+{
+	struct imx_i2c_struct *i2c_imx = platform_get_drvdata(pdev);
+	/* Make sure i2c bus is idle before soft reset */
+	if (i2c_imx != NULL) {
+		int error;
+		struct i2c_adapter *adapter = &i2c_imx->adapter;
+		static struct hrtimer_sleeper bus_sleeper;
+		ktime_t timeout = ktime_set(4,0); /* 4 seconds */
+
+		hrtimer_init_on_stack(&bus_sleeper.timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
+		hrtimer_init_sleeper(&bus_sleeper, current);
+		timeout = ktime_add(ktime_get_real(), timeout);
+		hrtimer_set_expires(&bus_sleeper.timer, timeout);
+		error = rt_mutex_timed_lock(&adapter->bus_lock, &bus_sleeper);
+		if (error) {
+			printk("i2c bus %s could not be locked, error %d\n", adapter->name, error);
+		}
+	}
+}
+#endif
+
 static const struct dev_pm_ops i2c_imx_pm_ops = {
 	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(i2c_imx_suspend, i2c_imx_resume)
 	SET_RUNTIME_PM_OPS(i2c_imx_runtime_suspend,
@@ -1262,6 +1285,9 @@ static const struct dev_pm_ops i2c_imx_pm_ops = {
 static struct platform_driver i2c_imx_driver = {
 	.probe = i2c_imx_probe,
 	.remove = i2c_imx_remove,
+#ifdef CONFIG_SONOS
+	.shutdown = i2c_imx_shutdown,
+#endif
 	.driver = {
 		.name = DRIVER_NAME,
 		.pm = I2C_IMX_PM_OPS,
