@@ -505,7 +505,7 @@ static TZ_RESULT KREE_ServThread_Create(u32 op,
 	memcpy(info, uparam, sizeof(struct REE_THREAD_INFO));
 
 	/* create thread and run ... */
-	if (!kthread_run(kree_thread_function, info, "%s", info->name))
+	if (!kthread_run(kree_thread_function, info, info->name))
 		return TZ_RESULT_ERROR_GENERIC;
 
 	return TZ_RESULT_SUCCESS;
