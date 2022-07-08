@@ -241,6 +241,10 @@ static void mtk_phy_link_adjust(struct net_device *dev)
 			  flowctrl & FLOW_CTRL_TX ? "enabled" : "disabled");
 	}
 
+#ifdef CONFIG_SONOS
+	mcr |= MAC_MCR_FORCE_LINK;
+#endif
+
 	mtk_w32(mac->hw, mcr, MTK_MAC_MCR(mac->id));
 
 	if (mac->phy_dev->link)
