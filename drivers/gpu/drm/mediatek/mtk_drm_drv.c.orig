@@ -189,7 +189,7 @@ static int mtk_drm_kms_init(struct drm_device *drm)
 	 * at drm_mode_addfb().
 	 */
 	drm->mode_config.max_width = 4096;
-	drm->mode_config.max_height = 1080;  // Restrict max video to 1080p
+	drm->mode_config.max_height = 4096;
 	drm->mode_config.funcs = &mtk_drm_mode_config_funcs;
 
 	ret = component_bind_all(drm->dev, drm);

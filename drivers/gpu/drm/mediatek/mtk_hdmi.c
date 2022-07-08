@@ -1349,7 +1349,7 @@ static int mtk_hdmi_bridge_attach(struct drm_bridge *bridge)
 	drm_connector_helper_add(&hdmi->conn, &mtk_hdmi_connector_helper_funcs);
 
 	hdmi->conn.polled = DRM_CONNECTOR_POLL_HPD;
-	hdmi->conn.interlace_allowed = true;
+	hdmi->conn.interlace_allowed = false;
 	hdmi->conn.doublescan_allowed = false;
 
 	ret = drm_mode_connector_attach_encoder(&hdmi->conn,
