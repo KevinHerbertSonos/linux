@@ -50,6 +50,8 @@ void aml_tdm_enable(
 		offset = EE_AUDIO_TDMIN_B_CTRL
 				- EE_AUDIO_TDMIN_A_CTRL;
 		reg = EE_AUDIO_TDMIN_A_CTRL + offset * index;
+		if (reg == EE_AUDIO_TDMIN_B_CTRL)
+			audiobus_update_bits(reg, 1<<26, 1<<26);//enable lrclk cnt
 		aml_audiobus_update_bits(actrl, reg, 1<<31, is_enable<<31);
 	}
 

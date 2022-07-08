@@ -38,6 +38,7 @@
 
 #include "ddr_mngr.h"
 #include "tdm_hw.h"
+#include "iomap.h"
 
 /*#define G12A_PTM*/
 
@@ -141,6 +142,17 @@ static irqreturn_t aml_tdm_ddr_isr(int irq, void *devid)
 
 	if (!snd_pcm_running(substream))
 		return IRQ_HANDLED;
+	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+		int tdm_sta = 0;
+		struct snd_pcm_runtime *runtime = substream->runtime;
+		struct aml_tdm *p_tdm = runtime->private_data;
+
+		tdm_sta = audiobus_read(EE_AUDIO_TDMIN_B_STAT);
+		if (tdm_sta & 0x3e0) {
+			dev_warn(p_tdm->dev, "reset tdmb, TDMIN_B_STAT:0x%x\n", tdm_sta);
+			snd_pcm_stop_xrun(substream);
+		}
+	}
 
 	snd_pcm_period_elapsed(substream);
 
