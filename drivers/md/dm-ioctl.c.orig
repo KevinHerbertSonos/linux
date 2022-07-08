@@ -1954,20 +1954,3 @@ out:
 
 	return r;
 }
-
-#ifdef CONFIG_SONOS
-int dm_dev_create(struct dm_ioctl *param, size_t param_size)
-{
-	return ( dev_create(param, param_size) );
-}
-
-int dm_dev_suspend(struct dm_ioctl *param, size_t param_size)
-{
-	return ( dev_suspend(param, param_size) );
-}
-
-int dm_table_load(struct dm_ioctl *param, size_t param_size)
-{
-	return ( table_load(param, param_size) );
-}
-#endif

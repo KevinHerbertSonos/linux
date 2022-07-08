@@ -26,10 +26,6 @@
 #include <linux/blk-mq.h>
 #include <linux/pr.h>
 
-#ifdef CONFIG_SONOS
-#include <linux/namei.h>
-#endif
-
 #include <trace/events/block.h>
 
 #define DM_MSG_PREFIX "core"
@@ -2283,64 +2279,6 @@ static void cleanup_mapped_device(struct mapped_device *md)
 	}
 }
 
-#ifdef CONFIG_SONOS
-const char * upgrade_dev_node = "/dev/mapper/upgrade";
-const char * rootfs_dev_node = "/dev/mapper/crroot";
-
-static int add_dev_mapper_node(struct mapped_device *md)
-{
-	struct dentry *dentry;
-	struct path path;
-	int err;
-	const char *mapper_devpoint;
-	int minor = MINOR(disk_devt(md->disk));
-	char dev_buffer[DISK_NAME_LEN + 5];
-
-	if ( minor == 10 ) {
-		mapper_devpoint = upgrade_dev_node;
-	} else {
-		mapper_devpoint = rootfs_dev_node;
-	}
-
-	snprintf(dev_buffer, sizeof(dev_buffer), "/dev/%s", md->disk->disk_name);
-
-	dentry = kern_path_create(AT_FDCWD, mapper_devpoint, &path, LOOKUP_DIRECTORY);
-	if (IS_ERR(dentry))
-		return PTR_ERR(dentry);
-
-	err = vfs_symlink(d_inode(path.dentry), dentry, dev_buffer);
-	if ( err ) {
-		printk("%s:%d link %s to %s fail\n", __func__, __LINE__,
-			md->disk->disk_name, mapper_devpoint);
-	}
-	done_path_create(&path, dentry);
-	return err;
-}
-
-static void remove_dev_mapper_node(struct mapped_device *md)
-{
-	struct dentry *dentry;
-	struct path parent;
-	const char *mapper_devpoint;
-	int minor = MINOR(disk_devt(md->disk));
-
-	if ( minor == 10 ) {
-		mapper_devpoint = upgrade_dev_node;
-	} else {
-		mapper_devpoint = rootfs_dev_node;
-	}
-
-	dentry = kern_path_locked(mapper_devpoint, &parent);
-	if (IS_ERR(dentry))
-		return;
-
-	vfs_unlink(d_inode(parent.dentry), dentry, NULL);
-	dput(dentry);
-	mutex_unlock(&d_inode(parent.dentry)->i_mutex);
-	path_put(&parent);
-}
-#endif
-
 /*
  * Allocate and initialise a blank device with a given minor.
  */
@@ -2452,10 +2390,6 @@ static void free_dev(struct mapped_device *md)
 	int minor = MINOR(disk_devt(md->disk));
 
 	unlock_fs(md);
-
-#ifdef CONFIG_SONOS
-	remove_dev_mapper_node(md);
-#endif
 
 	cleanup_mapped_device(md);
 	if (md->use_blk_mq)
@@ -2612,9 +2546,7 @@ int dm_create(int minor, struct mapped_device **result)
 		return -ENXIO;
 
 	dm_sysfs_init(md);
-#ifdef CONFIG_SONOS
-	add_dev_mapper_node(md);
-#endif
+
 	*result = md;
 	return 0;
 }
