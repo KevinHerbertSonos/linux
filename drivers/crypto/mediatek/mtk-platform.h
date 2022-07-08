@@ -1,36 +1,35 @@
 /*
- * Support for MediaTek cryptographic accelerator.
+ * Driver for EIP97 cryptographic accelerator.
  *
- * Copyright (c) 2016 MediaTek Inc.
- * Author: Ryder Lee <ryder.lee@mediatek.com>
+ * Copyright (c) 2016 Ryder Lee <ryder.lee@mediatek.com>
  *
  * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License.
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
  */
 
 #ifndef __MTK_PLATFORM_H_
 #define __MTK_PLATFORM_H_
 
-#include <linux/crypto.h>
+#include <crypto/algapi.h>
 #include <crypto/internal/hash.h>
+#include <crypto/scatterwalk.h>
+#include <linux/crypto.h>
+#include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
+#include <linux/scatterlist.h>
+#include "mtk-regs.h"
 
-#define MTK_RDR_THRESH_DEF	0x800001
-
+#define MTK_RDR_PROC_THRESH	BIT(0)
+#define MTK_RDR_PROC_MODE	BIT(23)
+#define MTK_CNT_RST		BIT(31)
 #define MTK_IRQ_RDR0		BIT(1)
 #define MTK_IRQ_RDR1		BIT(3)
 #define MTK_IRQ_RDR2		BIT(5)
 #define MTK_IRQ_RDR3		BIT(7)
 
-#define MTK_DESC_CNT_CLR	BIT(31)
-#define MTK_DESC_LAST		BIT(22)
-#define MTK_DESC_FIRST		BIT(23)
-#define MTK_DESC_BUF_LEN(x)	((x) & 0x1ffff)
-#define MTK_DESC_CT_LEN(x)	(((x) & 0xff) << 24)
-
-#define WORD(x)			((x) >> 2)
+#define SIZE_IN_WORDS(x)	((x) >> 2)
 
 /**
  * Ring 0/1 are used by AES encrypt and decrypt.
@@ -44,30 +43,41 @@ enum {
 	RING_MAX,
 };
 
-#define RECORD_NUM		(RING_MAX / 2)
+#define MTK_REC_NUM		(RING_MAX / 2)
+#define MTK_IRQ_NUM		5
 
 /**
  * struct mtk_desc - DMA descriptor
  * @hdr:	the descriptor control header
- * @buf:	DMA address of input buffer
- * @ct:		the command token that control operation flow
+ * @buf:	DMA address of input buffer segment
+ * @ct:		DMA address of command token that control operation flow
  * @ct_hdr:	the command token control header
  * @tag:	the user-defined field
  * @tfm:	DMA address of transform state
  * @bound:	align descriptors offset boundary
  *
- * Structure passed to the crypto engine to describe the crypto
- * operation to be executed.
+ * Structure passed to the crypto engine to describe where source
+ * data needs to be fetched and how it needs to be processed.
  */
 struct mtk_desc {
-	u32 hdr;
-	u32 buf;
-	u32 ct;
-	u32 ct_hdr;
-	u32 tag;
-	u32 tfm;
-	u32 bound[2];
+	__le32 hdr;
+	__le32 buf;
+	__le32 ct;
+	__le32 ct_hdr;
+	__le32 tag;
+	__le32 tfm;
+	__le32 bound[2];
 };
+
+#define MTK_DESC_NUM		512
+#define MTK_DESC_OFF		SIZE_IN_WORDS(sizeof(struct mtk_desc))
+#define MTK_DESC_SZ		(MTK_DESC_OFF - 2)
+#define MTK_DESC_RING_SZ	((sizeof(struct mtk_desc) * MTK_DESC_NUM))
+#define MTK_DESC_CNT(x)		((MTK_DESC_OFF * (x)) << 2)
+#define MTK_DESC_LAST		cpu_to_le32(BIT(22))
+#define MTK_DESC_FIRST		cpu_to_le32(BIT(23))
+#define MTK_DESC_BUF_LEN(x)	cpu_to_le32(x)
+#define MTK_DESC_CT_LEN(x)	cpu_to_le32((x) << 24)
 
 /**
  * struct mtk_ring - Descriptor ring
@@ -76,6 +86,10 @@ struct mtk_desc {
  * @res_base:	pointer to result descriptor ring base
  * @res_dma:	DMA address of result descriptor ring
  * @pos:	current position in the ring
+ *
+ * A descriptor ring is a circular buffer that is used to manage
+ * one or more descriptors. There are two type of descriptor rings;
+ * the command descriptor ring and result descriptor ring.
  */
 struct mtk_ring {
 	struct mtk_desc *cmd_base;
@@ -84,12 +98,6 @@ struct mtk_ring {
 	dma_addr_t res_dma;
 	u32 pos;
 };
-
-#define MTK_MAX_DESC_NUM	512
-#define MTK_DESC_OFFSET		WORD(sizeof(struct mtk_desc))
-#define MTK_DESC_SIZE		(MTK_DESC_OFFSET - 2)
-#define MTK_MAX_RING_SIZE	((sizeof(struct mtk_desc) * MTK_MAX_DESC_NUM))
-#define MTK_DESC_CNT(x)		((MTK_DESC_OFFSET * (x)) << 2)
 
 /**
  * struct mtk_aes_dma - Structure that holds sg list info
@@ -106,7 +114,7 @@ struct mtk_aes_dma {
 };
 
 /**
- * struct mtk_aes - AES operation record
+ * struct mtk_aes_rec - AES operation record
  * @queue:	crypto request queue
  * @req:	pointer to ablkcipher request
  * @task:	the tasklet is use in AES interrupt
@@ -125,9 +133,9 @@ struct mtk_aes_dma {
  * @flags:	it's describing AES operation state
  * @lock:	the ablkcipher queue lock
  *
- * Structure used to record AES execution state
+ * Structure used to record AES execution state.
  */
-struct mtk_aes {
+struct mtk_aes_rec {
 	struct crypto_queue queue;
 	struct ablkcipher_request *req;
 	struct tasklet_struct task;
@@ -141,7 +149,7 @@ struct mtk_aes {
 	void *buf;
 
 	void *info;
-	u32 ct_hdr;
+	__le32 ct_hdr;
 	u32 ct_size;
 	dma_addr_t ct_dma;
 	dma_addr_t tfm_dma;
@@ -153,7 +161,7 @@ struct mtk_aes {
 };
 
 /**
- * struct mtk_sha - SHA operation record
+ * struct mtk_sha_rec - SHA operation record
  * @queue:	crypto request queue
  * @req:	pointer to ahash request
  * @task:	the tasklet is use in SHA interrupt
@@ -168,13 +176,13 @@ struct mtk_aes {
  *
  * Structure used to record SHA execution state.
  */
-struct mtk_sha {
+struct mtk_sha_rec {
 	struct crypto_queue queue;
 	struct ahash_request *req;
 	struct tasklet_struct task;
 
 	void *info;
-	u32 ct_hdr;
+	__le32 ct_hdr;
 	u32 ct_size;
 	dma_addr_t ct_dma;
 	dma_addr_t tfm_dma;
@@ -208,11 +216,11 @@ struct mtk_cryp {
 	struct device *dev;
 	struct clk *clk_ethif;
 	struct clk *clk_cryp;
-	int irq[5];
+	int irq[MTK_IRQ_NUM];
 
 	struct mtk_ring *ring[RING_MAX];
-	struct mtk_aes *aes[RECORD_NUM];
-	struct mtk_sha *sha[RECORD_NUM];
+	struct mtk_aes_rec *aes[MTK_REC_NUM];
+	struct mtk_sha_rec *sha[MTK_REC_NUM];
 
 	struct list_head aes_list;
 	struct list_head sha_list;

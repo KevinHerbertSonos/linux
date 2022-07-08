@@ -1,10 +1,9 @@
 /*
  * Cryptographic API.
  *
- * Support for MediaTek SHA1/SHA2 hardware accelerator.
+ * Driver for EIP97 SHA1/SHA2(HMAC) acceleration.
  *
- * Copyright (c) 2016 MediaTek Inc.
- * Author: Ryder Lee <ryder.lee@mediatek.com>
+ * Copyright (c) 2016 Ryder Lee <ryder.lee@mediatek.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -13,53 +12,46 @@
  * Some ideas are from atmel-sha.c and omap-sham.c drivers.
  */
 
-#include <linux/dma-mapping.h>
-#include <linux/scatterlist.h>
-#include <linux/crypto.h>
-#include <crypto/scatterwalk.h>
-#include <crypto/algapi.h>
 #include <crypto/sha.h>
-#include <crypto/internal/hash.h>
 #include "mtk-platform.h"
-#include "mtk-regs.h"
 
 #define SHA_ALIGN_MSK		(sizeof(u32) - 1)
 #define SHA_QUEUE_SIZE		512
-#define SHA_TMP_STATE_SIZE	512
-
-#define SHA_DATA_LEN_MSK	GENMASK(16, 0)
-#define SHA_BUFFER_LEN		((u32)PAGE_SIZE)
+#define SHA_TMP_BUF_SIZE	512
+#define SHA_BUF_SIZE		((u32)PAGE_SIZE)
 
 #define SHA_OP_UPDATE		1
 #define SHA_OP_FINAL		2
 
+#define SHA_DATA_LEN_MSK	cpu_to_le32(GENMASK(16, 0))
+
 /* SHA command token */
 #define SHA_CT_SIZE		5
-#define SHA_CT_CTRL_HDR		0x02220000
-#define SHA_COMMAND0		0x03020000
-#define SHA_COMMAND1		0x21060000
-#define SHA_COMMAND2		0xe0e63802
+#define SHA_CT_CTRL_HDR		cpu_to_le32(0x02220000)
+#define SHA_COMMAND0		cpu_to_le32(0x03020000)
+#define SHA_COMMAND1		cpu_to_le32(0x21060000)
+#define SHA_COMMAND2		cpu_to_le32(0xe0e63802)
 
 /* SHA transform information */
-#define SHA_TFM_HASH		(0x2 << 0)
-#define SHA_TFM_DIG_TYPE	(0x1 << 21)
-#define SHA_TFM_SIZE(x)		((x) << 8)
-#define SHA_TFM_START		(0x1 << 4)
-#define SHA_TFM_CONTINUE		(0x1 << 5)
-#define SHA_TFM_HASH_STORE	(0x1 << 19)
-#define SHA_TFM_SHA1		(0x2 << 23)
-#define SHA_TFM_SHA256		(0x3 << 23)
-#define SHA_TFM_SHA224		(0x4 << 23)
-#define SHA_TFM_SHA512		(0x5 << 23)
-#define SHA_TFM_SHA384		(0x6 << 23)
-#define SHA_TFM_DIGEST(x)	(((x) & 0xf) << 24)
+#define SHA_TFM_HASH		cpu_to_le32(0x2 << 0)
+#define SHA_TFM_INNER_DIG	cpu_to_le32(0x1 << 21)
+#define SHA_TFM_SIZE(x)		cpu_to_le32((x) << 8)
+#define SHA_TFM_START		cpu_to_le32(0x1 << 4)
+#define SHA_TFM_CONTINUE	cpu_to_le32(0x1 << 5)
+#define SHA_TFM_HASH_STORE	cpu_to_le32(0x1 << 19)
+#define SHA_TFM_SHA1		cpu_to_le32(0x2 << 23)
+#define SHA_TFM_SHA256		cpu_to_le32(0x3 << 23)
+#define SHA_TFM_SHA224		cpu_to_le32(0x4 << 23)
+#define SHA_TFM_SHA512		cpu_to_le32(0x5 << 23)
+#define SHA_TFM_SHA384		cpu_to_le32(0x6 << 23)
+#define SHA_TFM_DIGEST(x)	cpu_to_le32(((x) & GENMASK(3, 0)) << 24)
 
 /* SHA flags */
 #define SHA_FLAGS_BUSY		BIT(0)
 #define	SHA_FLAGS_FINAL		BIT(1)
 #define SHA_FLAGS_FINUP		BIT(2)
 #define SHA_FLAGS_SG		BIT(3)
-#define SHA_FLAGS_ALGO_MASK	GENMASK(8, 4)
+#define SHA_FLAGS_ALGO_MSK	GENMASK(8, 4)
 #define SHA_FLAGS_SHA1		BIT(4)
 #define SHA_FLAGS_SHA224	BIT(5)
 #define SHA_FLAGS_SHA256	BIT(6)
@@ -68,22 +60,33 @@
 #define SHA_FLAGS_HMAC		BIT(9)
 #define SHA_FLAGS_PAD		BIT(10)
 
-/* SHA command token */
+/**
+ * mtk_sha_ct is a set of hardware instructions(command token)
+ * that are used to control engine's processing flow of SHA,
+ * and it contains the first two words of transform state.
+ */
 struct mtk_sha_ct {
-	u32 tfm_ctrl0;
-	u32 tfm_ctrl1;
-	u32 ct_ctrl0;
-	u32 ct_ctrl1;
-	u32 ct_ctrl2;
+	__le32 tfm_ctrl0;
+	__le32 tfm_ctrl1;
+	__le32 ct_ctrl0;
+	__le32 ct_ctrl1;
+	__le32 ct_ctrl2;
 };
 
-/* SHA transform state */
+/**
+ * mtk_sha_tfm is used to define SHA transform state
+ * and store result digest that produced by engine.
+ */
 struct mtk_sha_tfm {
-	u32 tfm_ctrl0;
-	u32 tfm_ctrl1;
-	u8 digest[SHA512_DIGEST_SIZE] __aligned(sizeof(u32));
+	__le32 tfm_ctrl0;
+	__le32 tfm_ctrl1;
+	__le32 digest[SIZE_IN_WORDS(SHA512_DIGEST_SIZE)];
 };
 
+/**
+ * mtk_sha_info consists of command token and transform state
+ * of SHA, its role is similar to mtk_aes_info.
+ */
 struct mtk_sha_info {
 	struct mtk_sha_ct ct;
 	struct mtk_sha_tfm tfm;
@@ -99,10 +102,10 @@ struct mtk_sha_reqctx {
 	size_t bufcnt;
 	dma_addr_t dma_addr;
 
-	/* walk state */
+	/* Walk state */
 	struct scatterlist *sg;
-	u32 offset;	/* offset in current sg */
-	u32 total;	/* total request */
+	u32 offset;	/* Offset in current sg */
+	u32 total;	/* Total request */
 	size_t ds;
 	size_t bs;
 
@@ -119,14 +122,14 @@ struct mtk_sha_ctx {
 	struct mtk_cryp *cryp;
 	unsigned long flags;
 	u8 id;
-	u8 buf[SHA_BUFFER_LEN] __aligned(sizeof(u32));
+	u8 buf[SHA_BUF_SIZE] __aligned(sizeof(u32));
 
 	struct mtk_sha_hmac_ctx	base[0];
 };
 
 struct mtk_sha_drv {
 	struct list_head dev_list;
-	/* device list lock */
+	/* Device list lock */
 	spinlock_t lock;
 };
 
@@ -167,7 +170,7 @@ static struct mtk_cryp *mtk_sha_find_dev(struct mtk_sha_ctx *tctx)
 
 	/*
 	 * Assign record id to tfm in round-robin fashion, and this
-	 * help us to link to descriptor ring and record.
+	 * will help tfm to bind  to corresponding descriptor rings.
 	 */
 	tctx->id = cryp->rec;
 	cryp->rec = !cryp->rec;
@@ -181,17 +184,17 @@ static int mtk_sha_append_sg(struct mtk_sha_reqctx *ctx)
 {
 	size_t count;
 
-	while ((ctx->bufcnt < SHA_BUFFER_LEN) && ctx->total) {
+	while ((ctx->bufcnt < SHA_BUF_SIZE) && ctx->total) {
 		count = min(ctx->sg->length - ctx->offset, ctx->total);
-		count = min(count, SHA_BUFFER_LEN - ctx->bufcnt);
+		count = min(count, SHA_BUF_SIZE - ctx->bufcnt);
 
 		if (count <= 0) {
 			/*
-			* Check if count <= 0 because the buffer is full or
-			* because the sg length is 0. In the latest case,
-			* check if there is another sg in the list, a 0 length
-			* sg doesn't necessarily mean the end of the sg list.
-			*/
+			 * Check if count <= 0 because the buffer is full or
+			 * because the sg length is 0. In the latest case,
+			 * check if there is another sg in the list, a 0 length
+			 * sg doesn't necessarily mean the end of the sg list.
+			 */
 			if ((ctx->sg->length == 0) && !sg_is_last(ctx->sg)) {
 				ctx->sg = sg_next(ctx->sg);
 				continue;
@@ -266,7 +269,8 @@ static void mtk_sha_fill_padding(struct mtk_sha_reqctx *ctx, u32 len)
 	}
 }
 
-static void mtk_sha_info_init(struct mtk_sha *sha,
+/* Initialize basic transform information of SHA */
+static void mtk_sha_info_init(struct mtk_sha_rec *sha,
 			      struct mtk_sha_reqctx *ctx)
 {
 	struct mtk_sha_info *info = sha->info;
@@ -276,10 +280,10 @@ static void mtk_sha_info_init(struct mtk_sha *sha,
 	sha->ct_hdr = SHA_CT_CTRL_HDR;
 	sha->ct_size = SHA_CT_SIZE;
 
-	tfm->tfm_ctrl0 = SHA_TFM_HASH | SHA_TFM_DIG_TYPE |
-			 SHA_TFM_SIZE(WORD(ctx->ds));
+	tfm->tfm_ctrl0 = SHA_TFM_HASH | SHA_TFM_INNER_DIG |
+			 SHA_TFM_SIZE(SIZE_IN_WORDS(ctx->ds));
 
-	switch (ctx->flags & SHA_FLAGS_ALGO_MASK) {
+	switch (ctx->flags & SHA_FLAGS_ALGO_MSK) {
 	case SHA_FLAGS_SHA1:
 		tfm->tfm_ctrl0 |= SHA_TFM_SHA1;
 		break;
@@ -307,11 +311,16 @@ static void mtk_sha_info_init(struct mtk_sha *sha,
 
 	ct->ct_ctrl0 = SHA_COMMAND0;
 	ct->ct_ctrl1 = SHA_COMMAND1;
-	ct->ct_ctrl2 = SHA_COMMAND2 | SHA_TFM_DIGEST(WORD(ctx->ds));
+	ct->ct_ctrl2 = SHA_COMMAND2 | SHA_TFM_DIGEST(SIZE_IN_WORDS(ctx->ds));
 }
 
+/*
+ * Update input data length field of transform information and
+ * map it to DMA region.
+ */
 static int mtk_sha_info_map(struct mtk_cryp *cryp,
-			    struct mtk_sha *sha, size_t len)
+			    struct mtk_sha_rec *sha,
+			    size_t len)
 {
 	struct mtk_sha_reqctx *ctx = ahash_request_ctx(sha->req);
 	struct mtk_sha_info *info = sha->info;
@@ -322,8 +331,10 @@ static int mtk_sha_info_map(struct mtk_cryp *cryp,
 	else
 		ct->tfm_ctrl0 &= ~SHA_TFM_START;
 
-	sha->ct_hdr = (sha->ct_hdr & ~SHA_DATA_LEN_MSK) | len;
-	ct->ct_ctrl0 = (ct->ct_ctrl0 & ~SHA_DATA_LEN_MSK) | len;
+	sha->ct_hdr &= ~SHA_DATA_LEN_MSK;
+	sha->ct_hdr |= cpu_to_le32(len);
+	ct->ct_ctrl0 &= ~SHA_DATA_LEN_MSK;
+	ct->ct_ctrl0 |= cpu_to_le32(len);
 
 	ctx->digcnt += len;
 
@@ -338,6 +349,12 @@ static int mtk_sha_info_map(struct mtk_cryp *cryp,
 	return 0;
 }
 
+/*
+ * Because of hardware limitation, we must pre-calculate the inner
+ * and outer digest that need to be processed firstly by engine, then
+ * apply the result digest to the input message. These complex hashing
+ * procedures limits HMAC performance, so we use fallback SW encoding.
+ */
 static int mtk_sha_finish_hmac(struct ahash_request *req)
 {
 	struct mtk_sha_ctx *tctx = crypto_tfm_ctx(req->base.tfm);
@@ -354,6 +371,7 @@ static int mtk_sha_finish_hmac(struct ahash_request *req)
 	       crypto_shash_finup(shash, req->result, ctx->ds, req->result);
 }
 
+/* Initialize request context */
 static int mtk_sha_init(struct ahash_request *req)
 {
 	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
@@ -404,7 +422,7 @@ static int mtk_sha_init(struct ahash_request *req)
 	return 0;
 }
 
-static int mtk_sha_xmit(struct mtk_cryp *cryp, struct mtk_sha *sha,
+static int mtk_sha_xmit(struct mtk_cryp *cryp, struct mtk_sha_rec *sha,
 			dma_addr_t addr, size_t len)
 {
 	struct mtk_ring *ring = cryp->ring[sha->id];
@@ -416,33 +434,42 @@ static int mtk_sha_xmit(struct mtk_cryp *cryp, struct mtk_sha *sha,
 	if (err)
 		return err;
 
-	res->hdr = MTK_DESC_FIRST | MTK_DESC_LAST |
-		    MTK_DESC_BUF_LEN(len);
+	/* Fill in the command/result descriptors */
+	res->hdr = MTK_DESC_FIRST |
+		   MTK_DESC_LAST |
+		   MTK_DESC_BUF_LEN(len);
 
-	res->buf = cryp->tmp_dma;
+	res->buf = cpu_to_le32(cryp->tmp_dma);
 
-	cmd->hdr = MTK_DESC_FIRST | MTK_DESC_LAST |
-		    MTK_DESC_BUF_LEN(len) |
-		    MTK_DESC_CT_LEN(sha->ct_size);
+	cmd->hdr = MTK_DESC_FIRST |
+		   MTK_DESC_LAST |
+		   MTK_DESC_BUF_LEN(len) |
+		   MTK_DESC_CT_LEN(sha->ct_size);
 
-	cmd->buf = addr;
-	cmd->ct = sha->ct_dma;
+	cmd->buf = cpu_to_le32(addr);
+	cmd->ct = cpu_to_le32(sha->ct_dma);
 	cmd->ct_hdr = sha->ct_hdr;
-	cmd->tfm = sha->tfm_dma;
+	cmd->tfm = cpu_to_le32(sha->tfm_dma);
 
-	if (++ring->pos == MTK_MAX_DESC_NUM)
+	if (++ring->pos == MTK_DESC_NUM)
 		ring->pos = 0;
 
-	/* make sure all descriptor are filled done */
+	/*
+	 * Make sure that all changes to the DMA ring are done before we
+	 * start engine.
+	 */
 	wmb();
+	/* Start DMA transfer */
 	mtk_sha_write(cryp, RDR_PREP_COUNT(sha->id), MTK_DESC_CNT(1));
 	mtk_sha_write(cryp, CDR_PREP_COUNT(sha->id), MTK_DESC_CNT(1));
 
 	return -EINPROGRESS;
 }
 
-static int mtk_sha_xmit2(struct mtk_cryp *cryp, struct mtk_sha *sha,
-			 struct mtk_sha_reqctx *ctx, size_t len1, size_t len2)
+static int mtk_sha_xmit2(struct mtk_cryp *cryp,
+			 struct mtk_sha_rec *sha,
+			 struct mtk_sha_reqctx *ctx,
+			 size_t len1, size_t len2)
 {
 	struct mtk_ring *ring = cryp->ring[sha->id];
 	struct mtk_desc *cmd = ring->cmd_base + ring->pos;
@@ -453,44 +480,52 @@ static int mtk_sha_xmit2(struct mtk_cryp *cryp, struct mtk_sha *sha,
 	if (err)
 		return err;
 
+	/* Fill in the command/result descriptors */
 	res->hdr = MTK_DESC_BUF_LEN(len1) | MTK_DESC_FIRST;
-	res->buf = cryp->tmp_dma;
+	res->buf = cpu_to_le32(cryp->tmp_dma);
 
-	cmd->hdr = MTK_DESC_BUF_LEN(len1) | MTK_DESC_FIRST |
-					MTK_DESC_CT_LEN(sha->ct_size);
-	cmd->buf = sg_dma_address(ctx->sg);
-	cmd->ct = sha->ct_dma;
+	cmd->hdr = MTK_DESC_BUF_LEN(len1) |
+		   MTK_DESC_FIRST |
+		   MTK_DESC_CT_LEN(sha->ct_size);
+	cmd->buf = cpu_to_le32(sg_dma_address(ctx->sg));
+	cmd->ct = cpu_to_le32(sha->ct_dma);
 	cmd->ct_hdr = sha->ct_hdr;
-	cmd->tfm = sha->tfm_dma;
+	cmd->tfm = cpu_to_le32(sha->tfm_dma);
 
-	if (++ring->pos == MTK_MAX_DESC_NUM)
+	if (++ring->pos == MTK_DESC_NUM)
 		ring->pos = 0;
 
 	cmd = ring->cmd_base + ring->pos;
 	res = ring->res_base + ring->pos;
 
 	res->hdr = MTK_DESC_BUF_LEN(len2) | MTK_DESC_LAST;
-	res->buf = cryp->tmp_dma;
+	res->buf = cpu_to_le32(cryp->tmp_dma);
 
 	cmd->hdr = MTK_DESC_BUF_LEN(len2) | MTK_DESC_LAST;
-	cmd->buf = ctx->dma_addr;
+	cmd->buf = cpu_to_le32(ctx->dma_addr);
 
-	if (++ring->pos == MTK_MAX_DESC_NUM)
+	if (++ring->pos == MTK_DESC_NUM)
 		ring->pos = 0;
 
-	/* make sure all descriptor are filled done */
+	/*
+	 * Make sure that all changes to the DMA ring are done before we
+	 * start engine.
+	 */
 	wmb();
+	/* Start DMA transfer */
 	mtk_sha_write(cryp, RDR_PREP_COUNT(sha->id), MTK_DESC_CNT(2));
 	mtk_sha_write(cryp, CDR_PREP_COUNT(sha->id), MTK_DESC_CNT(2));
 
 	return -EINPROGRESS;
 }
 
-static int mtk_sha_dma_map(struct mtk_cryp *cryp, struct mtk_sha *sha,
-			   struct mtk_sha_reqctx *ctx, size_t count)
+static int mtk_sha_dma_map(struct mtk_cryp *cryp,
+			   struct mtk_sha_rec *sha,
+			   struct mtk_sha_reqctx *ctx,
+			   size_t count)
 {
 	ctx->dma_addr = dma_map_single(cryp->dev, ctx->buffer,
-				SHA_BUFFER_LEN, DMA_TO_DEVICE);
+				SHA_BUF_SIZE, DMA_TO_DEVICE);
 	if (unlikely(dma_mapping_error(cryp->dev, ctx->dma_addr))) {
 		dev_err(cryp->dev, "dma map error\n");
 		return -EINVAL;
@@ -501,7 +536,8 @@ static int mtk_sha_dma_map(struct mtk_cryp *cryp, struct mtk_sha *sha,
 	return mtk_sha_xmit(cryp, sha, ctx->dma_addr, count);
 }
 
-static int mtk_sha_update_slow(struct mtk_cryp *cryp, struct mtk_sha *sha)
+static int mtk_sha_update_slow(struct mtk_cryp *cryp,
+			       struct mtk_sha_rec *sha)
 {
 	struct mtk_sha_reqctx *ctx = ahash_request_ctx(sha->req);
 	size_t count;
@@ -518,7 +554,7 @@ static int mtk_sha_update_slow(struct mtk_cryp *cryp, struct mtk_sha *sha)
 		mtk_sha_fill_padding(ctx, 0);
 	}
 
-	if (final || (ctx->bufcnt == SHA_BUFFER_LEN && ctx->total)) {
+	if (final || (ctx->bufcnt == SHA_BUF_SIZE && ctx->total)) {
 		count = ctx->bufcnt;
 		ctx->bufcnt = 0;
 
@@ -527,7 +563,8 @@ static int mtk_sha_update_slow(struct mtk_cryp *cryp, struct mtk_sha *sha)
 	return 0;
 }
 
-static int mtk_sha_update_req(struct mtk_cryp *cryp, struct mtk_sha *sha)
+static int mtk_sha_update_start(struct mtk_cryp *cryp,
+				struct mtk_sha_rec *sha)
 {
 	struct mtk_sha_reqctx *ctx = ahash_request_ctx(sha->req);
 	u32 len, final, tail;
@@ -545,14 +582,14 @@ static int mtk_sha_update_req(struct mtk_cryp *cryp, struct mtk_sha *sha)
 		return mtk_sha_update_slow(cryp, sha);
 
 	if (!sg_is_last(sg) && !IS_ALIGNED(sg->length, ctx->bs))
-		/* size is not bs aligned */
+		/* size is not ctx->bs aligned */
 		return mtk_sha_update_slow(cryp, sha);
 
 	len = min(ctx->total, sg->length);
 
 	if (sg_is_last(sg)) {
 		if (!(ctx->flags & SHA_FLAGS_FINUP)) {
-			/* not last sg must be bs aligned */
+			/* not last sg must be ctx->bs aligned */
 			tail = len & (ctx->bs - 1);
 			len -= tail;
 		}
@@ -577,7 +614,7 @@ static int mtk_sha_update_req(struct mtk_cryp *cryp, struct mtk_sha *sha)
 		mtk_sha_fill_padding(ctx, len);
 
 		ctx->dma_addr = dma_map_single(cryp->dev, ctx->buffer,
-			SHA_BUFFER_LEN, DMA_TO_DEVICE);
+			SHA_BUF_SIZE, DMA_TO_DEVICE);
 		if (unlikely(dma_mapping_error(cryp->dev, ctx->dma_addr))) {
 			dev_err(cryp->dev, "dma map bytes error\n");
 			return -EINVAL;
@@ -613,7 +650,8 @@ static int mtk_sha_update_req(struct mtk_cryp *cryp, struct mtk_sha *sha)
 	return mtk_sha_xmit(cryp, sha, sg_dma_address(ctx->sg), len);
 }
 
-static int mtk_sha_final_req(struct mtk_cryp *cryp, struct mtk_sha *sha)
+static int mtk_sha_final_req(struct mtk_cryp *cryp,
+			     struct mtk_sha_rec *sha)
 {
 	struct ahash_request *req = sha->req;
 	struct mtk_sha_reqctx *ctx = ahash_request_ctx(req);
@@ -628,12 +666,17 @@ static int mtk_sha_final_req(struct mtk_cryp *cryp, struct mtk_sha *sha)
 	return mtk_sha_dma_map(cryp, sha, ctx, count);
 }
 
+/* Copy ready hash (+ finalize hmac) */
 static int mtk_sha_finish(struct ahash_request *req)
 {
 	struct mtk_sha_reqctx *ctx = ahash_request_ctx(req);
-	u8 *digest = ctx->info.tfm.digest;
+	u32 *digest = ctx->info.tfm.digest;
+	u32 *result = (u32 *)req->result;
+	int i;
 
-	memcpy(req->result, digest, ctx->ds);
+	/* Get the hash from the digest buffer */
+	for (i = 0; i < SIZE_IN_WORDS(ctx->ds); i++)
+		result[i] = le32_to_cpu(digest[i]);
 
 	if (ctx->flags & SHA_FLAGS_HMAC)
 		return mtk_sha_finish_hmac(req);
@@ -642,7 +685,7 @@ static int mtk_sha_finish(struct ahash_request *req)
 }
 
 static void mtk_sha_finish_req(struct mtk_cryp *cryp,
-			       struct mtk_sha *sha, int err)
+			       struct mtk_sha_rec *sha, int err)
 {
 	if (likely(!err && (SHA_FLAGS_FINAL & sha->flags)))
 		err = mtk_sha_finish(sha->req);
@@ -650,13 +693,15 @@ static void mtk_sha_finish_req(struct mtk_cryp *cryp,
 	sha->flags &= ~(SHA_FLAGS_BUSY | SHA_FLAGS_FINAL);
 
 	sha->req->base.complete(&sha->req->base, err);
+
+	/* Handle new request */
 	mtk_sha_handle_queue(cryp, sha->id - RING2, NULL);
 }
 
 static int mtk_sha_handle_queue(struct mtk_cryp *cryp, u8 id,
 				struct ahash_request *req)
 {
-	struct mtk_sha *sha = cryp->sha[id];
+	struct mtk_sha_rec *sha = cryp->sha[id];
 	struct crypto_async_request *async_req, *backlog;
 	struct mtk_sha_reqctx *ctx;
 	unsigned long flags;
@@ -692,16 +737,16 @@ static int mtk_sha_handle_queue(struct mtk_cryp *cryp, u8 id,
 	mtk_sha_info_init(sha, ctx);
 
 	if (ctx->op == SHA_OP_UPDATE) {
-		err = mtk_sha_update_req(cryp, sha);
+		err = mtk_sha_update_start(cryp, sha);
 		if (err != -EINPROGRESS && (ctx->flags & SHA_FLAGS_FINUP))
-			/* no final() after finup() */
+			/* No final() after finup() */
 			err = mtk_sha_final_req(cryp, sha);
 	} else if (ctx->op == SHA_OP_FINAL) {
 		err = mtk_sha_final_req(cryp, sha);
 	}
 
 	if (unlikely(err != -EINPROGRESS))
-		/* task will not finish it, so do it here */
+		/* Task will not finish it, so do it here */
 		mtk_sha_finish_req(cryp, sha, err);
 
 	return ret;
@@ -717,7 +762,7 @@ static int mtk_sha_enqueue(struct ahash_request *req, u32 op)
 	return mtk_sha_handle_queue(tctx->cryp, tctx->id, req);
 }
 
-static void mtk_sha_unmap(struct mtk_cryp *cryp, struct mtk_sha *sha)
+static void mtk_sha_unmap(struct mtk_cryp *cryp, struct mtk_sha_rec *sha)
 {
 	struct mtk_sha_reqctx *ctx = ahash_request_ctx(sha->req);
 
@@ -733,18 +778,19 @@ static void mtk_sha_unmap(struct mtk_cryp *cryp, struct mtk_sha *sha)
 		}
 		if (ctx->flags & SHA_FLAGS_PAD) {
 			dma_unmap_single(cryp->dev, ctx->dma_addr,
-					 SHA_BUFFER_LEN, DMA_TO_DEVICE);
+					 SHA_BUF_SIZE, DMA_TO_DEVICE);
 		}
 	} else
 		dma_unmap_single(cryp->dev, ctx->dma_addr,
-				 SHA_BUFFER_LEN, DMA_TO_DEVICE);
+				 SHA_BUF_SIZE, DMA_TO_DEVICE);
 }
 
-static void mtk_sha_complete(struct mtk_cryp *cryp, struct mtk_sha *sha)
+static void mtk_sha_complete(struct mtk_cryp *cryp,
+			     struct mtk_sha_rec *sha)
 {
 	int err = 0;
 
-	err = mtk_sha_update_req(cryp, sha);
+	err = mtk_sha_update_start(cryp, sha);
 	if (err != -EINPROGRESS)
 		mtk_sha_finish_req(cryp, sha, err);
 }
@@ -757,7 +803,7 @@ static int mtk_sha_update(struct ahash_request *req)
 	ctx->sg = req->src;
 	ctx->offset = 0;
 
-	if ((ctx->bufcnt + ctx->total < SHA_BUFFER_LEN) &&
+	if ((ctx->bufcnt + ctx->total < SHA_BUF_SIZE) &&
 	    !(ctx->flags & SHA_FLAGS_FINUP))
 		return mtk_sha_append_sg(ctx);
 
@@ -1175,7 +1221,7 @@ static struct ahash_alg algs_sha384_sha512[] = {
 static void mtk_sha_task0(unsigned long data)
 {
 	struct mtk_cryp *cryp = (struct mtk_cryp *)data;
-	struct mtk_sha *sha = cryp->sha[0];
+	struct mtk_sha_rec *sha = cryp->sha[0];
 
 	mtk_sha_unmap(cryp, sha);
 	mtk_sha_complete(cryp, sha);
@@ -1184,7 +1230,7 @@ static void mtk_sha_task0(unsigned long data)
 static void mtk_sha_task1(unsigned long data)
 {
 	struct mtk_cryp *cryp = (struct mtk_cryp *)data;
-	struct mtk_sha *sha = cryp->sha[1];
+	struct mtk_sha_rec *sha = cryp->sha[1];
 
 	mtk_sha_unmap(cryp, sha);
 	mtk_sha_complete(cryp, sha);
@@ -1193,14 +1239,15 @@ static void mtk_sha_task1(unsigned long data)
 static irqreturn_t mtk_sha_ring2_irq(int irq, void *dev_id)
 {
 	struct mtk_cryp *cryp = (struct mtk_cryp *)dev_id;
-	struct mtk_sha *sha = cryp->sha[0];
+	struct mtk_sha_rec *sha = cryp->sha[0];
 	u32 val = mtk_sha_read(cryp, RDR_STAT(RING2));
 
 	mtk_sha_write(cryp, RDR_STAT(RING2), val);
 
 	if (likely((SHA_FLAGS_BUSY & sha->flags))) {
-		mtk_sha_write(cryp, RDR_PROC_COUNT(RING2), MTK_DESC_CNT_CLR);
-		mtk_sha_write(cryp, RDR_THRESH(RING2), MTK_RDR_THRESH_DEF);
+		mtk_sha_write(cryp, RDR_PROC_COUNT(RING2), MTK_CNT_RST);
+		mtk_sha_write(cryp, RDR_THRESH(RING2),
+			      MTK_RDR_PROC_THRESH | MTK_RDR_PROC_MODE);
 
 		tasklet_schedule(&sha->task);
 	} else {
@@ -1212,14 +1259,15 @@ static irqreturn_t mtk_sha_ring2_irq(int irq, void *dev_id)
 static irqreturn_t mtk_sha_ring3_irq(int irq, void *dev_id)
 {
 	struct mtk_cryp *cryp = (struct mtk_cryp *)dev_id;
-	struct mtk_sha *sha = cryp->sha[1];
+	struct mtk_sha_rec *sha = cryp->sha[1];
 	u32 val = mtk_sha_read(cryp, RDR_STAT(RING3));
 
 	mtk_sha_write(cryp, RDR_STAT(RING3), val);
 
 	if (likely((SHA_FLAGS_BUSY & sha->flags))) {
-		mtk_sha_write(cryp, RDR_PROC_COUNT(RING3), MTK_DESC_CNT_CLR);
-		mtk_sha_write(cryp, RDR_THRESH(RING3), MTK_RDR_THRESH_DEF);
+		mtk_sha_write(cryp, RDR_PROC_COUNT(RING3), MTK_CNT_RST);
+		mtk_sha_write(cryp, RDR_THRESH(RING3),
+			      MTK_RDR_PROC_THRESH | MTK_RDR_PROC_MODE);
 
 		tasklet_schedule(&sha->task);
 	} else {
@@ -1228,12 +1276,16 @@ static irqreturn_t mtk_sha_ring3_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+/*
+ * The purpose of two SHA records is used to get extra performance.
+ * It is similar to mtk_aes_record_init().
+ */
 static int mtk_sha_record_init(struct mtk_cryp *cryp)
 {
-	struct mtk_sha **sha = cryp->sha;
+	struct mtk_sha_rec **sha = cryp->sha;
 	int i, err = -ENOMEM;
 
-	for (i = 0; i < RECORD_NUM; i++) {
+	for (i = 0; i < MTK_REC_NUM; i++) {
 		sha[i] = kzalloc(sizeof(**sha), GFP_KERNEL);
 		if (!sha[i])
 			goto err_cleanup;
@@ -1261,7 +1313,7 @@ static void mtk_sha_record_free(struct mtk_cryp *cryp)
 {
 	int i;
 
-	for (i = 0; i < RECORD_NUM; i++) {
+	for (i = 0; i < MTK_REC_NUM; i++) {
 		tasklet_kill(&cryp->sha[i]->task);
 		kfree(cryp->sha[i]);
 	}
@@ -1313,10 +1365,12 @@ int mtk_hash_alg_register(struct mtk_cryp *cryp)
 
 	INIT_LIST_HEAD(&cryp->sha_list);
 
+	/* Initialize two hash records */
 	err = mtk_sha_record_init(cryp);
 	if (err)
 		goto err_record;
 
+	/* Ring2 is use by SHA record0 */
 	err = devm_request_irq(cryp->dev, cryp->irq[RING2],
 			       mtk_sha_ring2_irq, IRQF_TRIGGER_LOW,
 			       "mtk-sha", cryp);
@@ -1325,6 +1379,7 @@ int mtk_hash_alg_register(struct mtk_cryp *cryp)
 		goto err_res;
 	}
 
+	/* Ring3 is use by SHA record1 */
 	err = devm_request_irq(cryp->dev, cryp->irq[RING3],
 			       mtk_sha_ring3_irq, IRQF_TRIGGER_LOW,
 			       "mtk-sha", cryp);
@@ -1333,11 +1388,11 @@ int mtk_hash_alg_register(struct mtk_cryp *cryp)
 		goto err_res;
 	}
 
-	/* enable ring2 and ring3 interrupt for hash */
+	/* Enable ring2 and ring3 interrupt for hash */
 	mtk_sha_write(cryp, AIC_ENABLE_SET(RING2), MTK_IRQ_RDR2);
 	mtk_sha_write(cryp, AIC_ENABLE_SET(RING3), MTK_IRQ_RDR3);
 
-	cryp->tmp = dma_alloc_coherent(cryp->dev, SHA_TMP_STATE_SIZE,
+	cryp->tmp = dma_alloc_coherent(cryp->dev, SHA_TMP_BUF_SIZE,
 					&cryp->tmp_dma, GFP_KERNEL);
 	if (!cryp->tmp) {
 		dev_err(cryp->dev, "unable to allocate tmp buffer.\n");
@@ -1359,7 +1414,7 @@ err_algs:
 	spin_lock(&mtk_sha.lock);
 	list_del(&cryp->sha_list);
 	spin_unlock(&mtk_sha.lock);
-	dma_free_coherent(cryp->dev, SHA_TMP_STATE_SIZE,
+	dma_free_coherent(cryp->dev, SHA_TMP_BUF_SIZE,
 			  cryp->tmp, cryp->tmp_dma);
 err_res:
 	mtk_sha_record_free(cryp);
@@ -1368,7 +1423,6 @@ err_record:
 	dev_err(cryp->dev, "mtk-sha initialization failed.\n");
 	return err;
 }
-EXPORT_SYMBOL(mtk_hash_alg_register);
 
 void mtk_hash_alg_release(struct mtk_cryp *cryp)
 {
@@ -1377,8 +1431,7 @@ void mtk_hash_alg_release(struct mtk_cryp *cryp)
 	spin_unlock(&mtk_sha.lock);
 
 	mtk_sha_unregister_algs();
-	dma_free_coherent(cryp->dev, SHA_TMP_STATE_SIZE,
+	dma_free_coherent(cryp->dev, SHA_TMP_BUF_SIZE,
 			  cryp->tmp, cryp->tmp_dma);
 	mtk_sha_record_free(cryp);
 }
-EXPORT_SYMBOL(mtk_hash_alg_release);

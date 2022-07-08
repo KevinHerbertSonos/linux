@@ -1,10 +1,9 @@
 /*
  * Cryptographic API.
  *
- * Support for MediaTek AES hardware accelerator.
+ * Driver for EIP97 AES acceleration.
  *
- * Copyright (c) 2016 MediaTek Inc.
- * Author: Ryder Lee <ryder.lee@mediatek.com>
+ * Copyright (c) 2016 Ryder Lee <ryder.lee@mediatek.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -13,61 +12,69 @@
  * Some ideas are from atmel-aes.c drivers.
  */
 
-#include <linux/dma-mapping.h>
-#include <linux/scatterlist.h>
-#include <crypto/scatterwalk.h>
-#include <crypto/algapi.h>
 #include <crypto/aes.h>
 #include "mtk-platform.h"
-#include "mtk-regs.h"
 
-#define AES_QUEUE_LENGTH	512
-#define AES_BUFFER_ORDER	2
-#define AES_BUFFER_SIZE		((PAGE_SIZE << AES_BUFFER_ORDER) \
+#define AES_QUEUE_SIZE		512
+#define AES_BUF_ORDER		2
+#define AES_BUF_SIZE		((PAGE_SIZE << AES_BUF_ORDER) \
 				& ~(AES_BLOCK_SIZE - 1))
 
 /* AES command token */
 #define AES_CT_SIZE_ECB		2
 #define AES_CT_SIZE_CBC		3
-#define AES_CT_CTRL_HDR		0x00220000
-#define AES_COMMAND0		0x05000000
-#define AES_COMMAND1		0x2d060000
-#define AES_COMMAND2		0xe4a63806
+#define AES_CT_CTRL_HDR		cpu_to_le32(0x00220000)
+#define AES_COMMAND0		cpu_to_le32(0x05000000)
+#define AES_COMMAND1		cpu_to_le32(0x2d060000)
+#define AES_COMMAND2		cpu_to_le32(0xe4a63806)
 
 /* AES transform information */
-#define AES_TFM_ECB		(0x0 << 0)
-#define AES_TFM_CBC		(0x1 << 0)
-#define AES_TFM_DECRYPT		(0x5 << 0)
-#define AES_TFM_ENCRYPT		(0x4 << 0)
-#define AES_TFM_SIZE(x)		((x) << 8)
-#define AES_TFM_128BITS		(0xb << 16)
-#define AES_TFM_192BITS		(0xd << 16)
-#define AES_TFM_256BITS		(0xf << 16)
-#define AES_TFM_FULL_IV		(0xf << 5)
+#define AES_TFM_ECB		cpu_to_le32(0x0 << 0)
+#define AES_TFM_CBC		cpu_to_le32(0x1 << 0)
+#define AES_TFM_DECRYPT		cpu_to_le32(0x5 << 0)
+#define AES_TFM_ENCRYPT		cpu_to_le32(0x4 << 0)
+#define AES_TFM_SIZE(x)		cpu_to_le32((x) << 8)
+#define AES_TFM_128BITS		cpu_to_le32(0xb << 16)
+#define AES_TFM_192BITS		cpu_to_le32(0xd << 16)
+#define AES_TFM_256BITS		cpu_to_le32(0xf << 16)
+#define AES_TFM_FULL_IV		cpu_to_le32(0xf << 5)
 
 /* AES flags */
-#define AES_FLAGS_MODE_MSK	GENMASK(2, 0)
+#define AES_FLAGS_MODE_MSK	0x7
 #define AES_FLAGS_ECB		BIT(0)
 #define AES_FLAGS_CBC		BIT(1)
 #define AES_FLAGS_ENCRYPT	BIT(2)
 #define AES_FLAGS_BUSY		BIT(3)
 
-/* AES command token */
+/**
+ * mtk_aes_ct is a set of hardware instructions(command token)
+ * that are used to control engine's processing flow of AES.
+ */
 struct mtk_aes_ct {
-	u32 ct_ctrl0;
-	u32 ct_ctrl1;
-	u32 ct_ctrl2;
+	__le32 ct_ctrl0;
+	__le32 ct_ctrl1;
+	__le32 ct_ctrl2;
 };
 
-/* AES transform info */
+/**
+ * mtk_aes_tfm is used to define AES transform state
+ * and contains all keys and initial vectors.
+ */
 struct mtk_aes_tfm {
-	u32 tfm_ctrl0;
-	u32 tfm_ctrl1;
-
-	/* keys and IVs */
-	u8 state[AES_KEYSIZE_256 + AES_BLOCK_SIZE] __aligned(sizeof(u32));
+	__le32 tfm_ctrl0;
+	__le32 tfm_ctrl1;
+	__le32 state[SIZE_IN_WORDS(AES_KEYSIZE_256 + AES_BLOCK_SIZE)];
 };
 
+/**
+ * mtk_aes_info consists of command token and transform state of AES,
+ * which should be encapsulated in command and result descriptors.
+ *
+ * The engine requires this information to do:
+ * - Commands decoding and control of the engine's data path.
+ * - Coordinating hardware data fetch and store operations.
+ * - Result token construction and output.
+ */
 struct mtk_aes_info {
 	struct mtk_aes_ct ct;
 	struct mtk_aes_tfm tfm;
@@ -81,13 +88,11 @@ struct mtk_aes_ctx {
 	struct mtk_cryp *cryp;
 	struct mtk_aes_info info;
 	u32 keylen;
-
-	unsigned long flags;
 };
 
 struct mtk_aes_drv {
 	struct list_head dev_list;
-	/* device list lock */
+	/* Device list lock */
 	spinlock_t lock;
 };
 
@@ -133,8 +138,8 @@ static inline size_t mtk_aes_padlen(size_t len)
 	return len ? AES_BLOCK_SIZE - len : 0;
 }
 
-static bool mtk_aes_check_aligned(struct scatterlist *sg,
-				  size_t len, struct mtk_aes_dma *dma)
+static bool mtk_aes_check_aligned(struct scatterlist *sg, size_t len,
+				  struct mtk_aes_dma *dma)
 {
 	int nents;
 
@@ -164,46 +169,54 @@ static bool mtk_aes_check_aligned(struct scatterlist *sg,
 	return false;
 }
 
+/* Initialize and map transform information of AES */
 static int mtk_aes_info_map(struct mtk_cryp *cryp,
-			    struct mtk_aes *aes, size_t len)
+			    struct mtk_aes_rec *aes,
+			    size_t len)
 {
 	struct mtk_aes_ctx *ctx = crypto_ablkcipher_ctx(
 			crypto_ablkcipher_reqtfm(aes->req));
 	struct mtk_aes_info *info = aes->info;
 	struct mtk_aes_ct *ct = &info->ct;
 	struct mtk_aes_tfm *tfm = &info->tfm;
-	u32 keylen = ctx->keylen;
 
-	aes->ct_hdr = AES_CT_CTRL_HDR | len;
-	ct->ct_ctrl0 = AES_COMMAND0 | len;
-	ct->ct_ctrl1 = AES_COMMAND1;
+	aes->ct_hdr = AES_CT_CTRL_HDR | cpu_to_le32(len);
 
 	if (aes->flags & AES_FLAGS_ENCRYPT)
 		tfm->tfm_ctrl0 = AES_TFM_ENCRYPT;
 	else
 		tfm->tfm_ctrl0 = AES_TFM_DECRYPT;
 
+	if (ctx->keylen == SIZE_IN_WORDS(AES_KEYSIZE_128))
+		tfm->tfm_ctrl0 |= AES_TFM_128BITS;
+	else if (ctx->keylen == SIZE_IN_WORDS(AES_KEYSIZE_256))
+		tfm->tfm_ctrl0 |= AES_TFM_256BITS;
+	else if (ctx->keylen == SIZE_IN_WORDS(AES_KEYSIZE_192))
+		tfm->tfm_ctrl0 |= AES_TFM_192BITS;
+
+	ct->ct_ctrl0 = AES_COMMAND0 | cpu_to_le32(len);
+	ct->ct_ctrl1 = AES_COMMAND1;
+
 	if (aes->flags & AES_FLAGS_CBC) {
+		const u32 *iv = (const u32 *)aes->req->info;
+		u32 *iv_state = tfm->state + ctx->keylen;
+		int i;
+
 		aes->ct_size = AES_CT_SIZE_CBC;
 		ct->ct_ctrl2 = AES_COMMAND2;
 
-		tfm->tfm_ctrl0 |= AES_TFM_SIZE(WORD(keylen + AES_BLOCK_SIZE));
-		tfm->tfm_ctrl1 = AES_TFM_CBC;
-		tfm->tfm_ctrl1 |= AES_TFM_FULL_IV;
+		tfm->tfm_ctrl0 |= AES_TFM_SIZE(ctx->keylen +
+				  SIZE_IN_WORDS(AES_BLOCK_SIZE));
+		tfm->tfm_ctrl1 = AES_TFM_CBC | AES_TFM_FULL_IV;
 
-		memcpy(tfm->state + keylen, aes->req->info, AES_BLOCK_SIZE);
+		for (i = 0; i < SIZE_IN_WORDS(AES_BLOCK_SIZE); i++)
+			iv_state[i] = cpu_to_le32(iv[i]);
+
 	} else if (aes->flags & AES_FLAGS_ECB) {
 		aes->ct_size = AES_CT_SIZE_ECB;
-		tfm->tfm_ctrl0 |= AES_TFM_SIZE(WORD(keylen));
+		tfm->tfm_ctrl0 |= AES_TFM_SIZE(ctx->keylen);
 		tfm->tfm_ctrl1 = AES_TFM_ECB;
 	}
-
-	if (keylen == AES_KEYSIZE_128)
-		tfm->tfm_ctrl0 |= AES_TFM_128BITS;
-	else if (keylen == AES_KEYSIZE_256)
-		tfm->tfm_ctrl0 |= AES_TFM_256BITS;
-	else if (keylen == AES_KEYSIZE_192)
-		tfm->tfm_ctrl0 |= AES_TFM_192BITS;
 
 	aes->ct_dma = dma_map_single(cryp->dev, info, sizeof(*info),
 					DMA_TO_DEVICE);
@@ -216,7 +229,7 @@ static int mtk_aes_info_map(struct mtk_cryp *cryp,
 	return 0;
 }
 
-static int mtk_aes_xmit(struct mtk_cryp *cryp, struct mtk_aes *aes)
+static int mtk_aes_xmit(struct mtk_cryp *cryp, struct mtk_aes_rec *aes)
 {
 	struct mtk_ring *ring = cryp->ring[aes->id];
 	struct mtk_desc *cmd = NULL, *res = NULL;
@@ -224,37 +237,41 @@ static int mtk_aes_xmit(struct mtk_cryp *cryp, struct mtk_aes *aes)
 	u32 len = aes->src.sg_len;
 	int nents;
 
+	/* Fill in the command/result descriptors */
 	for (nents = 0; nents < len; ++nents) {
 		ssg = &aes->src.sg[nents];
 		dsg = &aes->dst.sg[nents];
 
 		cmd = ring->cmd_base + ring->pos;
-		res = ring->res_base + ring->pos;
-
-		res->hdr = MTK_DESC_BUF_LEN(dsg->length);
-		res->buf = sg_dma_address(dsg);
-
 		cmd->hdr = MTK_DESC_BUF_LEN(ssg->length);
-		cmd->buf = sg_dma_address(ssg);
+		cmd->buf = cpu_to_le32(sg_dma_address(ssg));
+
+		res = ring->res_base + ring->pos;
+		res->hdr = MTK_DESC_BUF_LEN(dsg->length);
+		res->buf = cpu_to_le32(sg_dma_address(dsg));
 
 		if (nents == 0) {
 			res->hdr |= MTK_DESC_FIRST;
-			cmd->hdr |= MTK_DESC_FIRST;
-			cmd->hdr |= MTK_DESC_CT_LEN(aes->ct_size);
-			cmd->ct = aes->ct_dma;
+			cmd->hdr |= MTK_DESC_FIRST |
+				    MTK_DESC_CT_LEN(aes->ct_size);
+			cmd->ct = cpu_to_le32(aes->ct_dma);
 			cmd->ct_hdr = aes->ct_hdr;
-			cmd->tfm = aes->tfm_dma;
+			cmd->tfm = cpu_to_le32(aes->tfm_dma);
 		}
 
-		if (++ring->pos == MTK_MAX_DESC_NUM)
+		if (++ring->pos == MTK_DESC_NUM)
 			ring->pos = 0;
 	}
 
 	cmd->hdr |= MTK_DESC_LAST;
 	res->hdr |= MTK_DESC_LAST;
 
-	/* make sure all descriptor are filled done */
+	/*
+	 * Make sure that all changes to the DMA ring are done before we
+	 * start engine.
+	 */
 	wmb();
+	/* Start DMA transfer */
 	mtk_aes_write(cryp, RDR_PREP_COUNT(aes->id), MTK_DESC_CNT(len));
 	mtk_aes_write(cryp, CDR_PREP_COUNT(aes->id), MTK_DESC_CNT(len));
 
@@ -278,7 +295,7 @@ static inline void mtk_aes_restore_sg(const struct mtk_aes_dma *dma)
 	sg->length += dma->remainder;
 }
 
-static int mtk_aes_map(struct mtk_cryp *cryp, struct mtk_aes *aes)
+static int mtk_aes_map(struct mtk_cryp *cryp, struct mtk_aes_rec *aes)
 {
 	struct scatterlist *src = aes->req->src;
 	struct scatterlist *dst = aes->req->dst;
@@ -300,7 +317,7 @@ static int mtk_aes_map(struct mtk_cryp *cryp, struct mtk_aes *aes)
 	if (!src_aligned || !dst_aligned) {
 		padlen = mtk_aes_padlen(len);
 
-		if (len + padlen > AES_BUFFER_SIZE)
+		if (len + padlen > AES_BUF_SIZE)
 			return -ENOMEM;
 
 		if (!src_aligned) {
@@ -347,7 +364,7 @@ static int mtk_aes_map(struct mtk_cryp *cryp, struct mtk_aes *aes)
 static int mtk_aes_handle_queue(struct mtk_cryp *cryp, u8 id,
 				struct ablkcipher_request *req)
 {
-	struct mtk_aes *aes = cryp->aes[id];
+	struct mtk_aes_rec *aes = cryp->aes[id];
 	struct crypto_async_request *areq, *backlog;
 	struct mtk_aes_reqctx *rctx;
 	struct mtk_aes_ctx *ctx;
@@ -377,7 +394,7 @@ static int mtk_aes_handle_queue(struct mtk_cryp *cryp, u8 id,
 	ctx = crypto_ablkcipher_ctx(crypto_ablkcipher_reqtfm(req));
 	rctx = ablkcipher_request_ctx(req);
 	rctx->mode &= AES_FLAGS_MODE_MSK;
-	/* assign new request to device */
+	/* Assign new request to device */
 	aes->req = req;
 	aes->info = &ctx->info;
 	aes->flags = (aes->flags & ~AES_FLAGS_MODE_MSK) | rctx->mode;
@@ -389,7 +406,7 @@ static int mtk_aes_handle_queue(struct mtk_cryp *cryp, u8 id,
 	return mtk_aes_xmit(cryp, aes);
 }
 
-static void mtk_aes_unmap(struct mtk_cryp *cryp, struct mtk_aes *aes)
+static void mtk_aes_unmap(struct mtk_cryp *cryp, struct mtk_aes_rec *aes)
 {
 	dma_unmap_single(cryp->dev, aes->ct_dma,
 			 sizeof(struct mtk_aes_info), DMA_TO_DEVICE);
@@ -421,20 +438,24 @@ static void mtk_aes_unmap(struct mtk_cryp *cryp, struct mtk_aes *aes)
 }
 
 static inline void mtk_aes_complete(struct mtk_cryp *cryp,
-				    struct mtk_aes *aes)
+				    struct mtk_aes_rec *aes)
 {
 	aes->flags &= ~AES_FLAGS_BUSY;
 
 	aes->req->base.complete(&aes->req->base, 0);
 
+	/* Handle new request */
 	mtk_aes_handle_queue(cryp, aes->id, NULL);
 }
 
+/* Check and set the AES key to transform state buffer */
 static int mtk_aes_setkey(struct crypto_ablkcipher *tfm,
 			  const u8 *key, u32 keylen)
 {
 	struct mtk_aes_ctx *ctx = crypto_ablkcipher_ctx(tfm);
-	u8 *state = ctx->info.tfm.state;
+	const u32 *key_tmp = (const u32 *)key;
+	u32 *key_state = ctx->info.tfm.state;
+	int i;
 
 	if (keylen != AES_KEYSIZE_128 &&
 	    keylen != AES_KEYSIZE_192 &&
@@ -443,8 +464,10 @@ static int mtk_aes_setkey(struct crypto_ablkcipher *tfm,
 		return -EINVAL;
 	}
 
-	ctx->keylen = keylen;
-	memcpy(state, key, keylen);
+	ctx->keylen = SIZE_IN_WORDS(keylen);
+
+	for (i = 0; i < ctx->keylen; i++)
+		key_state[i] = cpu_to_le32(key_tmp[i]);
 
 	return 0;
 }
@@ -544,7 +567,7 @@ static struct crypto_alg aes_algs[] = {
 static void mtk_aes_enc_task(unsigned long data)
 {
 	struct mtk_cryp *cryp = (struct mtk_cryp *)data;
-	struct mtk_aes *aes = cryp->aes[0];
+	struct mtk_aes_rec *aes = cryp->aes[0];
 
 	mtk_aes_unmap(cryp, aes);
 	mtk_aes_complete(cryp, aes);
@@ -553,7 +576,7 @@ static void mtk_aes_enc_task(unsigned long data)
 static void mtk_aes_dec_task(unsigned long data)
 {
 	struct mtk_cryp *cryp = (struct mtk_cryp *)data;
-	struct mtk_aes *aes = cryp->aes[1];
+	struct mtk_aes_rec *aes = cryp->aes[1];
 
 	mtk_aes_unmap(cryp, aes);
 	mtk_aes_complete(cryp, aes);
@@ -562,14 +585,15 @@ static void mtk_aes_dec_task(unsigned long data)
 static irqreturn_t mtk_aes_enc_irq(int irq, void *dev_id)
 {
 	struct mtk_cryp *cryp = (struct mtk_cryp *)dev_id;
-	struct mtk_aes *aes = cryp->aes[0];
+	struct mtk_aes_rec *aes = cryp->aes[0];
 	u32 val = mtk_aes_read(cryp, RDR_STAT(RING0));
 
 	mtk_aes_write(cryp, RDR_STAT(RING0), val);
 
 	if (likely(AES_FLAGS_BUSY & aes->flags)) {
-		mtk_aes_write(cryp, RDR_PROC_COUNT(RING0), MTK_DESC_CNT_CLR);
-		mtk_aes_write(cryp, RDR_THRESH(RING0), MTK_RDR_THRESH_DEF);
+		mtk_aes_write(cryp, RDR_PROC_COUNT(RING0), MTK_CNT_RST);
+		mtk_aes_write(cryp, RDR_THRESH(RING0),
+			      MTK_RDR_PROC_THRESH | MTK_RDR_PROC_MODE);
 
 		tasklet_schedule(&aes->task);
 	} else {
@@ -581,14 +605,15 @@ static irqreturn_t mtk_aes_enc_irq(int irq, void *dev_id)
 static irqreturn_t mtk_aes_dec_irq(int irq, void *dev_id)
 {
 	struct mtk_cryp *cryp = (struct mtk_cryp *)dev_id;
-	struct mtk_aes *aes = cryp->aes[1];
+	struct mtk_aes_rec *aes = cryp->aes[1];
 	u32 val = mtk_aes_read(cryp, RDR_STAT(RING1));
 
 	mtk_aes_write(cryp, RDR_STAT(RING1), val);
 
 	if (likely(AES_FLAGS_BUSY & aes->flags)) {
-		mtk_aes_write(cryp, RDR_PROC_COUNT(RING1), MTK_DESC_CNT_CLR);
-		mtk_aes_write(cryp, RDR_THRESH(RING1), MTK_RDR_THRESH_DEF);
+		mtk_aes_write(cryp, RDR_PROC_COUNT(RING1), MTK_CNT_RST);
+		mtk_aes_write(cryp, RDR_THRESH(RING1),
+			      MTK_RDR_PROC_THRESH | MTK_RDR_PROC_MODE);
 
 		tasklet_schedule(&aes->task);
 	} else {
@@ -597,26 +622,31 @@ static irqreturn_t mtk_aes_dec_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-/* AES encryption record and decryption record */
+/*
+ * The purpose of creating encryption and decryption records is
+ * to process outbound/inbound data in parallel, it can improve
+ * performance in most use cases, such as IPSec VPN, especially
+ * under heavy network traffic.
+ */
 static int mtk_aes_record_init(struct mtk_cryp *cryp)
 {
-	struct mtk_aes **aes = cryp->aes;
+	struct mtk_aes_rec **aes = cryp->aes;
 	int i, err = -ENOMEM;
 
-	for (i = 0; i < RECORD_NUM; i++) {
+	for (i = 0; i < MTK_REC_NUM; i++) {
 		aes[i] = kzalloc(sizeof(**aes), GFP_KERNEL);
 		if (!aes[i])
 			goto err_cleanup;
 
 		aes[i]->buf = (void *)__get_free_pages(GFP_KERNEL,
-						AES_BUFFER_ORDER);
+						AES_BUF_ORDER);
 		if (!aes[i]->buf)
 			goto err_cleanup;
 
 		aes[i]->id = i;
 
 		spin_lock_init(&aes[i]->lock);
-		crypto_init_queue(&aes[i]->queue, AES_QUEUE_LENGTH);
+		crypto_init_queue(&aes[i]->queue, AES_QUEUE_SIZE);
 	}
 
 	tasklet_init(&aes[0]->task, mtk_aes_enc_task, (unsigned long)cryp);
@@ -637,7 +667,7 @@ static void mtk_aes_record_free(struct mtk_cryp *cryp)
 {
 	int i;
 
-	for (i = 0; i < RECORD_NUM; i++) {
+	for (i = 0; i < MTK_REC_NUM; i++) {
 		tasklet_kill(&cryp->aes[i]->task);
 		free_page((unsigned long)cryp->aes[i]->buf);
 		kfree(cryp->aes[i]);
@@ -654,7 +684,7 @@ static void mtk_aes_unregister_algs(void)
 
 static int mtk_aes_register_algs(void)
 {
-	int err, i, j;
+	int err, i;
 
 	for (i = 0; i < ARRAY_SIZE(aes_algs); i++) {
 		err = crypto_register_alg(&aes_algs[i]);
@@ -665,8 +695,8 @@ static int mtk_aes_register_algs(void)
 	return 0;
 
 err_aes_algs:
-	for (j = 0; j < i; j++)
-		crypto_unregister_alg(&aes_algs[j]);
+	for (; i--; )
+		crypto_unregister_alg(&aes_algs[i]);
 
 	return err;
 }
@@ -677,10 +707,12 @@ int mtk_cipher_alg_register(struct mtk_cryp *cryp)
 
 	INIT_LIST_HEAD(&cryp->aes_list);
 
+	/* Initialize two cipher records */
 	ret = mtk_aes_record_init(cryp);
 	if (ret)
 		goto err_record;
 
+	/* Ring0 is use by encryption record */
 	ret = devm_request_irq(cryp->dev, cryp->irq[RING0], mtk_aes_enc_irq,
 			       IRQF_TRIGGER_LOW, "mtk-aes", cryp);
 	if (ret) {
@@ -688,6 +720,7 @@ int mtk_cipher_alg_register(struct mtk_cryp *cryp)
 		goto err_res;
 	}
 
+	/* Ring1 is use by decryption record */
 	ret = devm_request_irq(cryp->dev, cryp->irq[RING1], mtk_aes_dec_irq,
 			       IRQF_TRIGGER_LOW, "mtk-aes", cryp);
 	if (ret) {
@@ -695,7 +728,7 @@ int mtk_cipher_alg_register(struct mtk_cryp *cryp)
 		goto err_res;
 	}
 
-	/* enable ring0 and ring1 interrupt for cipher */
+	/* Enable ring0 and ring1 interrupt */
 	mtk_aes_write(cryp, AIC_ENABLE_SET(RING0), MTK_IRQ_RDR0);
 	mtk_aes_write(cryp, AIC_ENABLE_SET(RING1), MTK_IRQ_RDR1);
 
@@ -720,7 +753,6 @@ err_record:
 	dev_err(cryp->dev, "mtk-aes initialization failed.\n");
 	return ret;
 }
-EXPORT_SYMBOL(mtk_cipher_alg_register);
 
 void mtk_cipher_alg_release(struct mtk_cryp *cryp)
 {
@@ -731,4 +763,3 @@ void mtk_cipher_alg_release(struct mtk_cryp *cryp)
 	mtk_aes_unregister_algs();
 	mtk_aes_record_free(cryp);
 }
-EXPORT_SYMBOL(mtk_cipher_alg_release);

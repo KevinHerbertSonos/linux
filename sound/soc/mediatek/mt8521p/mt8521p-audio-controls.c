@@ -446,6 +446,23 @@ static int loopback_control_put(struct snd_kcontrol *kcontrol, struct snd_ctl_el
 	return 0;
 }
 
+static int sram_enable_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = afe_sram_enable;
+	pr_notice("%s Mch-I2S memif output sram enable:%d\n", __func__, afe_sram_enable);
+
+	return 0;
+}
+
+static int sram_enable_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	afe_sram_enable = ucontrol->value.integer.value[0];
+	pr_notice("%s Mch-I2S memif output sram enable is set to:%d\n", __func__, afe_sram_enable);
+
+	return 0;
+}
+
+
 static const struct snd_kcontrol_new mt8521p_soc_controls[] = {
 	{
 		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
@@ -500,5 +517,9 @@ static const struct snd_kcontrol_new mt8521p_soc_controls[] = {
 		.get = loopback_control_get,
 		.put = loopback_control_put
 	},
+	SOC_SINGLE_BOOL_EXT("SRAM Enable",
+			    0,
+			    sram_enable_get,
+			    sram_enable_put),
 };
 

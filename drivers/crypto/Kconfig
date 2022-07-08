@@ -499,8 +499,8 @@ config CRYPTO_DEV_SUN4I_SS
 	  will be called sun4i-ss.
 
 config CRYPTO_DEV_MEDIATEK
-	bool "Support for MediaTek cryptographic accelerator"
-	depends on ARM && ARCH_MEDIATEK
+	tristate "MediaTek's EIP97 Cryptographic Engine driver"
+	depends on ARM && (ARCH_MEDIATEK || COMPILE_TEST)
 	select ARM_CRYPTO
 	select CRYPTO_AES
 	select CRYPTO_BLKCIPHER
@@ -509,8 +509,8 @@ config CRYPTO_DEV_MEDIATEK
 	select CRYPTO_SHA512_ARM
 	select CRYPTO_HMAC
 	help
-	  This driver allows you to utilize the cryptographic engines
-	  and security accelerator which can be found on the mt7623.
+	  This driver allows you to utilize the hardware crypto accelerator
+	  EIP97 which can be found on the MT7623 MT2701, MT8521p, etc ....
 	  Select this if you want to use it for AES/SHA1/SHA2 algorithms.
 
 endif # CRYPTO_HW

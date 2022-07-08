@@ -31,12 +31,6 @@
 
 #include "sync_write.h"
 
-/* For fake mt_ptp.c functions */
-u32 __attribute__ ((weak)) PTP_get_ptp_level(void)
-{
-	return 0;
-}
-
 #include "mach/mt_freqhopping.h"
 #include "mt_cpufreq.h"
 #include <mach/mtk_thermal.h>
@@ -47,6 +41,54 @@ u32 __attribute__ ((weak)) PTP_get_ptp_level(void)
 #include <linux/of_address.h>
 #include <linux/regulator/consumer.h>
 #endif
+
+#include <trustzone/tz_cross/ta_efuse.h>
+#include <trustzone/tz_cross/efuse_info.h>
+
+/* For duplicate mt_ptp.c functions */
+u32 __attribute__ ((weak)) PTP_get_ptp_level(void)
+{
+	unsigned int spd_bin_resv = 0, segment = 0, ret = 0;
+	unsigned char efuse_data[4];
+
+	tee_fuse_read(M_HW_RES4, efuse_data, 4); /* M_HW_RES4 */
+	segment = (efuse_data[3] >> 7) & 0x1;
+	if (segment == 0) {
+		tee_fuse_read(M_HW_RES4, efuse_data, 4); /* M_HW_RES4 */
+		spd_bin_resv = efuse_data[0] | (efuse_data[1] << 8) | (efuse_data[2] << 16) | (efuse_data[3] << 24);
+	} else {
+		tee_fuse_read(M_HW_RES4, efuse_data, 4); /* M_HW_RES4 */
+		spd_bin_resv = ((efuse_data[2]) | (efuse_data[3] << 8)) & 0x7FFF;
+	}
+
+	if (segment == 1) {
+		if (spd_bin_resv == 0x1000)
+			ret = 0; /* 1.3G */
+		else if (spd_bin_resv == 0x1001)
+			ret = 5; /* 1.222G */
+		else if (spd_bin_resv == 0x1003)
+			ret = 6; /* 1.118G */
+		else
+			ret = 0; /* 1.3G */
+	} else if (spd_bin_resv != 0) {
+		if (spd_bin_resv == 0x1000)
+			ret = 3; /* 1.5G, 8127T */
+		else
+			ret = 0; /* 1.3G, */
+	} else { /* free */
+		tee_fuse_read(M_HW2_RES2, efuse_data, 4); /* M_HW2_RES2 */
+		spd_bin_resv = efuse_data[0] & 0x7;
+		switch (spd_bin_resv) {
+		case 1:
+			ret = 3; /* 1.5G */
+			break;
+		default:
+			ret = 0; /* 1.3G */
+			break;
+		}
+	}
+	return ret;
+}
 
 
 
@@ -138,8 +180,9 @@ static struct mt_cpu_freq_info mt8127_freqs_e1_5[] = {
 };
 
 static struct mt_cpu_freq_info mt8127_freqs_e1_6[] = {
-	OP(DVFS_F2, DVFS_V0),
-	OP(DVFS_F3, DVFS_V1),
+	OP(DVFS_F1_1, DVFS_V1),
+	OP(DVFS_F2, DVFS_V2),
+	OP(DVFS_F3, DVFS_V2),
 	OP(DVFS_F4, DVFS_V2),
 };
 
@@ -1106,7 +1149,6 @@ static int mt_cpufreq_pdrv_probe(struct platform_device *pdev)
     * Check PTP level to define default max freq
     *************************************************/
 	g_cpufreq_get_ptp_level = PTP_get_ptp_level();
-	g_cpufreq_get_ptp_level = 6;
 
 	if (g_cpufreq_get_ptp_level == 0)
 		g_max_freq_by_ptp = DVFS_F0;

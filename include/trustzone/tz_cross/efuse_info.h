@@ -55,6 +55,8 @@ enum efuse_index {
 	HRID,
 	M_HW_RES4,
 	M_HW2_RES2,
+	SW_JTAG_CON,
+	BROM_CMD_DIS, /* 30 */
 	EFUSE_MAX
 };
 
@@ -87,7 +89,9 @@ static const struct efuse_entry efuse_info[] = {
 	EFUEE_INFO(SEC_CTRL_LOCK2, 1),
 	EFUEE_INFO(HRID, 8),
 	EFUEE_INFO(M_HW_RES4, 4),
-	EFUEE_INFO(M_HW2_RES2, 4), /* 28 */
+	EFUEE_INFO(M_HW2_RES2, 4),
+	EFUEE_INFO(SW_JTAG_CON, 1),
+	EFUEE_INFO(BROM_CMD_DIS, 1), /* 30 */
 };
 
 #endif /* __TRUSTZONE_EFUSE_INFO__ */

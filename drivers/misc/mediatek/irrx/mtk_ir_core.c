@@ -783,7 +783,7 @@ int mtk_ir_core_create_thread(int (*threadfn) (void *data),
 	int ret = 0;
 	struct task_struct *ptask;
 
-	ptask = kthread_create(threadfn, data, ps_name);
+	ptask = kthread_run(threadfn, data, ps_name);
 
 	if (IS_ERR(ptask)) {
 		MTK_IR_ERR("unable to create kernel thread %s\n", ps_name);
@@ -851,9 +851,6 @@ static int mtk_ir_input_thread(void *pvArg)
 		spin_unlock_irqrestore(&scancode_lock, __flags);
 
 		if (u4CurKey != BTN_NONE) {
-			if (kthread_should_stop())	/* other place want to stop this thread; */
-				continue;
-
 			MTK_IR_TRD_LOG(" get scancode: 0x%08x\n", u4CurKey);
 			cxt = mtk_ir_context_obj;
 			rcdev = cxt->rcdev;
@@ -902,7 +899,9 @@ static int mtk_ir_input_thread(void *pvArg)
 			}
 		}
 		set_current_state(TASK_INTERRUPTIBLE);
+		MTK_IR_TRD_LOG(" input schedule() >>>>\n");
 		schedule();
+		MTK_IR_TRD_LOG(" input schedule() <<<<\n");
 	}
 
 	MTK_IR_TRD_LOG("mtk_ir_input_thread exit success\n");
@@ -990,24 +989,10 @@ static int mtk_ir_lirc_register(struct device *dev_parent)
 		MTK_IR_ERR(" lirc_register_driver fail ret(%d) !!!\n", ret);
 		goto lirc_register_failed;
 	}
-	spin_lock_init(&scancode_lock);
-	ret = mtk_ir_core_create_thread(mtk_ir_input_thread,
-									NULL,
-									"mtk_ir_inp_thread",
-									&(mtk_ir_context_obj->k_thread),
-									94);	/*RTPM_PRIO_SCRN_UPDATE */
-	if (ret) {
-		MTK_IR_ERR(" create mtk_ir_input_thread fail\n");
-		goto ir_inp_thread_fail;
-	} else
-		MTK_IR_LOG(" create mtk_ir_input_thread[mtk_ir_context_obj->k_thread].\n");
-
 	mtk_ir_context_obj->drv = drv;	/* store lirc_driver pointor to mtk_rc_core.drv */
 	MTK_IR_LOG(" mtk_ir_lirc_register[%s]----\n", drv->name);
 	return 0;
 
-ir_inp_thread_fail:
-	lirc_unregister_driver(drv->minor);
 lirc_register_failed:
 	lirc_buffer_free(rbuf);
 rbuf_init_failed:
@@ -1165,6 +1150,7 @@ static int mtk_ir_core_probe(struct platform_device *pdev)
 	ASSERT(pdata->uninit_hw != NULL);
 	ASSERT(pdata->p_map_list != NULL);
 	ASSERT(pdata->ir_hw_decode != NULL);
+	spin_lock_init(&scancode_lock);
 
 	ret = pdata->init_hw();	/* init this  ir's  hw */
 	if (ret) {
@@ -1214,6 +1200,17 @@ static int mtk_ir_core_probe(struct platform_device *pdev)
 		MTK_IR_ERR(" register irq failed!\n");
 		goto err_request_irq;
 	}
+
+	ret = mtk_ir_core_create_thread(mtk_ir_input_thread,
+									NULL,
+									"mtk_ir_inp_thread",
+									&(mtk_ir_context_obj->k_thread),
+									94);	/*RTPM_PRIO_SCRN_UPDATE */
+	if (ret) {
+		MTK_IR_ERR(" create mtk_ir_input_thread fail\n");
+		goto err_request_irq;
+	} else
+		MTK_IR_LOG(" create mtk_ir_input_thread[mtk_ir_context_obj->k_thread].\n");
 
 	startTimer(&cxt->hrTimer, atomic_read(&cxt->delay), true);
 	MTK_IR_LOG("mtk_ir_core_probe----\n");

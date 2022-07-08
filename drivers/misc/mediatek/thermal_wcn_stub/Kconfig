@@ -1,0 +1,4 @@
+config MTK_WCN_THERMAL_STUB
+        bool "MediaTek Wireless Chip Temperature Indication Support" if MTK_COMBO=n
+        help
+          MTK Wireless chip temperarure indication support for MT76XX

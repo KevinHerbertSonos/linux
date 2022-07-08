@@ -61,6 +61,7 @@ struct mt_stream {
 	struct snd_pcm_substream *substream;
 	struct mt_irq *irq;
 	int use_i2s_slave_clock;
+	int use_sram;
 };
 
 struct mt_irq {

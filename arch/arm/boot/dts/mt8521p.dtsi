@@ -150,7 +150,9 @@
 	};
 
 	scpsys: scpsys@10006000 {
-		compatible = "mediatek,mt2701-scpsys", "syscon";
+		compatible = "mediatek,mt2701-scpsys",
+			     "mediatek,mt8127-scpsys",
+			     "syscon";
 		#power-domain-cells = <1>;
 		reg = <0 0x10006000 0 0x1000>;
 		interrupts = <GIC_SPI 117 IRQ_TYPE_LEVEL_LOW>,
@@ -229,7 +231,8 @@
 	};
 
 	mcucfg: mcucfg@10200000 {
-		compatible = "mediatek,mt2701-infracfg", "mediatek,mt8127-mcucfg";
+		compatible = "mediatek,mt2701-mcucfg",
+			     "mediatek,mt8127-mcucfg";
 		reg = <0 0x10200000 0 0x200>;
 	};
 
@@ -264,6 +267,9 @@
 		reg = <0 0x10206000 0 0x1000>;
 		#address-cells = <1>;
 		#size-cells = <1>;
+		thermal_calibration: calib@424 {
+			reg = <0x424 0xc>;
+		};
 	};
 
 	apmixedsys: syscon@10209000 {
@@ -428,7 +434,7 @@
 	};
 
 	thermal: thermal@1100b000 {
-		compatible = "mediatek,mt8127-thermal";
+		compatible = "mediatek,mt2701-thermal";
 		reg = <0 0x1100b000 0 0x1000>;
 		interrupts = <GIC_SPI 70 IRQ_TYPE_LEVEL_LOW>;
 		clocks = <&pericfg CLK_PERI_THERM>, <&pericfg CLK_PERI_AUXADC>;
@@ -436,6 +442,8 @@
 		auxadc = <&auxadc>;
 		apmixedsys = <&apmixedsys>;
 		pericfg = <&pericfg>;
+		nvmem-cells = <&thermal_calibration>;
+		nvmem-cell-names = "calibration-data";
 	};
 
 	nandc: nfi@1100d000 {
@@ -1043,6 +1051,21 @@
 		compatible = "mediatek,mtee";
 		clocks = <&infracfg CLK_INFRA_TRNG>, <&pericfg CLK_PERI_GCPU>;
 		clock-names = "TRNG", "GCPU";
+	};
+
+	crypto: crypto@1b240000 {
+		compatible = "mediatek,eip97-crypto";
+		reg = <0 0x1b240000 0 0x20000>;
+		interrupts = <GIC_SPI 82 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 83 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 84 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 91 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 97 IRQ_TYPE_LEVEL_LOW>;
+		clocks = <&topckgen CLK_TOP_ETHIF_SEL>,
+			 <&ethsys CLK_ETHSYS_CRYPTO>;
+		clock-names = "ethif","cryp";
+		power-domains = <&scpsys MT2701_POWER_DOMAIN_ETH>;
+		status = "disabled";
 	};
 
 	bring-up {

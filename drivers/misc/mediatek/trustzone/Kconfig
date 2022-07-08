@@ -14,3 +14,9 @@ config MTK_IN_HOUSE_TEE_SUPPORT
 	help
 	  This enable MTK TEE support.
 
+config MTK_IN_HOUSE_TEE_CRYPTO_DRIVER
+	bool "Enable MTK In House TEE Crypto Driver"
+	depends on MTK_IN_HOUSE_TEE_SUPPORT
+	default n
+	help
+	   This enable sha256 and ctr(aes) crypto driver
