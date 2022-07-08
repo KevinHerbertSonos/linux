@@ -214,6 +214,15 @@ config PHY_MT65XX_USB3
 	  Say 'Y' here to add support for Mediatek USB3.0 PHY driver,
 	  it supports multiple usb2.0 and usb3.0 ports.
 
+config PHY_MEDIATEK_PCIE
+	tristate "Mediatek PCIe PHY driver"
+	depends on ARCH_MEDIATEK && OF
+	select GENERIC_PHY
+	select MFD_SYSCON
+	help
+	  Say 'Y' here to add support for generic Mediatek PCIe PHY driver,
+	  which could be found on MT7623/MT8521p/MT2701 series SoCs.
+
 config PHY_SUN4I_USB
 	tristate "Allwinner sunxi SoC USB PHY driver"
 	depends on ARCH_SUNXI && HAS_IOMEM && OF

@@ -190,8 +190,8 @@ extern u32 spm_irq_1;
 #define PCM_SW_INT1                 (1U << 1)
 #define PCM_SW_INT2                 (1U << 2)
 #define PCM_SW_INT3                 (1U << 3)
-#define PCM_SW_INT_ALL              (PCM_SW_INT3 | PCM_SW_INT2 | PCM_SW_INT1 |  \
-				     PCM_SW_INT0)
+#define PCM_SW_INT_ALL              (PCM_SW_INT3 | PCM_SW_INT2 |	\
+					PCM_SW_INT1 | PCM_SW_INT0)
 
 #define CC_SYSCLK0_EN_0             (1U << 0)
 #define CC_SYSCLK0_EN_1             (1U << 1)
@@ -226,6 +226,7 @@ extern u32 spm_irq_1;
 #define WAKE_SRC_AFE                (1U << 20)
 #define WAKE_SRC_THERM              (1U << 21)
 #define WAKE_SRC_CIRQ               (1U << 22)
+#define WAKE_SRC_CM4SYS             (1U << 23)
 #define WAKE_SRC_SYSPWREQ           (1U << 24)
 #define WAKE_SRC_ETHERNET           (1U << 25)
 #define WAKE_SRC_CPU0_IRQ           (1U << 26)
@@ -241,10 +242,12 @@ extern u32 spm_irq_1;
 #define ISR_PCM_IRQ3                (1U << 11)
 
 #define ISRM_PCM_IRQ_AUX            (ISR_PCM_IRQ3 | ISR_PCM_IRQ2 | ISR_PCM_IRQ1)
-#define ISRM_ALL_EXC_TWAM           (ISR_PCM_IRQ3 | ISR_PCM_IRQ2 | ISR_PCM_IRQ1 |   \
-				     ISR_PCM_IRQ0 | ISR_PCM_RETURN)
-#define ISRM_ALL                    (ISR_PCM_IRQ3 | ISR_PCM_IRQ2 | ISR_PCM_IRQ1 |   \
-				     ISR_PCM_IRQ0 | ISR_PCM_RETURN | ISR_TWAM)
+#define ISRM_ALL_EXC_TWAM           (ISR_PCM_IRQ3 | ISR_PCM_IRQ2 |	\
+					ISR_PCM_IRQ1 | ISR_PCM_IRQ0 |	\
+					ISR_PCM_RETURN)
+#define ISRM_ALL                    (ISR_PCM_IRQ3 | ISR_PCM_IRQ2 |	\
+					ISR_PCM_IRQ1 | ISR_PCM_IRQ0 |	\
+					ISR_PCM_RETURN | ISR_TWAM)
 
 #define ISRC_ALL_EXC_TWAM           (ISR_PCM_RETURN)
 #define ISRC_ALL                    (ISR_PCM_RETURN | ISR_TWAM)
@@ -252,7 +255,8 @@ extern u32 spm_irq_1;
 #define EVENT_VEC(event, resume, imme, pc)	\
 	(((event) << 0) | ((resume) << 5) | ((imme) << 6) | ((pc) << 16))
 
-#define spm_read(addr)			__raw_readl((void __force __iomem *)(addr))
+#define spm_read(addr)			\
+	__raw_readl((void __force __iomem *)(addr))
 #define spm_write(addr, val)		mt_reg_sync_writel(val, addr)
 
 #define spm_is_wakesrc_invalid(wakesrc)     (!!((u32)(wakesrc) & 0xc082b881))
@@ -264,7 +268,7 @@ extern u32 spm_irq_1;
 #define spm_warn(fmt, args...)		pr_warn("[SPM] " fmt, ##args)
 #define spm_notice(fmt, args...)	pr_notice("[SPM] " fmt, ##args)
 #define spm_info(fmt, args...)		pr_info("[SPM] " fmt, ##args)
-#define spm_debug(fmt, args...)		pr_info("[SPM] " fmt, ##args)	/* pr_debug show nothing */
+#define spm_debug(fmt, args...)		pr_info("[SPM] " fmt, ##args)
 
 typedef struct {
 	const u32 *base;	/* code array base */

@@ -46,5 +46,6 @@ void mtk_ecc_adjust_strength(u32 *);
 
 struct mtk_ecc *of_mtk_ecc_get(struct device_node *);
 void mtk_ecc_release(struct mtk_ecc *);
+struct clk *mtk_ecc_get_clk(struct mtk_ecc *ecc);
 
 #endif

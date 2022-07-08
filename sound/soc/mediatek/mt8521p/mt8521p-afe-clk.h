@@ -30,5 +30,8 @@ extern void mt_turn_on_i2sin_clock(int id, int on);
 extern void mt_mclk_set(int id, int domain, int mclk);
 extern void mt_afe_spdif_dir_clk_on(void);
 extern void mt_afe_spdif_dir_clk_off(void);
+extern void mt_afe_apdma_clk_on(void);
+extern void mt_afe_apdma_clk_off(void);
+extern void mt_afe_cmsys_clk_on(void);
 
 #endif

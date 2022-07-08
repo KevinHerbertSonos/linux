@@ -411,6 +411,59 @@ static void mtk_nfc_hw_reset(struct mtk_nfc *nfc)
 	nfi_writew(nfc, STAR_DE, NFI_STRDATA);
 }
 
+static int mtk_nfc_enable_clk(struct device *dev, struct mtk_nfc_clk *clk)
+{
+	int ret;
+
+	ret = clk_prepare_enable(clk->nfi_clk);
+	if (ret) {
+		dev_err(dev, "failed to enable nfi clk\n");
+		return ret;
+	}
+
+	ret = clk_prepare_enable(clk->pad_clk);
+	if (ret) {
+		dev_err(dev, "failed to enable pad clk\n");
+		clk_disable_unprepare(clk->nfi_clk);
+		return ret;
+	}
+
+	return 0;
+}
+
+static void mtk_nfc_disable_clk(struct mtk_nfc_clk *clk)
+{
+	clk_disable_unprepare(clk->nfi_clk);
+	clk_disable_unprepare(clk->pad_clk);
+}
+
+static void mtk_nfc_clk_cpuidle(struct mtk_nfc *nfc, int gate)
+{
+	int ret;
+	struct clk *ecc_clk;
+	struct device *dev = nfc->dev;
+
+	ecc_clk = mtk_ecc_get_clk(nfc->ecc);
+	if (unlikely(!ecc_clk)) {
+		dev_err(dev, "failed to get ecc clk\n");
+		return;
+	}
+
+	if (gate < 0) {
+		mtk_nfc_disable_clk(&nfc->clk);
+		clk_disable_unprepare(ecc_clk);
+	} else {
+		if (mtk_nfc_enable_clk(dev, &nfc->clk))
+			return;
+
+		ret = clk_prepare_enable(ecc_clk);
+		if (ret) {
+			dev_err(dev, "failed to enable ecc clk\n");
+			mtk_nfc_disable_clk(&nfc->clk);
+		}
+	}
+}
+
 static int mtk_nfc_send_command(struct mtk_nfc *nfc, u8 command)
 {
 	struct device *dev = nfc->dev;
@@ -571,6 +624,8 @@ static void mtk_nfc_select_chip(struct mtd_info *mtd, int chip)
 	struct mtk_nfc *nfc = nand_get_controller_data(nand);
 	struct mtk_nfc_nand_chip *mtk_nand = to_mtk_nand(nand);
 
+	mtk_nfc_clk_cpuidle(nfc, chip);
+
 	if (chip < 0)
 		return;
 
@@ -702,7 +757,7 @@ static void mt2701_adjust_spare_fmt(struct mtd_info *mtd, u32 *fmt)
 	struct nand_chip *chip = mtd_to_nand(mtd);
 	struct mtk_nfc_nand_chip *mtk_nand = to_mtk_nand(chip);
 	struct mtk_nfc *nfc = nand_get_controller_data(chip);
-	u32 spare, ecc_str, spare_used;
+	u32 spare;
 
 	spare = mtk_nand->spare_per_sector;
 	if (chip->ecc.size == 1024)
@@ -724,8 +779,7 @@ static void mt7622_adjust_spare_fmt(struct mtd_info *mtd, u32 *fmt)
 {
 	struct nand_chip *chip = mtd_to_nand(mtd);
 	struct mtk_nfc_nand_chip *mtk_nand = to_mtk_nand(chip);
-	struct mtk_nfc *nfc = nand_get_controller_data(chip);
-	u32 spare, ecc_str, spare_used;
+	u32 spare;
 
 	spare = mtk_nand->spare_per_sector;
 	*fmt &= ~(0xf << PAGEFMT_SPARE_SHIFT);
@@ -738,7 +792,6 @@ static void mt7622_adjust_spare_fmt(struct mtd_info *mtd, u32 *fmt)
 static void mt7622_nfc_adjust_ecc(struct mtd_info *mtd)
 {
 	struct nand_chip *nand = mtd_to_nand(mtd);
-	struct mtk_nfc *nfc = nand_get_controller_data(nand);
 	u32 spare;
 
 	nand->ecc.size = 512;
@@ -1244,32 +1297,6 @@ static irqreturn_t mtk_nfc_irq(int irq, void *id)
 	return IRQ_HANDLED;
 }
 
-static int mtk_nfc_enable_clk(struct device *dev, struct mtk_nfc_clk *clk)
-{
-	int ret;
-
-	ret = clk_prepare_enable(clk->nfi_clk);
-	if (ret) {
-		dev_err(dev, "failed to enable nfi clk\n");
-		return ret;
-	}
-
-	ret = clk_prepare_enable(clk->pad_clk);
-	if (ret) {
-		dev_err(dev, "failed to enable pad clk\n");
-		clk_disable_unprepare(clk->nfi_clk);
-		return ret;
-	}
-
-	return 0;
-}
-
-static void mtk_nfc_disable_clk(struct mtk_nfc_clk *clk)
-{
-	clk_disable_unprepare(clk->nfi_clk);
-	clk_disable_unprepare(clk->pad_clk);
-}
-
 static int mtk_nfc_ooblayout_free(struct mtd_info *mtd, int section,
 				  struct mtd_oob_region *oob_region)
 {
@@ -1702,6 +1729,9 @@ static int mtk_nfc_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to init nand chips\n");
 		goto clk_disable;
 	}
+
+	/* Turn off clock for Mediatek CPU idle */
+	mtk_nfc_clk_cpuidle(nfc, -1);
 
 	return 0;
 

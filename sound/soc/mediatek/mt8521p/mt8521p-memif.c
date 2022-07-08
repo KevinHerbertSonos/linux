@@ -238,7 +238,7 @@ static int memif_hw_params(struct snd_pcm_substream *substream, struct snd_pcm_h
 	}
 	if (afe_sram_enable &&
 		(rtd->cpu_dai->id == MT_DAI_I2SM_ID) &&
-		(buffer_bytes < afe_sram_max_size)) {
+		(buffer_bytes <= afe_sram_max_size)) {
 		struct snd_dma_buffer *dma_buf = &substream->dma_buffer;
 
 		dma_buf->dev.type = SNDRV_DMA_TYPE_DEV;

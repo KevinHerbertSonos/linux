@@ -26,3 +26,4 @@ obj-y += mt_cpuidle.o
 obj-y += cpu_dormant-v7.o
 obj-y += mt_sleep.o
 obj-y += mt_spm_sleep.o
+obj-y += mt_idle.o

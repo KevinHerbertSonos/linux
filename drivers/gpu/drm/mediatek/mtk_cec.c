@@ -967,7 +967,7 @@ static int mtk_cec_probe(struct platform_device *pdev)
 	cec->adap = cec_allocate_adapter(&mtk_hdmi_cec_adap_ops,
 					cec, "mtk-hdmi-cec",
 					CEC_CAP_TRANSMIT | CEC_CAP_PASSTHROUGH |
-					CEC_CAP_LOG_ADDRS, 1, dev);
+					CEC_CAP_LOG_ADDRS, 1);
 
 	ret = PTR_ERR_OR_ZERO(cec->adap);
 	if (ret < 0) {
@@ -975,7 +975,7 @@ static int mtk_cec_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = cec_register_adapter(cec->adap);
+	ret = cec_register_adapter(cec->adap, dev);
 	if (ret) {
 		dev_err(dev, "Fail to register cec adapter\n");
 		cec_delete_adapter(cec->adap);

@@ -173,6 +173,24 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie_default>;
 	status = "okay";
+
+	pcie@0,0 {
+		wake-gpios = <&pio 28 0>;
+		status = "okay";
+	};
+
+	pcie@1,0 {
+		wake-gpios = <&pio 27 0>;
+		status = "okay";
+	};
+};
+
+&pcie0_phy {
+	status = "okay";
+};
+
+&pcie1_phy {
+	status = "okay";
 };
 
 &pio {
@@ -397,7 +415,10 @@
 	pcie_default: pcie_pin_default {
 		pins_cmd_dat {
 			pinmux = <MT2701_PIN_22_EINT0__FUNC_PCIE0_PERST_N>,
-				 <MT2701_PIN_209_AUD_EXT_CK2__FUNC_PCIE1_PERST_N>;
+				 <MT2701_PIN_209_AUD_EXT_CK2__FUNC_PCIE1_PERST_N>,
+				 <MT2701_PIN_28_EINT6__FUNC_PCIE0_WAKE_N>,
+				 <MT2701_PIN_27_EINT5__FUNC_PCIE1_WAKE_N>;
+			bias-disable;
 		};
 	};
 
@@ -700,7 +721,8 @@
 
 &sound {
 	/* CS42448 Machine name */
-	compatible = "mediatek,mt8521p-cs42448-machine";
+	compatible = "mediatek,mt8521p-cs42448-machine",
+		     "mediatek,mt8521p-soc-machine";
 	/* CS42448 routing*/
 	audio-routing =
 		"Line Out Jack", "AOUT1L",
@@ -767,6 +789,11 @@
 		reg = <0>;
 		spi-max-frequency = <1000000>;
 	};
+};
+
+&topckgen {
+	assigned-clocks = <&topckgen CLK_TOP_RTC_SEL>;
+	assigned-clock-parents = <&topckgen CLK_TOP_32K_EXTERNAL>;
 };
 
 &uart0 {

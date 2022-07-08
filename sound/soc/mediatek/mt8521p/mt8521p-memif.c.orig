@@ -19,6 +19,7 @@
 #include "mt8521p-dai.h"
 #include "mt8521p-afe.h"
 #include "mt8521p-private.h"
+#include "mt8521p-afe-reg.h"
 
 static const struct snd_pcm_hardware memif_hardware = {
 	.info = SNDRV_PCM_INFO_MMAP
@@ -221,6 +222,7 @@ static int memif_close(struct snd_pcm_substream *substream)
 
 static int memif_hw_params(struct snd_pcm_substream *substream, struct snd_pcm_hw_params *params)
 {
+	struct mt_stream *s = substream->runtime->private_data;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	unsigned int channels = params_channels(params);
 	unsigned int buffer_bytes = params_buffer_bytes(params);
@@ -234,18 +236,42 @@ static int memif_hw_params(struct snd_pcm_substream *substream, struct snd_pcm_h
 			return -EINVAL;
 		}
 	}
-	ret = snd_pcm_lib_malloc_pages(substream, params_buffer_bytes(params));
-	if (ret < 0) {
-		pr_err("%s() error: allocation of memory failed\n", __func__);
-		return ret;
+	if (afe_sram_enable &&
+		(rtd->cpu_dai->id == MT_DAI_I2SM_ID) &&
+		(buffer_bytes < afe_sram_max_size)) {
+		struct snd_dma_buffer *dma_buf = &substream->dma_buffer;
+
+		dma_buf->dev.type = SNDRV_DMA_TYPE_DEV;
+		dma_buf->dev.dev = substream->pcm->card->dev;
+		dma_buf->area = (unsigned char *)afe_sram_address;
+		dma_buf->addr = afe_sram_phy_address;
+		dma_buf->bytes = buffer_bytes;
+		snd_pcm_set_runtime_buffer(substream, dma_buf);
+		s->use_sram = 1;
+		pr_notice("%s playback use sram as buffer (%x)\n", __func__, (int)buffer_bytes);
+	} else {
+		ret = snd_pcm_lib_malloc_pages(substream, params_buffer_bytes(params));
+		if (ret < 0) {
+			pr_err("%s() error: allocation of memory failed\n", __func__);
+			return ret;
+		}
+		s->use_sram = 0;
+		pr_notice("%s playback use dram as buffer (%x)\n", __func__, (int)buffer_bytes);
 	}
+
 	return 0;
 }
 
 static int memif_hw_free(struct snd_pcm_substream *substream)
 {
+	struct mt_stream *s = substream->runtime->private_data;
+	int ret = 0;
 	pr_debug("%s()\n", __func__);
-	return snd_pcm_lib_free_pages(substream);
+	if (s->use_sram)
+		snd_pcm_set_runtime_buffer(substream, NULL);
+	else
+		ret = snd_pcm_lib_free_pages(substream);
+	return ret;
 }
 
 static int memif_prepare(struct snd_pcm_substream *substream)

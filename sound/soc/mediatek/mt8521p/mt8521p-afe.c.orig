@@ -43,6 +43,8 @@ void *cmsys_base_address;
 void *infracfg_base_address;
 void *pctrl_base_address;
 unsigned int afe_sram_phy_address;
+unsigned int afe_sram_max_size;
+int afe_sram_enable;
 
 #endif
 #ifdef CONFIG_OF
@@ -63,6 +65,7 @@ void mt_afe_reg_unmap(void)
 	if (afe_sram_address) {
 		iounmap(afe_sram_address);
 		afe_sram_address = NULL;
+		afe_sram_max_size = 0;
 	}
 	if (topckgen_base_address) {
 		iounmap(topckgen_base_address);
@@ -117,6 +120,7 @@ int mt_afe_reg_remap(void *dev)
 		goto exit;
 	}
 	afe_sram_phy_address = res.start;
+	afe_sram_max_size = resource_size(&res);
 
 	/* TOPCKGEN register base */
 	node = of_find_compatible_node(NULL, NULL, "mediatek,mt2701-topckgen"); /* need to check */

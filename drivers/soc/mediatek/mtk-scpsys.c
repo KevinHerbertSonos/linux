@@ -529,7 +529,6 @@ static const struct scp_domain_data scp_domain_data_mt2701[] = {
 		.sram_pdn_bits = GENMASK(11, 8),
 		.sram_pdn_ack_bits = GENMASK(15, 12),
 		.clk_id = {CLK_ETHIF},
-		.active_wakeup = true,
 	},
 	[MT2701_POWER_DOMAIN_IFR_MSC] = {
 		.name = "ifr_msc",

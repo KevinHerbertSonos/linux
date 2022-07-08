@@ -35,7 +35,6 @@
  * struct cec_devnode - cec device node
  * @dev:	cec device
  * @cdev:	cec character device
- * @parent:	parent device
  * @minor:	device node minor number
  * @registered:	the device was correctly registered
  * @unregistered: the device was unregistered
@@ -51,14 +50,13 @@ struct cec_devnode {
 	/* sysfs */
 	struct device dev;
 	struct cdev cdev;
-	struct device *parent;
 
 	/* device info */
 	int minor;
 	bool registered;
 	bool unregistered;
-	struct mutex fhs_lock;
 	struct list_head fhs;
+	struct mutex lock;
 };
 
 struct cec_adapter;
@@ -126,12 +124,20 @@ struct cec_adap_ops {
  * With a transfer rate of at most 36 bytes per second this makes 18 messages
  * per second worst case.
  *
- * We queue at most 3 seconds worth of messages. The CEC specification requires
- * that messages are replied to within a second, so 3 seconds should give more
- * than enough margin. Since most messages are actually more than 2 bytes, this
- * is in practice a lot more than 3 seconds.
+ * We queue at most 3 seconds worth of received messages. The CEC specification
+ * requires that messages are replied to within a second, so 3 seconds should
+ * give more than enough margin. Since most messages are actually more than 2
+ * bytes, this is in practice a lot more than 3 seconds.
  */
-#define CEC_MAX_MSG_QUEUE_SZ		(18 * 3)
+#define CEC_MAX_MSG_RX_QUEUE_SZ		(18 * 3)
+
+/*
+ * The transmit queue is limited to 1 second worth of messages (worst case).
+ * Messages can be transmitted by userspace and kernel space. But for both it
+ * makes no sense to have a lot of messages queued up. One second seems
+ * reasonable.
+ */
+#define CEC_MAX_MSG_TX_QUEUE_SZ		(18 * 1)
 
 struct cec_adapter {
 	struct module *owner;
@@ -141,6 +147,7 @@ struct cec_adapter {
 	struct rc_dev *rc;
 
 	struct list_head transmit_queue;
+	unsigned int transmit_queue_sz;
 	struct list_head wait_queue;
 	struct cec_data *transmitting;
 
@@ -187,11 +194,10 @@ static inline bool cec_is_sink(const struct cec_adapter *adap)
 	return adap->phys_addr == 0;
 }
 
-#if IS_ENABLED(CONFIG_MEDIA_CEC)
+#if IS_ENABLED(CONFIG_MEDIA_CEC_SUPPORT)
 struct cec_adapter *cec_allocate_adapter(const struct cec_adap_ops *ops,
-		void *priv, const char *name, u32 caps, u8 available_las,
-		struct device *parent);
-int cec_register_adapter(struct cec_adapter *adap);
+		void *priv, const char *name, u32 caps, u8 available_las);
+int cec_register_adapter(struct cec_adapter *adap, struct device *parent);
 void cec_unregister_adapter(struct cec_adapter *adap);
 void cec_delete_adapter(struct cec_adapter *adap);
 
@@ -209,7 +215,8 @@ void cec_received_msg(struct cec_adapter *adap, struct cec_msg *msg);
 
 #else
 
-static inline int cec_register_adapter(struct cec_adapter *adap)
+static inline int cec_register_adapter(struct cec_adapter *adap,
+				       struct device *parent)
 {
 	return 0;
 }

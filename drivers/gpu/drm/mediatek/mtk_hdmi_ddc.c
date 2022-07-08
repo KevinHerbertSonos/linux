@@ -344,12 +344,41 @@ static const struct of_device_id mtk_hdmi_ddc_match[] = {
 	{},
 };
 
+#ifdef CONFIG_PM_SLEEP
+static int mtk_ddc_suspend(struct device *dev)
+{
+	struct mtk_hdmi_ddc *ddc = dev_get_drvdata(dev);
+
+	clk_disable_unprepare(ddc->clk);
+
+	return 0;
+}
+
+static int mtk_ddc_resume(struct device *dev)
+{
+	struct mtk_hdmi_ddc *ddc = dev_get_drvdata(dev);
+	int ret = 0;
+
+	ret = clk_prepare_enable(ddc->clk);
+	if (ret) {
+		dev_err(dev, "hdmiddc resume failed!\n");
+		return ret;
+	}
+
+	return 0;
+}
+#endif
+
+static SIMPLE_DEV_PM_OPS(mtk_ddc_pm_ops,
+			 mtk_ddc_suspend, mtk_ddc_resume);
+
 struct platform_driver mtk_hdmi_ddc_driver = {
 	.probe = mtk_hdmi_ddc_probe,
 	.remove = mtk_hdmi_ddc_remove,
 	.driver = {
 		.name = "mediatek-hdmi-ddc",
 		.of_match_table = mtk_hdmi_ddc_match,
+		.pm = &mtk_ddc_pm_ops,
 	},
 };
 

@@ -24,11 +24,13 @@
 /* address for ioremap audio hardware register */
 extern void *afe_base_address;
 extern void *afe_sram_address;
+extern unsigned int afe_sram_phy_address;
+extern unsigned int afe_sram_max_size;
+extern int afe_sram_enable;
 extern void *topckgen_base_address;
 extern void *cmsys_base_address;
 extern void *infracfg_base_address;
 extern void *pctrl_base_address;
-
 
 #define afe_read(addr) \
 	readl(((volatile void *)(((u32)(addr))+afe_base_address)))

@@ -289,11 +289,9 @@ static int mtk_phy_connect(struct mtk_mac *mac)
 	u32 val;
 
 	np = of_parse_phandle(mac->of_node, "phy-handle", 0);
-	if (!np && of_phy_is_fixed_link(mac->of_node))
-		if (!of_phy_register_fixed_link(mac->of_node)) {
-			eth->fixed_np = of_node_get(mac->of_node);
-			np = eth->fixed_np;
-		}
+	if (!np)
+		np = eth->fixed_np;
+
 	if (!np) {
 		pr_err("err at %s %d mac->id=%d\n", __func__, __LINE__, mac->id);
 		return -ENODEV;
@@ -1522,6 +1520,8 @@ static int mtk_hw_init(struct mtk_eth *eth)
 	return 0;
 }
 
+static void mtk_stop_dma(struct mtk_eth *eth, u32 glo_cfg);
+static int mtk_hw_deinit(struct mtk_eth *eth);
 static int mtk_open(struct net_device *dev)
 {
 	struct mtk_mac *mac = netdev_priv(dev);
@@ -1530,6 +1530,8 @@ static int mtk_open(struct net_device *dev)
 
 	/* we run 2 netdevs on the same dma ring so we only bring it up once */
 	if (!atomic_read(&eth->dma_refcnt)) {
+		mtk_hw_init(eth);
+
 		err = mtk_start_dma(eth);
 		if (err)
 			return err;
@@ -1540,12 +1542,31 @@ static int mtk_open(struct net_device *dev)
 		smp_mb__before_atomic();
 		clear_bit(MTK_DOWN, &eth->state);
 		smp_mb__after_atomic();
+
 	}
+	err = mtk_phy_connect(mac);
+	if (err)
+		goto err_phy;
+
 	atomic_inc(&eth->dma_refcnt);
 	phy_start(mac->phy_dev);
 	netif_start_queue(dev);
 
 	return 0;
+
+err_phy:
+	smp_mb__before_atomic();
+	set_bit(MTK_DOWN, &eth->state);
+	smp_mb__after_atomic();
+
+	mtk_irq_disable(eth, MTK_TX_DONE_INT | MTK_RX_DONE_INT);
+	napi_disable(&eth->tx_napi);
+	napi_disable(&eth->rx_napi);
+	mtk_stop_dma(eth, MTK_QDMA_GLO_CFG);
+	mtk_dma_free(eth);
+	mtk_hw_deinit(eth);
+
+	return err;
 }
 
 static void mtk_stop_dma(struct mtk_eth *eth, u32 glo_cfg)
@@ -1600,7 +1621,8 @@ static int mtk_stop(struct net_device *dev)
 	netif_carrier_off(dev);
 	netif_tx_disable(dev);
 
-	phy_stop(mac->phy_dev);
+	phy_disconnect(mac->phy_dev);
+
 	/* only shutdown DMA if this is the last user */
 	if (!atomic_dec_and_test(&eth->dma_refcnt))
 		return 0;
@@ -1627,6 +1649,8 @@ static int mtk_stop(struct net_device *dev)
 
 	mtk_stop_dma(eth, MTK_QDMA_GLO_CFG);
 	mtk_dma_free(eth);
+	mtk_hw_deinit(eth);
+
 	return 0;
 }
 
@@ -1648,7 +1672,9 @@ static int __init mtk_init(struct net_device *dev)
 		dev->addr_assign_type = NET_ADDR_RANDOM;
 	}
 
-	return mtk_phy_connect(mac);
+	mtk_hw_deinit(eth);
+
+	return 0;
 }
 
 static void mtk_uninit(struct net_device *dev)
@@ -1657,7 +1683,6 @@ static void mtk_uninit(struct net_device *dev)
 	struct mtk_eth *eth = mac->hw;
 
 	pr_debug("[%s][%d] mtk_uninit\n", __func__, __LINE__);
-	phy_disconnect(mac->phy_dev);
 	mtk_irq_disable(eth, ~0);
 	of_node_put(eth->fixed_np);
 }
@@ -2085,6 +2110,11 @@ static int mtk_probe(struct platform_device *pdev)
 			goto err_free_dev;
 		}
 
+		if (of_phy_is_fixed_link(mac_np) &&
+		    !of_phy_register_fixed_link(mac_np)) {
+			dev_err(&pdev->dev, "register fixed phy ... O.K");
+			eth->fixed_np = of_node_get(mac_np);
+		}
 	}
 
 	err = devm_request_irq(eth->dev, eth->irq[1], mtk_handle_irq_tx, 0,

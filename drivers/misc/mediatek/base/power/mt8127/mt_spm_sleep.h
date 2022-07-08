@@ -47,6 +47,14 @@ extern void spm_dpidle_before_wfi(void);	/* can be redefined */
 extern void spm_dpidle_after_wfi(void);	/* can be redefined */
 extern wake_reason_t spm_go_to_dpidle(bool cpu_pdn, u16 pwrlevel);
 
+/*
+ * for ultra-deep idle
+ */
+#define SPM_ULTRA_DP_ENABLED				0
+#define SPM_LOCK_UNLOCK_SYNC				0
+
+#define SPM_DEEPIDLE_BACKUP_VOLTAGE
+
 /* to replace mt_irq_unmask_for_sleep */
 extern void unmask_irq(struct irq_desc *desc);
 extern bool spm_is_md_sleep(void);

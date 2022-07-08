@@ -31,21 +31,21 @@
 
 #include "8250.h"
 
-#define UART_MTK_DLH		0x01	/* baudrate Only when LCR.DLAB = 1 */
-#define UART_MTK_HIGHS		0x09	/* Highspeed register */
+#define UART_MTK_DLH			0x01	/* baudrate Only when LCR.DLAB = 1 */
+#define UART_MTK_HIGHS			0x09	/* Highspeed register */
 #define UART_MTK_SAMPLE_COUNT	0x0a	/* Sample count register */
 #define UART_MTK_SAMPLE_POINT	0x0b	/* Sample point register */
-#define MTK_UART_RATE_FIX	0x0d	/* UART Rate Fix Register */
-#define UART_MTK_GUARD		0x0f	/* guard time added register */
+#define MTK_UART_RATE_FIX		0x0d	/* UART Rate Fix Register */
+#define UART_MTK_GUARD			0x0f	/* guard time added register */
 #define UART_MTK_ESCAPE_DAT		0x10
-#define UART_MTK_ESCAPE_EN		0x11
+#define UART_MTK_ESCAPE_EN		0x11	/* escape enable register */
 #define UART_MTK_DMA_EN			0x13
-#define UART_MTK_FRACDIV_L	0x15	/* fractional divider LSB address */
-#define UART_MTK_FRACDIV_M	0x16	/* fractional divider MSB address */
-#define UART_MTK_FCR_RD		0x17	/* fifo control register */
-#define UART_MTK_RX_SEL		0x24	/* uart rx pin sel */
-#define UART_MTK_SLEEP_REQ	0x2d	/* uart sleep request register */
-#define UART_MTK_SLEEP_ACK	0x2e	/* uart sleep ack register */
+#define UART_MTK_FRACDIV_L		0x15	/* fractional divider LSB address */
+#define UART_MTK_FRACDIV_M		0x16	/* fractional divider MSB address */
+#define UART_MTK_FCR_RD			0x17	/* fifo control register */
+#define UART_MTK_RX_SEL			0x24	/* uart rx pin sel */
+#define UART_MTK_SLEEP_REQ		0x2d	/* uart sleep request register */
+#define UART_MTK_SLEEP_ACK		0x2e	/* uart sleep ack register */
 
 #define UART_MTK_CLK_OFF_REQ	(1 << 0)	/* Request UART to sleep*/
 #define UART_MTK_CLK_OFF_ACK	(1 << 0)	/* UART sleep ack*/
@@ -383,7 +383,7 @@ mtk8250_set_termios(struct uart_port *port, struct ktermios *termios,
 	} else {
 		if (!uart_console(port))
 			pr_err("ttyS%d samplecount is 0\n",
-				  serial_index(port), baud);
+				  serial_index(port));
 	}
 
 	/*

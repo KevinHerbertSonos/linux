@@ -63,6 +63,9 @@ enum audio_system_clock_type {
 	AUDCLK_TOP_SYSPLL_D5,
 	AUDCLK_TOP_UNIVPLL_D2,
 	AUDCLK_TOP_INTDIR_SEL,
+	AUDCLK_TOP_CMSYS_SEL,
+	AUDCLK_APMDA,
+	AUDCLK_UNIVPLL,
 	CLOCK_NUM
 };
 
@@ -136,6 +139,9 @@ static struct audio_clock_attr aud_clks[CLOCK_NUM] = {
 	[AUDCLK_TOP_SYSPLL_D5] = {"top_syspll_d5", false, false, NULL},
 	[AUDCLK_TOP_UNIVPLL_D2] = {"top_univpll_d2", false, false, NULL},
 	[AUDCLK_TOP_INTDIR_SEL] = {"top_intdir_sel", false, false, NULL},
+	[AUDCLK_TOP_CMSYS_SEL] = {"top_cmsys_sel", false, false, NULL},
+	[AUDCLK_APMDA] = {"clk_apdma", false, false, NULL},
+	[AUDCLK_UNIVPLL] = {"clk_univpll", false, false, NULL},
 };
 
 int aud_a1sys_hp_ck_cntr;
@@ -145,6 +151,8 @@ int aud_unipll_clk_cntr;
 int aud_afe_clk_cntr;
 int aud_i2s_clk_cntr;
 int aud_spdif_dir_clk_cntr;
+int aud_apdma_clk_cntr;
+int aud_cmsys_clk_cntr;
 
 static DEFINE_MUTEX(afe_clk_mutex);
 
@@ -490,14 +498,46 @@ void turn_off_f_apll_clock(void)
 void turn_on_unipll_clock(void)
 {
 #ifdef COMMON_CLOCK_FRAMEWORK_API
-	/* TODO*/
+	clk_prepare_enable(aud_clks[AUDCLK_UNIVPLL].clock);
+
 #endif
 }
 
 void turn_off_unipll_clock(void)
 {
 #ifdef COMMON_CLOCK_FRAMEWORK_API
-	/* TODO*/
+	clk_disable_unprepare(aud_clks[AUDCLK_UNIVPLL].clock);
+
+#endif
+}
+
+void turn_on_apdma_clock(void)
+{
+#ifdef COMMON_CLOCK_FRAMEWORK_API
+	clk_prepare_enable(aud_clks[AUDCLK_APMDA].clock);
+
+#endif
+}
+
+void turn_off_apdma_clock(void)
+{
+#ifdef COMMON_CLOCK_FRAMEWORK_API
+	clk_disable_unprepare(aud_clks[AUDCLK_APMDA].clock);
+#endif
+}
+
+void turn_on_cmsys_clock(void)
+{
+#ifdef COMMON_CLOCK_FRAMEWORK_API
+	clk_prepare_enable(aud_clks[AUDCLK_TOP_CMSYS_SEL].clock);
+	clk_set_parent(aud_clks[AUDCLK_TOP_CMSYS_SEL].clock, aud_clks[AUDCLK_CLK_26M].clock);
+#endif
+}
+
+void turn_off_cmsys_clock(void)
+{
+#ifdef COMMON_CLOCK_FRAMEWORK_API
+	clk_disable_unprepare(aud_clks[AUDCLK_TOP_CMSYS_SEL].clock);
 #endif
 }
 
@@ -744,6 +784,64 @@ void mt_afe_unipll_clk_off(void)
 		pr_err("%s aud_unipll_clk_cntr:%d<0\n",
 		       __func__, aud_unipll_clk_cntr);
 		aud_unipll_clk_cntr = 0;
+	}
+	mutex_unlock(&afe_clk_mutex);
+}
+
+void mt_afe_apdma_clk_on(void)
+{
+	mutex_lock(&afe_clk_mutex);
+	pr_debug("%s aud_unipll_clk_cntr:%d\n", __func__, aud_apdma_clk_cntr);
+
+	if (aud_apdma_clk_cntr == 0)
+		turn_on_apdma_clock();
+
+	aud_apdma_clk_cntr++;
+	mutex_unlock(&afe_clk_mutex);
+}
+
+void mt_afe_apdma_clk_off(void)
+{
+	pr_debug("%s aud_unipll_clk_cntr(%d)\n", __func__, aud_apdma_clk_cntr);
+	mutex_lock(&afe_clk_mutex);
+
+	aud_apdma_clk_cntr--;
+	if (aud_apdma_clk_cntr == 0)
+		turn_off_apdma_clock();
+
+	if (aud_apdma_clk_cntr < 0) {
+		pr_err("%s aud_unipll_clk_cntr:%d<0\n",
+		       __func__, aud_apdma_clk_cntr);
+		aud_apdma_clk_cntr = 0;
+	}
+	mutex_unlock(&afe_clk_mutex);
+}
+
+void mt_afe_cmsys_clk_on(void)
+{
+	mutex_lock(&afe_clk_mutex);
+	pr_debug("%s aud_cmsys_clk_cntr:%d\n", __func__, aud_cmsys_clk_cntr);
+
+	if (aud_cmsys_clk_cntr == 0)
+		turn_on_cmsys_clock();
+
+	aud_cmsys_clk_cntr++;
+	mutex_unlock(&afe_clk_mutex);
+}
+
+void mt_afe_cmsys_clk_off(void)
+{
+	pr_debug("%s aud_cmsys_clk_cntr(%d)\n", __func__, aud_cmsys_clk_cntr);
+	mutex_lock(&afe_clk_mutex);
+
+	aud_cmsys_clk_cntr--;
+	if (aud_cmsys_clk_cntr == 0)
+		turn_off_cmsys_clock();
+
+	if (aud_cmsys_clk_cntr < 0) {
+		pr_err("%s aud_unipll_clk_cntr:%d<0\n",
+		       __func__, aud_cmsys_clk_cntr);
+		aud_cmsys_clk_cntr = 0;
 	}
 	mutex_unlock(&afe_clk_mutex);
 }

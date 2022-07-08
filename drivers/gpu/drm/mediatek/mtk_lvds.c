@@ -192,13 +192,10 @@ static int mtk_lvds_bridge_attach(struct drm_bridge *bridge)
 	}
 	drm_connector_helper_add(&lvds->connector,
 				 &mtk_lvds_connector_helper_funcs);
-	drm_connector_register(&lvds->connector);
 	drm_mode_connector_attach_encoder(&lvds->connector, bridge->encoder);
 
 	if (lvds->panel)
 		drm_panel_attach(lvds->panel, &lvds->connector);
-
-	drm_helper_hpd_irq_event(lvds->connector.dev);
 
 	return ret;
 }
@@ -262,29 +259,35 @@ static void mtk_lvds_pre_enable(struct drm_bridge *bridge)
 		return;
 	}
 
-	if (lvds->is_dual)
-		clk_set_rate(lvds->vpll, 150000000);
-	else
-		clk_set_rate(lvds->vpll, 75000000);
-
-	phy_power_on(lvds->phy);
 	lvds->enabled = true;
 }
 
 static void mtk_lvds_enable(struct drm_bridge *bridge)
 {
 	struct mtk_lvds *lvds = bridge_to_lvds(bridge);
+	int ret;
 
-	writel(0x2210100, lvds->regs + PATGEN_REG05);
-	writel(lvds->mode.hdisplay << 16 | lvds->mode.htotal,
-	       lvds->regs + PATGEN_REG00);
-	writel(lvds->mode.vdisplay << 16 | lvds->mode.vtotal,
-	       lvds->regs + PATGEN_REG01);
-	writel(lvds->mode.hsync_start << 16 | lvds->mode.vsync_start,
-	       lvds->regs + PATGEN_REG02);
-	writel((lvds->mode.hsync_end - lvds->mode.hsync_start) << 16 |
-	       (lvds->mode.vsync_end - lvds->mode.vsync_start),
-	       lvds->regs + PATGEN_REG03);
+	ret = clk_prepare_enable(lvds->pix_clk_gate);
+	if (ret) {
+		dev_err(lvds->dev, "Failed to enable pixel clock gate: %d\n",
+			ret);
+		return;
+	}
+
+	ret = clk_prepare_enable(lvds->cts_clk_gate);
+	if (ret) {
+		dev_err(lvds->dev, "Failed to enable cts clock gate: %d\n",
+			ret);
+		clk_disable_unprepare(lvds->cts_clk_gate);
+		return;
+	}
+
+	if (lvds->is_dual)
+		clk_set_rate(lvds->vpll, 150000000);
+	else
+		clk_set_rate(lvds->vpll, 75000000);
+
+	phy_power_on(lvds->phy);
 	writel(RG_FIFO_EN | (lvds->is_dual ? 3 : 1) << 20 |
 	       (lvds->is_dual ? 1 : 0) << 23, lvds->regs + LVDSTOP_REG05);
 
@@ -294,6 +297,8 @@ static void mtk_lvds_enable(struct drm_bridge *bridge)
 
 	if (drm_panel_enable(lvds->panel)) {
 		DRM_ERROR("failed to enable panel\n");
+		clk_disable_unprepare(lvds->cts_clk_gate);
+		clk_disable_unprepare(lvds->pix_clk_gate);
 		return;
 	}
 
@@ -314,6 +319,8 @@ static int mtk_drm_lvds_probe(struct platform_device *pdev)
 {
 	struct mtk_lvds *lvds;
 	struct device *dev = &pdev->dev;
+	struct device_node *port, *out_ep;
+	struct device_node *panel_node = NULL;
 	int ret;
 	struct resource *mem;
 
@@ -323,7 +330,26 @@ static int mtk_drm_lvds_probe(struct platform_device *pdev)
 
 	lvds->dev = dev;
 
-	lvds->is_dual = true;
+	/* port@1 is lvds output port */
+	port = of_graph_get_port_by_id(dev->of_node, 1);
+	if (port) {
+		out_ep = of_get_child_by_name(port, "endpoint");
+		of_node_put(port);
+		if (out_ep) {
+			panel_node = of_graph_get_remote_port_parent(out_ep);
+			of_node_put(out_ep);
+		}
+	}
+
+	if (panel_node) {
+		lvds->panel = of_drm_find_panel(panel_node);
+		of_node_put(panel_node);
+		if (!lvds->panel)
+			return -EPROBE_DEFER;
+	}
+
+	lvds->is_dual = of_property_read_bool(dev->of_node,
+					      "mediatek,dual-channel");
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	lvds->regs = devm_ioremap_resource(dev, mem);
@@ -333,23 +359,23 @@ static int mtk_drm_lvds_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	lvds->pix_clk_gate = devm_clk_get(dev, "pixel-cg");
+	lvds->pix_clk_gate = devm_clk_get(dev, "pixel");
 	if (IS_ERR(lvds->pix_clk_gate)) {
 		ret = PTR_ERR(lvds->pix_clk_gate);
 		dev_err(dev, "Failed to get pixel clock gate: %d\n", ret);
 		return ret;
 	}
 
-	lvds->cts_clk_gate = devm_clk_get(dev, "cts-cg");
+	lvds->cts_clk_gate = devm_clk_get(dev, "cts");
 	if (IS_ERR(lvds->cts_clk_gate)) {
 		ret = PTR_ERR(lvds->cts_clk_gate);
 		dev_err(dev, "Failed to get cts clock gate: %d\n", ret);
 		return ret;
 	}
 
-	lvds->vpll = devm_clk_get(dev, "vpll");
+	lvds->vpll = devm_clk_get(dev, "pll");
 	if (IS_ERR(lvds->vpll)) {
-		dev_err(dev, "Failed to get lvds vpll\n");
+		dev_err(dev, "Failed to get lvds pll\n");
 		return PTR_ERR(lvds->vpll);
 	}
 
@@ -372,8 +398,6 @@ static int mtk_drm_lvds_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to add bridge, ret = %d\n", ret);
 		return ret;
 	}
-
-	dev_dbg(dev, "mediatek lvds probe success\n");
 
 	return 0;
 }

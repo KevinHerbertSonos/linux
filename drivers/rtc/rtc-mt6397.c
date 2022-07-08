@@ -655,7 +655,7 @@ exit:
 
 }
 
-static int mtk_rtc_init(void)
+static void mtk_rtc_init(void)
 {
 	int ret;
 	u16 data[RTC_OFFSET_COUNT];

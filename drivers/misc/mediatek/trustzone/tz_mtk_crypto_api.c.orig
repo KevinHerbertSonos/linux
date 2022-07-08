@@ -101,8 +101,6 @@ struct mtk_crypto_ctx *pctx /* [in/out] memory prepared by caller */
 	pctx->mutex = kmalloc(sizeof(struct mutex), GFP_KERNEL);
 	mutex_init((struct mutex *)pctx->mutex);
 
-	pr_info("mtk_crypto_ctx_init success!\n");
-
 	return 0;
 }
 

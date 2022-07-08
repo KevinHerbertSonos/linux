@@ -85,4 +85,8 @@ struct mt_private {
 	int has_es;
 };
 
+struct mt_lp_private {
+	 int use_i2s_slave_clock;
+};
+
 #endif

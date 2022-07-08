@@ -124,6 +124,8 @@ static const struct mtk_pin_drv_grp mt2701_pin_drv[] = {
 	MTK_PIN_DRV_GRP(72, 0xf80, 4, 0),
 	MTK_PIN_DRV_GRP(73, 0xf80, 4, 0),
 	MTK_PIN_DRV_GRP(74, 0xf80, 4, 0),
+	MTK_PIN_DRV_GRP(83, 0xfa0, 0, 1),
+	MTK_PIN_DRV_GRP(84, 0xfa0, 0, 1),
 	MTK_PIN_DRV_GRP(85, 0xda0, 0, 2),
 	MTK_PIN_DRV_GRP(86, 0xd90, 0, 2),
 	MTK_PIN_DRV_GRP(87, 0xdb0, 0, 2),
@@ -275,6 +277,7 @@ static const struct mtk_pin_spec_pupd_set_samereg mt2701_spec_pupd[] = {
 	MTK_PIN_PUPD_SPEC_SR(257, 0xf40, 0, 1, 2),	/* ms0e dat0 */
 	MTK_PIN_PUPD_SPEC_SR(258, 0xcb0, 8, 9, 10),	/* ms0e cmd */
 	MTK_PIN_PUPD_SPEC_SR(259, 0xc90, 8, 9, 10),	/* ms0e clk */
+	MTK_PIN_PUPD_SPEC_SR(260, 0x3a0, 8, 9, 10),	/* ms0e dsl*/
 	MTK_PIN_PUPD_SPEC_SR(261, 0x140, 8, 9, 10),	/* ms1 ins */
 };
 
@@ -483,18 +486,6 @@ static const struct mtk_spec_pinmux_set mt2701_spec_pinmux[] = {
 	MTK_PINMUX_SPEC(209, 0xb10, 8),
 	MTK_PINMUX_SPEC(203, 0xf20, 0),
 	MTK_PINMUX_SPEC(204, 0xf20, 1),
-	MTK_PINMUX_SPEC(249, 0xef0, 0),
-	MTK_PINMUX_SPEC(250, 0xef0, 0),
-	MTK_PINMUX_SPEC(251, 0xef0, 0),
-	MTK_PINMUX_SPEC(252, 0xef0, 0),
-	MTK_PINMUX_SPEC(253, 0xef0, 0),
-	MTK_PINMUX_SPEC(254, 0xef0, 0),
-	MTK_PINMUX_SPEC(255, 0xef0, 0),
-	MTK_PINMUX_SPEC(256, 0xef0, 0),
-	MTK_PINMUX_SPEC(257, 0xef0, 0),
-	MTK_PINMUX_SPEC(258, 0xef0, 0),
-	MTK_PINMUX_SPEC(259, 0xef0, 0),
-	MTK_PINMUX_SPEC(260, 0xef0, 0),
 };
 
 static void mt2701_spec_pinmux_set(struct regmap *reg, unsigned int pin,

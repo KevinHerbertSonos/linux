@@ -239,10 +239,14 @@ static void __iomem *pwrap_base;
 #define PLL_SETTLE_TIME (30)	/* us */
 #define PMIC_SETTLE_TIME (40)	/* us */
 
+#define VOLT_TO_PMIC_VAL(volt)  ((((volt) - 700) * 100 + 625 - 1) / 625)
+#define PMIC_VAL_TO_VOLT(pmic)  (((pmic) * 625) / 100 + 700)	/* (((pmic) * 625 + 100 - 1) / 100 + 700) */
+
+
 /* pmic volt by PTP-OD */
 static unsigned int mt_cpufreq_pmic_volt[8] = { 0 };
 
-#define RAMP_DOWN_TIMES (2)
+#define RAMP_DOWN_TIMES (0)
 int g_ramp_down_count;
 
 bool mt_cpufreq_debug;	/* /proc/cpufreq/cpufreq_debug */
@@ -1259,6 +1263,19 @@ static int mt_cpufreq_pdrv_probe(struct platform_device *pdev)
 	return ret;
 }
 
+void mt_cpufreq_backup_voltage(void)
+{
+	int vproc;
+
+	if (IS_ERR(reg_vproc))
+		return;
+
+	vproc = regulator_get_voltage(reg_vproc);
+	mt_cpufreq_reg_write(VOLT_TO_PMIC_VAL(vproc/1000), PMIC_WRAP_DVFS_WDATA5);
+	mt_cpufreq_reg_write(VOLT_TO_PMIC_VAL(vproc/1000), PMIC_WRAP_DVFS_WDATA7);
+	/*printk("current vproc=%d, volt to pmic = %x",vproc, VOLT_TO_PMIC_VAL(vproc/1000));*/
+}
+EXPORT_SYMBOL(mt_cpufreq_backup_voltage);
 
 /***************************************
 * this function should never be called
