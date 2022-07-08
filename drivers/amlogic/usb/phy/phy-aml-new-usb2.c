@@ -29,6 +29,10 @@
 #include <linux/amlogic/usb-gxl.h>
 #include "phy-aml-new-usb.h"
 
+#if defined(CONFIG_SONOS)
+static int sonos_eye_value = 0x00;
+#endif
+
 static int amlogic_new_usb2_init(struct usb_phy *x)
 {
 	int time_dly = 500;
@@ -37,6 +41,9 @@ static int amlogic_new_usb2_init(struct usb_phy *x)
 	struct amlogic_usb *phy = phy_to_amlusb(x);
 	struct u2p_aml_regs_t u2p_aml_regs;
 	union u2p_r0_t reg0;
+#if defined(CONFIG_SONOS)
+	union u2p_r1_t reg1;
+#endif
 
 	if (phy->suspend_flag) {
 		phy->suspend_flag = 0;
@@ -70,6 +77,12 @@ static int amlogic_new_usb2_init(struct usb_phy *x)
 		if (i == 1)
 			reg0.b.idpullup = 1;
 		writel(reg0.d32, u2p_aml_regs.u2p_r[0]);
+#if defined(CONFIG_SONOS)
+		/* Adjust the eye for monaco */
+		reg1.d32 = readl(u2p_aml_regs.u2p_r[1]);
+		reg1.b.tx_vref_tune = sonos_eye_value;
+		writel(reg1.d32, u2p_aml_regs.u2p_r[1]);
+#endif
 
 		udelay(time_dly);
 
@@ -126,6 +139,12 @@ static int amlogic_new_usb2_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "This phy has no usb port\n");
 		return -ENOMEM;
 	}
+
+#if defined(CONFIG_SONOS)
+	prop = of_get_property(dev->of_node, "sonos-eye-value", NULL);
+	if (prop)
+		sonos_eye_value = of_read_ulong(prop, 1);
+#endif
 
 	phy_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	phy_base = devm_ioremap_resource(dev, phy_mem);
