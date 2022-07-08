@@ -265,7 +265,7 @@ static int adv7511_cec_adap_transmit(struct cec_adapter *adap, u8 attempts,
 			   0x70, retries << 4);
 
 	/* blocking, clear cec tx irq status */
-	regmap_update_bits(adv7511->regmap, ADV7511_REG_INT(1), 0x38, 0x38);
+	regmap_write(adv7511->regmap, ADV7511_REG_INT(1), 0x38);
 
 	/* write data */
 	for (i = 0; i < len; i++)
