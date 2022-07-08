@@ -611,7 +611,7 @@ static void mali_set_initial_clock(struct device *dev)
 #ifdef MTK_GPU_DVFS_POLICY
 		int step = mtk_get_current_frequency_id();
 #else
-		int step = mfg->num_of_steps - 1;
+		int step = 0;
 #endif
 		unsigned long freq = mfg->power_table[step].hz;
 
