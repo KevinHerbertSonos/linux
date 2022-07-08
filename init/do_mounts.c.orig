@@ -42,10 +42,6 @@ static char * __initdata root_device_name;
 static char __initdata saved_root_name[64];
 static int root_wait;
 
-#ifdef CONFIG_SONOS_SECBOOT
-#include "sonos_mounts.c.inc"
-#endif
-
 dev_t ROOT_DEV;
 
 static int __init load_ramdisk(char *str)
@@ -364,7 +360,6 @@ static void __init get_fs_names(char *page)
 	*s = '\0';
 }
 
-#ifndef CONFIG_SONOS_SECBOOT
 static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 {
 	struct super_block *s;
@@ -382,7 +377,6 @@ static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 	       MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
 	return 0;
 }
-#endif
 
 void __init mount_block_root(char *name, int flags)
 {
@@ -572,13 +566,6 @@ void __init prepare_namespace(void)
 	wait_for_device_probe();
 
 	md_run_setup();
-
-#ifdef CONFIG_SONOS
-	/* mount tmpfs in order to remove the initramfs
-	 * the initramfs for 3.10 kernel doesn't work here
-	 */
-	devtmpfs_mount("dev");
-#endif
 
 	if (saved_root_name[0]) {
 		root_device_name = saved_root_name;
