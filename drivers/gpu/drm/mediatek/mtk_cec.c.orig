@@ -680,6 +680,7 @@ static int mtk_cec_send_msg(struct mtk_cec *cec)
 	cec_data = mtk_cec_parse_msg_data(cec, msg_data_size);
 	mtk_cec_set_msg_data(cec, cec_data);
 
+	mtk_cec_clear_bits(cec, TX_EVENT, FAIL | BS);
 	mtk_cec_trigger_tx_hw(cec);
 
 	return 0;
@@ -854,7 +855,7 @@ static void mtk_cec_tx_event_handler(struct mtk_cec *cec, unsigned int tx_event)
 		cec->transmitting.status.tx_status = CEC_TX_DONE;
 		cec_transmit_done(cec->adap, CEC_TX_STATUS_OK, 0, 0, 0, 0);
 		mtk_cec_clear_bits(cec,
-				TX_EVENT, I_EN_FAIL | I_EN_RB | I_EN_LOW | I_EN_UN | I_EN_BS);
+				TX_EVENT, BS | I_EN_FAIL | I_EN_RB | I_EN_LOW | I_EN_UN | I_EN_BS);
 		break;
 
 	case I_EN_RB:
@@ -867,7 +868,8 @@ static void mtk_cec_tx_event_handler(struct mtk_cec *cec, unsigned int tx_event)
 	case UN:
 		dev_err(cec->hdmi_dev, "cec transmit msg fail\n");
 		cec->transmitting.status.tx_status = CEC_TX_FAIL;
-		mtk_cec_clear_bits(cec, TX_EVENT, UN | LOWB | FAIL);
+		mtk_cec_clear_bits(cec, TX_EVENT, UN | LOWB | FAIL | I_EN_FAIL | I_EN_BS);
+		mtk_cec_hw_reset(cec);
 		cec_transmit_done(cec->adap, CEC_TX_STATUS_NACK, 0, 0, 0, 1);
 		break;
 
