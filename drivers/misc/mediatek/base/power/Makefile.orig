@@ -12,7 +12,7 @@
 #
 
 obj-$(CONFIG_MACH_MT8521P) += mt8127/
-obj-$(CONFIG_MTK_CPU_HOTPLUG_STRATEGY) += hps_v1/
+obj-$(CONFIG_MACH_MT8521P) += hps_v1/
 obj-$(CONFIG_MTK_BASE_POWER_MT7622) += mt7622/
 
 subdir-ccflags-$(CONFIG_MACH_MT8521P) += -I$(srctree)/drivers/misc/mediatek/base/power/hps_v1/
