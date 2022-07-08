@@ -822,6 +822,9 @@ static ssize_t store_test(
 	t.len = num;
 	spi_message_add_tail(&t, &m);
 	ret = spi_sync(m.spi, &m);
+	for (i = 0; i < num; i++)
+		tx_buf[i] = 0;
+	ret = spi_sync(m.spi, &m);
 	spi_dev_put(m.spi);
 	if (!ret && (mode & (SPI_LOOP | (1<<16)))) {
 		ret = 0;
