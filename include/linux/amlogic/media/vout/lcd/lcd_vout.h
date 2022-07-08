@@ -32,6 +32,7 @@
 extern unsigned char lcd_debug_print_flag;
 #define LCDPR(fmt, args...)     pr_info("lcd: "fmt"", ## args)
 #define LCDERR(fmt, args...)    pr_err("lcd: error: "fmt"", ## args)
+#define LCDDBG(fmt, args...)    pr_debug("lcd: debug: "fmt"", ## args)
 
 /* **********************************
  * clk parameter bit define

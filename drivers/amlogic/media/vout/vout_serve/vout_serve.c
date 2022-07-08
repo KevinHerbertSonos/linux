@@ -266,7 +266,7 @@ static int set_vout_init_mode(void)
 	strncpy(init_mode_str, vout_mode_uboot, VMODE_NAME_LEN_MAX);
 	vout_init_vmode = validate_vmode(vout_mode_uboot);
 	if (vout_init_vmode >= VMODE_MAX) {
-		VOUTERR("no matched vout_init mode %s, force to invalid\n",
+		VOUTDBG("no matched vout_init mode %s, force to invalid\n",
 			vout_mode_uboot);
 		nulldisp_index = 1;
 		vout_init_vmode = nulldisp_vinfo[nulldisp_index].mode;
@@ -521,7 +521,7 @@ static int vout_attr_create(void)
 		}
 	}
 
-	VOUTPR("create vout attribute OK\n");
+	VOUTDBG("create vout attribute OK\n");
 
 	return ret;
 }
@@ -549,7 +549,7 @@ static int vout_io_open(struct inode *inode, struct file *file)
 {
 	struct vout_cdev_s *vcdev;
 
-	VOUTPR("%s\n", __func__);
+	VOUTDBG("%s\n", __func__);
 	vcdev = container_of(inode->i_cdev, struct vout_cdev_s, cdev);
 	file->private_data = vcdev;
 	return 0;
@@ -557,7 +557,7 @@ static int vout_io_open(struct inode *inode, struct file *file)
 
 static int vout_io_release(struct inode *inode, struct file *file)
 {
-	VOUTPR("%s\n", __func__);
+	VOUTDBG("%s\n", __func__);
 	file->private_data = NULL;
 	return 0;
 }
@@ -571,7 +571,7 @@ static long vout_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct vinfo_base_s baseinfo;
 
 	mcd_nr = _IOC_NR(cmd);
-	VOUTPR("%s: cmd_dir = 0x%x, cmd_nr = 0x%x\n",
+	VOUTDBG("%s: cmd_dir = 0x%x, cmd_nr = 0x%x\n",
 		__func__, _IOC_DIR(cmd), mcd_nr);
 
 	argp = (void __user *)arg;
@@ -663,7 +663,7 @@ static int vout_fops_create(void)
 		goto vout_fops_err3;
 	}
 
-	VOUTPR("%s OK\n", __func__);
+	VOUTDBG("%s OK\n", __func__);
 	return 0;
 
 vout_fops_err3:
@@ -822,7 +822,7 @@ static int refresh_tvout_mode(void)
 		return -1;
 
 	if (cur_vmode != last_vmode) {
-		VOUTPR("%s: mode chang to %s\n", __func__, cur_mode_str);
+		VOUTDBG("%s: mode chang to %s\n", __func__, cur_mode_str);
 		set_vout_mode(cur_mode_str);
 		last_vmode = cur_vmode;
 	}
@@ -834,7 +834,7 @@ static void aml_tvout_mode_work(struct work_struct *work)
 {
 	if (tvout_monitor_timeout_cnt-- == 0) {
 		tvout_monitor_flag = 0;
-		VOUTPR("%s: monitor_timeout\n", __func__);
+		VOUTDBG("%s: monitor_timeout\n", __func__);
 		return;
 	}
 
@@ -845,7 +845,7 @@ static void aml_tvout_mode_work(struct work_struct *work)
 	if (tvout_monitor_flag)
 		schedule_delayed_work(&tvout_mode_work, 1*HZ/2);
 	else
-		VOUTPR("%s: monitor stop\n", __func__);
+		VOUTDBG("%s: monitor stop\n", __func__);
 }
 
 static void aml_tvout_mode_monitor(void)
@@ -856,7 +856,7 @@ static void aml_tvout_mode_monitor(void)
 		(vout_init_vmode != VMODE_INVALID))
 		return;
 
-	VOUTPR("%s\n", __func__);
+	VOUTDBG("%s\n", __func__);
 	last_vmode = vout_init_vmode;
 	tvout_monitor_flag = 1;
 	INIT_DELAYED_WORK(&tvout_mode_work, aml_tvout_mode_work);
@@ -923,7 +923,7 @@ static int aml_vout_probe(struct platform_device *pdev)
 	aml_vout_extcon_register(pdev);
 	aml_tvout_mode_monitor();
 
-	VOUTPR("%s OK\n", __func__);
+	VOUTDBG("%s OK\n", __func__);
 	return ret;
 }
 
@@ -943,7 +943,7 @@ static int aml_vout_remove(struct platform_device *pdev)
 
 static void aml_vout_shutdown(struct platform_device *pdev)
 {
-	VOUTPR("%s\n", __func__);
+	VOUTDBG("%s\n", __func__);
 	vout_shutdown();
 }
 

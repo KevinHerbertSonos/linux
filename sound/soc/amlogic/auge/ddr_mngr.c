@@ -177,7 +177,7 @@ static struct toddr *register_toddr_l(struct device *dev,
 	to->dev = dev;
 	to->actrl = actrl;
 	to->in_use = true;
-	pr_info("toddrs[%d] registered by device %s\n", i, dev_name(dev));
+	pr_debug("toddrs[%d] registered by device %s\n", i, dev_name(dev));
 	return to;
 }
 
@@ -223,7 +223,7 @@ static int unregister_toddr_l(struct device *dev, void *data)
 	to->dev = NULL;
 	to->actrl = NULL;
 	to->in_use = false;
-	pr_info("toddrs[%d] released by device %s\n", i, dev_name(dev));
+	pr_debug("toddrs[%d] released by device %s\n", i, dev_name(dev));
 
 	return 0;
 }
@@ -1136,7 +1136,7 @@ static int aml_ddr_mngr_platform_probe(struct platform_device *pdev)
 	frddrs[DDR_C].irq = platform_get_irq_byname(pdev, "frddr_c");
 
 	for (i = 0; i < DDRMAX; i++) {
-		pr_info("%d, irqs toddr %d, frddr %d\n",
+		pr_debug("%d, irqs toddr %d, frddr %d\n",
 			i, toddrs[i].irq, frddrs[i].irq);
 		if (toddrs[i].irq <= 0 || frddrs[i].irq <= 0) {
 			dev_err(&pdev->dev, "platform_get_irq_byname failed\n");

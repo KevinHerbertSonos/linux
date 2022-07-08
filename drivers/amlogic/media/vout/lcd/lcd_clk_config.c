@@ -301,7 +301,7 @@ static void lcd_clk_config_chip_init(void)
 	struct lcd_clk_config_s *cConf;
 	struct aml_lcd_drv_s *lcd_drv = aml_lcd_get_driver();
 
-	pr_info("%s ...\n", __func__);
+	pr_debug("%s ...\n", __func__);
 	cConf = get_lcd_clk_config();
 	switch (lcd_drv->data->chip_type) {
 	case LCD_CHIP_GXTVBB:
@@ -487,7 +487,7 @@ static int lcd_pll_wait_lock(unsigned int reg, unsigned int lock_bit)
 	} while ((pll_lock == 0) && (wait_loop > 0));
 	if (pll_lock == 0)
 		ret = -1;
-	LCDPR("%s: pll_lock=%d, wait_loop=%d\n",
+	LCDDBG("%s: pll_lock=%d, wait_loop=%d\n",
 		__func__, pll_lock, (PLL_WAIT_LOCK_CNT - wait_loop));
 	return ret;
 }
@@ -545,7 +545,7 @@ static int lcd_pll_wait_lock_g12a(int path)
 		ret = -1;
 
 pll_lock_end_g12a:
-	LCDPR("%s: path=%d, pll_lock=%d, wait_loop=%d\n",
+	LCDDBG("%s: path=%d, pll_lock=%d, wait_loop=%d\n",
 		__func__, path, pll_lock, (PLL_WAIT_LOCK_CNT_G12A - wait_loop));
 	return ret;
 }
@@ -1910,7 +1910,7 @@ static void lcd_clk_generate_axg(struct lcd_config_s *pconf)
 		goto generate_clk_done_axg;
 	}
 
-	pr_info("%s lcd_clk:%d ...\n", __func__, pconf->lcd_timing.lcd_clk);
+	pr_debug("%s lcd_clk:%d ...\n", __func__, pconf->lcd_timing.lcd_clk);
 	switch (pconf->lcd_basic.lcd_type) {
 	case LCD_MIPI:
 		cConf->xd_max = CRT_VID_DIV_MAX;
@@ -1928,14 +1928,14 @@ static void lcd_clk_generate_axg(struct lcd_config_s *pconf)
 				LCDPR("fout=%d, xd=%d\n", cConf->fout, xd);
 
 			pconf->lcd_control.mipi_config->bit_rate = pll_fout * 1000;
-			pr_info("%s bit_rate:%d ...\n", __func__, pconf->lcd_control.mipi_config->bit_rate);
+			pr_debug("%s bit_rate:%d ...\n", __func__, pconf->lcd_control.mipi_config->bit_rate);
 			pconf->lcd_control.mipi_config->clk_factor = xd;
 			cConf->xd = xd;
 			done = check_pll_axg(cConf, pll_fout);
 			if (done)
 				goto generate_clk_done_axg;
 		}
-		pr_info("%s pll_fout:%d\n", __func__, pll_fout);
+		pr_debug("%s pll_fout:%d\n", __func__, pll_fout);
 		break;
 	default:
 		break;
@@ -2198,7 +2198,7 @@ void lcd_pll_reset(void)
 	struct aml_lcd_drv_s *lcd_drv = aml_lcd_get_driver();
 
 	spin_lock_irqsave(&lcd_clk_lock, flags);
-	LCDPR("%s\n", __func__);
+	LCDDBG("%s\n", __func__);
 
 	switch (lcd_drv->data->chip_type) {
 	case LCD_CHIP_GXTVBB:
@@ -2232,7 +2232,7 @@ void lcd_clk_update(struct lcd_config_s *pconf)
 	struct aml_lcd_drv_s *lcd_drv = aml_lcd_get_driver();
 
 	spin_lock_irqsave(&lcd_clk_lock, flags);
-	LCDPR("%s\n", __func__);
+	LCDDBG("%s\n", __func__);
 
 	switch (lcd_drv->data->chip_type) {
 	case LCD_CHIP_GXTVBB:
@@ -2271,7 +2271,7 @@ void lcd_clk_set(struct lcd_config_s *pconf)
 	unsigned long flags = 0;
 	struct aml_lcd_drv_s *lcd_drv = aml_lcd_get_driver();
 
-	pr_info("%s ...\n", __func__);
+	pr_debug("%s ...\n", __func__);
 	spin_lock_irqsave(&lcd_clk_lock, flags);
 
 	if (lcd_debug_print_flag)
@@ -2586,7 +2586,7 @@ static void lcd_clktree_probe(void)
 		break;
 	}
 
-	LCDPR("%s\n", __func__);
+	LCDDBG("%s\n", __func__);
 }
 
 static void lcd_clktree_remove(void)

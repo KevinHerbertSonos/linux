@@ -131,7 +131,7 @@ void lcd_cpu_gpio_probe(unsigned int index)
 	ret = of_property_read_string_index(lcd_drv->dev->of_node,
 		"lcd_cpu_gpio_names", index, &str);
 	if (ret) {
-		LCDERR("failed to get lcd_cpu_gpio_names: %d\n", index);
+		LCDDBG("failed to get lcd_cpu_gpio_names: %d\n", index);
 		str = "unknown";
 	}
 	strcpy(cpu_gpio->name, str);
@@ -157,7 +157,7 @@ static int lcd_cpu_gpio_register(unsigned int index, int init_value)
 		return -1;
 	}
 	if (cpu_gpio->register_flag) {
-		LCDPR("%s: gpio %s[%d] is already registered\n",
+		LCDDBG("%s: gpio %s[%d] is already registered\n",
 			__func__, cpu_gpio->name, index);
 		return 0;
 	}
@@ -179,7 +179,7 @@ static int lcd_cpu_gpio_register(unsigned int index, int init_value)
 	cpu_gpio->gpio = devm_gpiod_get_index(lcd_drv->dev,
 		"lcd_cpu", index, value);
 	if (IS_ERR(cpu_gpio->gpio)) {
-		LCDERR("register gpio %s[%d]: %p, err: %d\n",
+		LCDDBG("register gpio %s[%d]: %p, err: %d\n",
 			cpu_gpio->name, index, cpu_gpio->gpio,
 			IS_ERR(cpu_gpio->gpio));
 		return -1;
@@ -740,7 +740,7 @@ void lcd_timing_init_config(struct lcd_config_s *pconf)
 	pconf->lcd_timing.vs_vs_addr = vstart;
 	pconf->lcd_timing.vs_ve_addr = vend;
 
-	//if (lcd_debug_print_flag)
+	if (lcd_debug_print_flag)
 	{
 		pr_info("%s pconf:%p lcd clk:%d, num:%d, den:%d\n", __func__, pconf, pconf->lcd_timing.lcd_clk, 
 				pconf->lcd_timing.sync_duration_num, pconf->lcd_timing.sync_duration_den);
@@ -773,7 +773,7 @@ int lcd_vmode_change(struct lcd_config_s *pconf)
 				sync_duration_num;
 		h_period = (h_period + 5) / 10; /* round off */
 		if (pconf->lcd_basic.h_period != h_period) {
-			LCDPR("%s: adjust h_period %u -> %u\n",
+			LCDDBG("%s: adjust h_period %u -> %u\n",
 				__func__, pconf->lcd_basic.h_period, h_period);
 			pconf->lcd_basic.h_period = h_period;
 			/* check clk frac update */
@@ -788,7 +788,7 @@ int lcd_vmode_change(struct lcd_config_s *pconf)
 				sync_duration_num;
 		v_period = (v_period + 5) / 10; /* round off */
 		if (pconf->lcd_basic.v_period != v_period) {
-			LCDPR("%s: adjust v_period %u -> %u\n",
+			LCDDBG("%s: adjust v_period %u -> %u\n",
 				__func__, pconf->lcd_basic.v_period, v_period);
 			pconf->lcd_basic.v_period = v_period;
 			/* check clk frac update */
@@ -803,7 +803,7 @@ int lcd_vmode_change(struct lcd_config_s *pconf)
 		pclk = (h_period * v_period) / sync_duration_den *
 			sync_duration_num;
 		if (pconf->lcd_timing.lcd_clk != pclk) {
-			LCDPR("%s: adjust pclk %u.%03uMHz -> %u.%03uMHz\n",
+			LCDDBG("%s: adjust pclk %u.%03uMHz -> %u.%03uMHz\n",
 				__func__, (pconf->lcd_timing.lcd_clk / 1000000),
 				((pconf->lcd_timing.lcd_clk / 1000) % 1000),
 				(pclk / 1000000), ((pclk / 1000) % 1000));
@@ -829,7 +829,7 @@ int lcd_vmode_change(struct lcd_config_s *pconf)
 	char str[100];
 	int len = 0;
 
-	pr_info("%s type:%d, clk:%d,h:%d, v:%d,min:%d, den:%d\n", __func__, type, pclk, h_period, v_period, duration_num, duration_den);
+	pr_debug("%s type:%d, clk:%d,h:%d, v:%d,min:%d, den:%d\n", __func__, type, pclk, h_period, v_period, duration_num, duration_den);
 	pconf->lcd_timing.clk_change = 0; /* clear clk flag */
 	switch (type) {
 	case 0: /* pixel clk adjust */
@@ -960,7 +960,7 @@ int lcd_vmode_change(struct lcd_config_s *pconf)
 		pconf->lcd_basic.h_period = h_period;
 	}
 	if (pconf->lcd_timing.lcd_clk != pclk) {
-		pr_info("%s change lcd_clk: %d\n", __func__, pclk);
+		pr_debug("%s change lcd_clk: %d\n", __func__, pclk);
 		if (len > 0)
 			len += sprintf(str+len, ", ");
 		len += sprintf(str+len, "pclk %u.%03uMHz->%u.%03uMHz",

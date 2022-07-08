@@ -25,6 +25,7 @@
 
 #define EXTPR(fmt, args...)     pr_info("lcd extern: "fmt"", ## args)
 #define EXTERR(fmt, args...)    pr_info("lcd extern: error: "fmt"", ## args)
+#define EXTDBG(fmt, args...)    pr_debug("lcd extern: debug: "fmt"", ## args)
 
 #define LCD_EXTERN_DRIVER		"lcd_extern"
 

@@ -727,7 +727,7 @@ static void lcd_tablet_vbyone_wait_stable(void)
 		udelay(50);
 		i--;
 	}
-	LCDPR("%s status: 0x%x, i=%d\n",
+	LCDDBG("%s status: 0x%x, i=%d\n",
 		__func__, lcd_vcbus_read(VBO_STATUS_L), (5000 - i));
 }
 
@@ -745,10 +745,10 @@ static void lcd_vx1_wait_hpd(void)
 	}
 	mdelay(10);
 	if (lcd_vcbus_read(VBO_STATUS_L) & 0x40)
-		LCDPR("%s: hpd=%d\n", __func__,
+		LCDDBG("%s: hpd=%d\n", __func__,
 			((lcd_vcbus_read(VBO_STATUS_L) >> 6) & 0x1));
 	else
-		LCDPR("%s: hpd=%d, i=%d\n", __func__,
+		LCDDBG("%s: hpd=%d, i=%d\n", __func__,
 			((lcd_vcbus_read(VBO_STATUS_L) >> 6) & 0x1), i);
 }
 
@@ -826,7 +826,7 @@ void lcd_tablet_clk_config_change(struct lcd_config_s *pconf)
 	request_vpu_clk_vmod(pconf->lcd_timing.lcd_clk, VPU_VENCL);
 #endif
 
-	pr_info("%s ...\n", __func__);
+	pr_debug("%s ...\n", __func__);
 	switch (pconf->lcd_basic.lcd_type) {
 	case LCD_VBYONE:
 		lcd_vbyone_config_set(pconf);
@@ -855,7 +855,7 @@ void lcd_tablet_config_update(struct lcd_config_s *pconf)
 	struct aml_lcd_drv_s *lcd_drv = aml_lcd_get_driver();
 	struct vinfo_s *info;
 
-	pr_info("%s pclk:%d ...\n", __func__, pconf->lcd_timing.lcd_clk);
+	pr_debug("%s pclk:%d ...\n", __func__, pconf->lcd_timing.lcd_clk);
 	/* update lcd config sync_duration */
 	info = lcd_drv->lcd_info;
 	pconf->lcd_timing.sync_duration_num = info->sync_duration_num;
@@ -881,7 +881,7 @@ void lcd_tablet_config_update(struct lcd_config_s *pconf)
 
 void lcd_tablet_config_post_update(struct lcd_config_s *pconf)
 {
-	pr_info("%s ...\n", __func__);
+	pr_debug("%s ...\n", __func__);
 	/* update interface timing */
 	switch (pconf->lcd_basic.lcd_type) {
 	case LCD_MIPI:
@@ -899,7 +899,7 @@ void lcd_tablet_driver_init_pre(void)
 	int ret;
 
 	pconf = lcd_drv->lcd_config;
-	LCDPR("tablet driver init(ver %s): %s\n", lcd_drv->version,
+	LCDDBG("tablet driver init(ver %s): %s\n", lcd_drv->version,
 		lcd_type_type_to_str(pconf->lcd_basic.lcd_type));
 	ret = lcd_type_supported(pconf);
 	if (ret)
