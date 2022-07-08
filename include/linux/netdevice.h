@@ -1912,6 +1912,10 @@ struct net_device {
 	struct lock_class_key	*qdisc_tx_busylock;
 	struct lock_class_key	*qdisc_running_key;
 	bool			proto_down;
+
+#if defined(CONFIG_SONOS) || defined(__SONOS_LINUX__)
+	struct net_bridge_port_list_node *br_port_list;
+#endif
 };
 #define to_net_dev(d) container_of(d, struct net_device, dev)
 

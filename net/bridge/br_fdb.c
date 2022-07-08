@@ -27,6 +27,11 @@
 #include <net/switchdev.h>
 #include "br_private.h"
 
+#if defined(CONFIG_SONOS)
+#include "br_fdb_sonos.h"
+#include "br_priority.h"
+#endif
+
 static struct kmem_cache *br_fdb_cache __read_mostly;
 static struct net_bridge_fdb_entry *fdb_find(struct hlist_head *head,
 					     const unsigned char *addr,
@@ -35,11 +40,15 @@ static int fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
 		      const unsigned char *addr, u16 vid);
 static void fdb_notify(struct net_bridge *br,
 		       const struct net_bridge_fdb_entry *, int);
-
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 static u32 fdb_salt __read_mostly;
+#endif
 
 int __init br_fdb_init(void)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	br_fdb_cache = KMEM_CACHE(net_bridge_fdb_entry, SLAB_HWCACHE_ALIGN);
+#else
 	br_fdb_cache = kmem_cache_create("bridge_fdb_cache",
 					 sizeof(struct net_bridge_fdb_entry),
 					 0,
@@ -48,6 +57,7 @@ int __init br_fdb_init(void)
 		return -ENOMEM;
 
 	get_random_bytes(&fdb_salt, sizeof(fdb_salt));
+#endif
 	return 0;
 }
 
@@ -69,14 +79,22 @@ static inline int has_expired(const struct net_bridge *br,
 				  const struct net_bridge_fdb_entry *fdb)
 {
 	return !fdb->is_static &&
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		time_before_eq(fdb->ageing_timer + hold_time(br), jiffies);
+#else
 		time_before_eq(fdb->updated + hold_time(br), jiffies);
+#endif
 }
 
 static inline int br_mac_hash(const unsigned char *mac, __u16 vid)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	return sonos_mac_hash(mac);
+#else
 	/* use 1 byte of OUI and 3 bytes of NIC */
 	u32 key = get_unaligned((u32 *)(mac + 2));
 	return jhash_2words(key, vid, fdb_salt) & (BR_HASH_SIZE - 1);
+#endif
 }
 
 static void fdb_rcu_free(struct rcu_head *head)
@@ -86,6 +104,14 @@ static void fdb_rcu_free(struct rcu_head *head)
 	kmem_cache_free(br_fdb_cache, ent);
 }
 
+/* Static function needed externally by br_fdb_sonos.c */
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+void br_fdb_rcu_free(struct rcu_head *head)
+{
+	fdb_rcu_free(head);
+}
+#endif
+
 /* When a static FDB entry is added, the mac address from the entry is
  * added to the bridge private HW address list and all required ports
  * are then updated with the new information.
@@ -93,6 +119,7 @@ static void fdb_rcu_free(struct rcu_head *head)
  */
 static void fdb_add_hw_addr(struct net_bridge *br, const unsigned char *addr)
 {
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70557 */
 	int err;
 	struct net_bridge_port *p;
 
@@ -112,6 +139,7 @@ undo:
 		if (!br_promisc_port(p))
 			dev_uc_del(p->dev, addr);
 	}
+#endif
 }
 
 /* When a static FDB entry is deleted, the HW address from that entry is
@@ -121,6 +149,7 @@ undo:
  */
 static void fdb_del_hw_addr(struct net_bridge *br, const unsigned char *addr)
 {
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70557 */
 	struct net_bridge_port *p;
 
 	ASSERT_RTNL();
@@ -129,10 +158,12 @@ static void fdb_del_hw_addr(struct net_bridge *br, const unsigned char *addr)
 		if (!br_promisc_port(p))
 			dev_uc_del(p->dev, addr);
 	}
+#endif
 }
 
 static void fdb_del_external_learn(struct net_bridge_fdb_entry *f)
 {
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70557 */
 	struct switchdev_obj_port_fdb fdb = {
 		.obj = {
 			.orig_dev = f->dst->dev,
@@ -144,6 +175,7 @@ static void fdb_del_external_learn(struct net_bridge_fdb_entry *f)
 
 	ether_addr_copy(fdb.addr, f->addr.addr);
 	switchdev_port_obj_del(f->dst->dev, &fdb.obj);
+#endif
 }
 
 static void fdb_delete(struct net_bridge *br, struct net_bridge_fdb_entry *f)
@@ -156,8 +188,19 @@ static void fdb_delete(struct net_bridge *br, struct net_bridge_fdb_entry *f)
 
 	hlist_del_rcu(&f->hlist);
 	fdb_notify(br, f, RTM_DELNEIGH);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	br_fdb_put(f);
+#else
 	call_rcu(&f->rcu, fdb_rcu_free);
+#endif
 }
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+void br_sonos_fdb_delete(struct net_bridge *br, struct net_bridge_fdb_entry *f)
+{
+	fdb_delete(br, f);
+ }
+#endif
 
 /* Delete a local entry if no other port had the same address. */
 static void fdb_delete_local(struct net_bridge *br,
@@ -208,6 +251,12 @@ void br_fdb_find_delete_local(struct net_bridge *br,
 	spin_unlock_bh(&br->hash_lock);
 }
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+void br_fdb_changeaddr(struct net_bridge_port_list_node *pl, const unsigned char *newaddr)
+{
+	sonos_fdb_changeaddr(pl, newaddr);
+}
+#else
 void br_fdb_changeaddr(struct net_bridge_port *p, const unsigned char *newaddr)
 {
 	struct net_bridge_vlan_group *vg;
@@ -256,7 +305,9 @@ insert:
 done:
 	spin_unlock_bh(&br->hash_lock);
 }
+#endif
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 void br_fdb_change_mac_address(struct net_bridge *br, const u8 *newaddr)
 {
 	struct net_bridge_vlan_group *vg;
@@ -289,12 +340,15 @@ void br_fdb_change_mac_address(struct net_bridge *br, const u8 *newaddr)
 out:
 	spin_unlock_bh(&br->hash_lock);
 }
+#endif
 
 void br_fdb_cleanup(unsigned long _data)
 {
 	struct net_bridge *br = (struct net_bridge *)_data;
 	unsigned long delay = hold_time(br);
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	unsigned long next_timer = jiffies + br->ageing_time;
+#endif
 	int i;
 
 	spin_lock(&br->hash_lock);
@@ -308,21 +362,32 @@ void br_fdb_cleanup(unsigned long _data)
 				continue;
 			if (f->added_by_external_learn)
 				continue;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+			this_timer = f->ageing_timer + delay;
+#else
 			this_timer = f->updated + delay;
+#endif
 			if (time_before_eq(this_timer, jiffies))
 				fdb_delete(br, f);
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 			else if (time_before(this_timer, next_timer))
 				next_timer = this_timer;
+#endif
 		}
 	}
 	spin_unlock(&br->hash_lock);
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	mod_timer(&br->gc_timer, round_jiffies_up(next_timer));
+#endif
 }
 
 /* Completely flush all dynamic entries in forwarding database.*/
 void br_fdb_flush(struct net_bridge *br)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	br_fdb_cleanup((unsigned long)br);
+#else
 	int i;
 
 	spin_lock_bh(&br->hash_lock);
@@ -335,6 +400,7 @@ void br_fdb_flush(struct net_bridge *br)
 		}
 	}
 	spin_unlock_bh(&br->hash_lock);
+#endif
 }
 
 /* Flush all entries referring to a specific port.
@@ -355,12 +421,28 @@ void br_fdb_delete_by_port(struct net_bridge *br,
 		hlist_for_each_safe(h, g, &br->hash[i]) {
 			struct net_bridge_fdb_entry *f
 				= hlist_entry(h, struct net_bridge_fdb_entry, hlist);
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+			/* KLUDGE: Delete if there is any way to route to the
+			 *         port were dumping.  If we deleted a port it
+			 *         is for good reason, but if we're wrong and
+			 *         it is still accessible (say via ethernet),
+			 *         we'll relearn it in a bit.
+			 *
+			 *         This should be just as safe as deleting a
+			 *         port in any normal case (same locking,
+			 *         etc).
+			 */
+			if (f->dst != p && f->dst_direct != p)
+				continue;
+#else
 			if (f->dst != p)
 				continue;
 
 			if (!do_all)
 				if (f->is_static || (vid && f->vlan_id != vid))
 					continue;
+#endif
 
 			if (f->is_local)
 				fdb_delete_local(br, p, f);
@@ -371,7 +453,7 @@ void br_fdb_delete_by_port(struct net_bridge *br,
 	spin_unlock_bh(&br->hash_lock);
 }
 
-/* No locking or refcounting, assumes caller has rcu_read_lock */
+/* No locking or refcounting, assumes caller has no preempt (rcu_read_lock) */
 struct net_bridge_fdb_entry *__br_fdb_get(struct net_bridge *br,
 					  const unsigned char *addr,
 					  __u16 vid)
@@ -451,11 +533,17 @@ int br_fdb_fillbuf(struct net_bridge *br, void *buf,
 
 			/* due to ABI compat need to split into hi/lo */
 			fe->port_no = f->dst->port_no;
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 			fe->port_hi = f->dst->port_no >> 8;
+#endif
 
 			fe->is_local = f->is_local;
 			if (!f->is_static)
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+				fe->ageing_timer_value = jiffies_delta_to_clock_t(jiffies - f->ageing_timer);
+#else
 				fe->ageing_timer_value = jiffies_delta_to_clock_t(jiffies - f->updated);
+#endif
 			++fe;
 			++num;
 		}
@@ -497,6 +585,9 @@ static struct net_bridge_fdb_entry *fdb_find_rcu(struct hlist_head *head,
 
 static struct net_bridge_fdb_entry *fdb_create(struct hlist_head *head,
 					       struct net_bridge_port *source,
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+					       struct net_bridge_port *direct_dest,
+#endif
 					       const unsigned char *addr,
 					       __u16 vid,
 					       unsigned char is_local,
@@ -507,6 +598,11 @@ static struct net_bridge_fdb_entry *fdb_create(struct hlist_head *head,
 	fdb = kmem_cache_alloc(br_fdb_cache, GFP_ATOMIC);
 	if (fdb) {
 		memcpy(fdb->addr.addr, addr, ETH_ALEN);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		sonos_fdb_create(fdb, head, source, direct_dest, addr, is_local);
+		fdb->added_by_user = 0;
+		fdb->added_by_external_learn = 0;
+#else
 		fdb->dst = source;
 		fdb->vlan_id = vid;
 		fdb->is_local = is_local;
@@ -515,6 +611,7 @@ static struct net_bridge_fdb_entry *fdb_create(struct hlist_head *head,
 		fdb->added_by_external_learn = 0;
 		fdb->updated = fdb->used = jiffies;
 		hlist_add_head_rcu(&fdb->hlist, head);
+#endif
 	}
 	return fdb;
 }
@@ -541,7 +638,11 @@ static int fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
 		fdb_delete(br, fdb);
 	}
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	fdb = fdb_create(head, source, 0, addr, vid, 1, 1);
+#else
 	fdb = fdb_create(head, source, addr, vid, 1, 1);
+#endif
 	if (!fdb)
 		return -ENOMEM;
 
@@ -549,6 +650,14 @@ static int fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
 	fdb_notify(br, fdb, RTM_NEWNEIGH);
 	return 0;
 }
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+int br_sonos_fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
+			const unsigned char *addr)
+{
+	return fdb_insert(br, source, addr, 0);
+}
+#endif
 
 /* Add entry for local address of interface */
 int br_fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
@@ -562,8 +671,16 @@ int br_fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
 	return ret;
 }
 
+/* note: already called with rcu_read_lock */
+#if defined(CONFIG_SONOS)
+struct net_bridge_fdb_entry *br_fdb_update(struct net_bridge *br,
+					   struct net_bridge_port *source,
+					   const unsigned char *addr, u16 vid,
+					   bool added_by_user)
+#else
 void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 		   const unsigned char *addr, u16 vid, bool added_by_user)
+#endif
 {
 	struct hlist_head *head = &br->hash[br_mac_hash(addr, vid)];
 	struct net_bridge_fdb_entry *fdb;
@@ -571,12 +688,18 @@ void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 
 	/* some users want to always flood. */
 	if (hold_time(br) == 0)
-		return;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		return NULL;
+#else
+		return; /* NOTE: Linux return type is void */
+#endif
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	/* ignore packets unless we are using this port */
 	if (!(source->state == BR_STATE_LEARNING ||
 	      source->state == BR_STATE_FORWARDING))
 		return;
+#endif
 
 	fdb = fdb_find_rcu(head, addr, vid);
 	if (likely(fdb)) {
@@ -592,29 +715,47 @@ void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 				fdb->dst = source;
 				fdb_modified = true;
 			}
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+			fdb->ageing_timer = jiffies;
+#else
 			fdb->updated = jiffies;
 			if (unlikely(added_by_user))
 				fdb->added_by_user = 1;
+#endif
 			if (unlikely(fdb_modified))
 				fdb_notify(br, fdb, RTM_NEWNEIGH);
 		}
 	} else {
 		spin_lock(&br->hash_lock);
 		if (likely(!fdb_find(head, addr, vid))) {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+			struct net_bridge_port *direct;
+			direct = _get_direct_port(br, addr);
+			fdb_create(head, source, direct, addr, vid, 0, 0);
+#else
 			fdb = fdb_create(head, source, addr, vid, 0, 0);
 			if (fdb) {
 				if (unlikely(added_by_user))
 					fdb->added_by_user = 1;
 				fdb_notify(br, fdb, RTM_NEWNEIGH);
 			}
+#endif
 		}
 		/* else  we lose race and someone else inserts
 		 * it first, don't bother updating
 		 */
 		spin_unlock(&br->hash_lock);
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		return NULL;
+#endif
 	}
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	return fdb;
+#endif
 }
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 static int fdb_to_nud(const struct net_bridge *br,
 		      const struct net_bridge_fdb_entry *fdb)
 {
@@ -680,10 +821,12 @@ static inline size_t fdb_nlmsg_size(void)
 		+ nla_total_size(sizeof(u16)) /* NDA_VLAN */
 		+ nla_total_size(sizeof(struct nda_cacheinfo));
 }
+#endif /* !defined(CONFIG_SONOS) */
 
 static void fdb_notify(struct net_bridge *br,
 		       const struct net_bridge_fdb_entry *fdb, int type)
 {
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	struct net *net = dev_net(br->dev);
 	struct sk_buff *skb;
 	int err = -ENOBUFS;
@@ -703,8 +846,10 @@ static void fdb_notify(struct net_bridge *br,
 	return;
 errout:
 	rtnl_set_sk_err(net, RTNLGRP_NEIGH, err);
+#endif
 }
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 /* Dump information about entries, in response to GETNEIGH */
 int br_fdb_dump(struct sk_buff *skb,
 		struct netlink_callback *cb,
@@ -1041,6 +1186,7 @@ int br_fdb_delete(struct ndmsg *ndm, struct nlattr *tb[],
 out:
 	return err;
 }
+#endif /* !defined(CONFIG_SONOS) */
 
 int br_fdb_sync_static(struct net_bridge *br, struct net_bridge_port *p)
 {
@@ -1098,6 +1244,7 @@ void br_fdb_unsync_static(struct net_bridge *br, struct net_bridge_port *p)
 	}
 }
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 int br_fdb_external_learn_add(struct net_bridge *br, struct net_bridge_port *p,
 			      const unsigned char *addr, u16 vid)
 {
@@ -1155,3 +1302,4 @@ int br_fdb_external_learn_del(struct net_bridge *br, struct net_bridge_port *p,
 
 	return err;
 }
+#endif

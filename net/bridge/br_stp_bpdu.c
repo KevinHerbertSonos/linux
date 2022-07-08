@@ -26,27 +26,56 @@
 #include "br_private.h"
 #include "br_private_stp.h"
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+#include "br_forward_sonos.h"
+#include "br_priority.h"
+#include "br_stp_sonos.h"
+
+#define JIFFIES_TO_TICKS(jiff) (((jiff) << 8) / HZ)
+#define TICKS_TO_JIFFIES(j) (((j) * HZ) >> 8)
+#endif /* CONFIG_SONOS */
+
 #define STP_HZ		256
 
 #define LLC_RESERVE sizeof(struct llc_pdu_un)
 
+
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 static int br_send_bpdu_finish(struct net *net, struct sock *sk,
 			       struct sk_buff *skb)
 {
 	return dev_queue_xmit(skb);
 }
+#endif
 
 static void br_send_bpdu(struct net_bridge_port *p,
 			 const unsigned char *data, int length)
 {
 	struct sk_buff *skb;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	int size;
 
+	if (p->br->stp_enabled == BR_NO_STP)
+		 return;
+
+	size = sonos_bpdu_size(length);
+	skb = dev_alloc_skb(size);
+	if (!skb)
+	{
+		printk(KERN_INFO "br: memory squeeze!\n");
+		return;
+	}
+#else
 	skb = dev_alloc_skb(length+LLC_RESERVE);
 	if (!skb)
 		return;
+#endif
 
 	skb->dev = p->dev;
 	skb->protocol = htons(ETH_P_802_2);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	sonos_send_bpdu(p, data, length, size, skb);
+#else
 	skb->priority = TC_PRIO_CONTROL;
 
 	skb_reserve(skb, LLC_RESERVE);
@@ -63,6 +92,7 @@ static void br_send_bpdu(struct net_bridge_port *p,
 	NF_HOOK(NFPROTO_BRIDGE, NF_BR_LOCAL_OUT,
 		dev_net(p->dev), NULL, skb, NULL, skb->dev,
 		br_send_bpdu_finish);
+#endif
 }
 
 static inline void br_set_ticks(unsigned char *dest, int j)
@@ -79,14 +109,31 @@ static inline int br_get_ticks(const unsigned char *src)
 	return DIV_ROUND_UP(ticks * HZ, STP_HZ);
 }
 
+#if defined(CONFIG_SONOS) /* Needed by br_stp_sonos.c */
+int br_sonos_get_ticks(const unsigned char *src)
+{
+	return br_get_ticks(src);
+}
+#endif
+
 /* called under bridge lock */
 void br_send_config_bpdu(struct net_bridge_port *p, struct br_config_bpdu *bpdu)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	unsigned char sonos_buf[38];
+	unsigned char *buf = sonos_buf + 3;
+#else
 	unsigned char buf[35];
 
 	if (p->br->stp_enabled != BR_KERNEL_STP)
 		return;
+#endif
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	sonos_buf[0] = 0x42;
+	sonos_buf[1] = 0x42;
+	sonos_buf[2] = 0x03;
+#endif
 	buf[0] = 0;
 	buf[1] = 0;
 	buf[2] = 0;
@@ -121,24 +168,43 @@ void br_send_config_bpdu(struct net_bridge_port *p, struct br_config_bpdu *bpdu)
 	br_set_ticks(buf+31, bpdu->hello_time);
 	br_set_ticks(buf+33, bpdu->forward_delay);
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	br_send_bpdu(p, sonos_buf, 38);
+#else
 	br_send_bpdu(p, buf, 35);
+#endif
 }
 
 /* called under bridge lock */
 void br_send_tcn_bpdu(struct net_bridge_port *p)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	unsigned char sonos_buf[7];
+	unsigned char *buf = sonos_buf + 3;
+#else
 	unsigned char buf[4];
 
 	if (p->br->stp_enabled != BR_KERNEL_STP)
 		return;
+#endif
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	sonos_buf[0] = 0x42;
+	sonos_buf[1] = 0x42;
+	sonos_buf[2] = 0x03;
+#endif
 	buf[0] = 0;
 	buf[1] = 0;
 	buf[2] = 0;
 	buf[3] = BPDU_TYPE_TCN;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	br_send_bpdu(p, sonos_buf, 7);
+#else
 	br_send_bpdu(p, buf, 4);
+#endif
 }
 
+#if !defined(CONFIG_SONOS) /* SWPBL-70338 */
 /*
  * Called from llc.
  *
@@ -245,3 +311,4 @@ void br_stp_rcv(const struct stp_proto *proto, struct sk_buff *skb,
  err:
 	kfree_skb(skb);
 }
+#endif
