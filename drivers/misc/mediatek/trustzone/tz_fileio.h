@@ -39,7 +39,7 @@ struct file *FILE_Open(const char *path, int flags, int mode);
  *  @retval   >0         SUCCESS, return actual bytes read.
  *  @retval   <0         Fail, errno
  */
-int FILE_Read(struct file *file, unsigned char *data, unsigned int size,
+int FILE_Read(struct file *file, unsigned char __user *data, unsigned int size,
 		unsigned long long *offset);
 
 /** FILE_Write
@@ -52,7 +52,7 @@ int FILE_Read(struct file *file, unsigned char *data, unsigned int size,
  *  @retval   >0         SUCCESS, return actual bytes Write.
  *  @retval   <0         Fail, errno
  */
-int FILE_Write(struct file *file, unsigned char *data, unsigned int size,
+int FILE_Write(struct file *file, unsigned char __user *data, unsigned int size,
 		unsigned long long *offset);
 
 /** FILE_ReadData
@@ -65,7 +65,7 @@ int FILE_Write(struct file *file, unsigned char *data, unsigned int size,
  *  @retval   >0         SUCCESS, return actual bytes read.
  *  @retval   <0         Fail, errno
  */
-int FILE_ReadData(const char *path, unsigned int u4Offset, char *pData,
+int FILE_ReadData(const char *path, unsigned int u4Offset, char __user *pData,
 			int i4Length);
 
 
@@ -79,6 +79,6 @@ int FILE_ReadData(const char *path, unsigned int u4Offset, char *pData,
  *  @retval   >0         SUCCESS, return actual bytes writen.
  *  @retval   <0         Fail, errno
  */
-int FILE_WriteData(const char *path, unsigned int u4Offset, char *pData,
+int FILE_WriteData(const char *path, unsigned int u4Offset, char __user *pData,
 			int i4Length);
 #endif

@@ -79,7 +79,6 @@ static struct mtk_pcie_port {
 	u32 reset;
 	u32 interrupt_en;
 	int irq;
-	int eint_irq;
 	u32 link;
 #ifdef CONFIG_SONOS
 	int conn_ldo_gpio;
@@ -613,7 +612,6 @@ static int mtk_pcie_parse_dt(struct mtk_pcie *pcie)
 		index--;
 		if (!of_device_is_available(port))
 			continue;
-		mtk_pcie_port[index].eint_irq = of_irq_get(port, 0);
 
 #ifdef CONFIG_SONOS
 		mtk_pcie_port[index].conn_ldo_gpio = of_get_named_gpio(port, "conn-ldo-gpio", 0);
@@ -732,7 +730,6 @@ static int mtk_pcie_probe(struct platform_device *pdev)
 		goto release_resource;
 	}
 
-	device_init_wakeup(pcie->dev, true);
 	platform_set_drvdata(pdev, pcie);
 	pcie_dbg = pcie;
 	dev_info(&pdev->dev, "==>mtk_pcie_probe done\n");
@@ -744,32 +741,6 @@ release_resource:
 	pm_runtime_disable(&pdev->dev);
 	return ret;
 }
-
-static int mtk_pcie_suspend(struct device *dev)
-{
-	struct mtk_pcie_port *port;
-
-	mtk_foreach_port(port)
-		if (port->link)
-			enable_irq_wake(port->eint_irq);
-
-	return 0;
-}
-
-static int mtk_pcie_resume(struct device *dev)
-{
-	struct mtk_pcie_port *port;
-
-	mtk_foreach_port(port)
-		if (port->link)
-			disable_irq_wake(port->eint_irq);
-
-	return 0;
-}
-
-static const struct dev_pm_ops mtk_pcie_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(mtk_pcie_suspend, mtk_pcie_resume)
-};
 
 static const struct of_device_id mtk_pcie_ids[] = {
 	{ .compatible = "mediatek,mt2701-pcie" },
@@ -784,7 +755,6 @@ static struct platform_driver mtk_pcie_driver = {
 		.name = "mt2701-pcie",
 		.owner = THIS_MODULE,
 		.of_match_table = of_match_ptr(mtk_pcie_ids),
-		.pm	= &mtk_pcie_pm_ops,
 	},
 };
 

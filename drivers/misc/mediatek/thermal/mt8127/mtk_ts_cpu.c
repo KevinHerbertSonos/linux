@@ -92,7 +92,7 @@ struct clk *clk_auxadc;
 #define thermal_writel(addr, val)	writel((val), ((void *)addr))
 #define thermal_setl(addr, val)		writel(thermal_readl(addr) | (val), ((void *)addr))
 #define thermal_clrl(addr, val)		writel(thermal_readl(addr) & ~(val), ((void *)addr))
-#define THERMAL_WRAP_WR32(val, addr)	writel((val), ((void *)addr))
+#define THERMAL_WRAP_WR32(val, addr)	writel((val), ((void __iomem *)addr))
 
 static unsigned int interval = 1000;	/* mseconds, 0 : no auto polling */
 //static int last_cpu_real_temp;

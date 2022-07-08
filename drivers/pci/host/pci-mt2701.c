@@ -758,7 +758,7 @@ static struct platform_driver mtk_pcie_driver = {
 	},
 };
 
-static ssize_t pcie_debug_proc_write(struct file *file, const char *buf,
+static ssize_t pcie_debug_proc_write(struct file *file, const char __user *buf,
 		size_t count, loff_t *data)
 {
 	unsigned char cmd_buf[32];

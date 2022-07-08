@@ -1470,7 +1470,7 @@ static int mt_cpufreq_debug_open(struct inode *inode, struct file *file)
 	return single_open(file, mt_cpufreq_debug_show, NULL);
 }
 
-static ssize_t mt_cpufreq_debug_write(struct file *file, const char *buffer, size_t count,
+static ssize_t mt_cpufreq_debug_write(struct file *file, const char __user *buffer, size_t count,
 				      loff_t *data)
 {
 	int debug = 0;
@@ -1513,7 +1513,7 @@ static int mt_cpufreq_limited_power_open(struct inode *inode, struct file *file)
 	return single_open(file, mt_cpufreq_limited_power_show, NULL);
 }
 
-static ssize_t mt_cpufreq_limited_power_write(struct file *file, const char *buffer, size_t count,
+static ssize_t mt_cpufreq_limited_power_write(struct file *file, const char __user *buffer, size_t count,
 					      loff_t *data)
 {
 	unsigned int power = 0;
@@ -1551,7 +1551,7 @@ static int mt_cpufreq_state_open(struct inode *inode, struct file *file)
 	return single_open(file, mt_cpufreq_state_show, NULL);
 }
 
-static ssize_t mt_cpufreq_state_write(struct file *file, const char *buffer, size_t count,
+static ssize_t mt_cpufreq_state_write(struct file *file, const char __user *buffer, size_t count,
 				      loff_t *data)
 {
 	int enabled = 0;

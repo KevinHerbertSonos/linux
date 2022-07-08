@@ -546,7 +546,7 @@ static int wk_proc_cmd_open(struct inode *inode, struct file *file)
 	return single_open(file, wk_proc_cmd_read, NULL);
 }
 
-static ssize_t wk_proc_cmd_write(struct file *file, const char *buf, size_t count, loff_t *data)
+static ssize_t wk_proc_cmd_write(struct file *file, const char __user *buf, size_t count, loff_t *data)
 {
 	int ret;
 	int enable;

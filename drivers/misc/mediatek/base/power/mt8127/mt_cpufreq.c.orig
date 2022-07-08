@@ -27,6 +27,7 @@
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
 #include <linux/ratelimit.h>
+#include <linux/pm_opp.h>
 #include "mt_hotplug_strategy.h"
 
 #include "sync_write.h"
@@ -117,7 +118,11 @@ u32 __attribute__ ((weak)) PTP_get_ptp_level(void)
 #define DVFS_F3     (747500)	/* KHz */
 #define DVFS_F4     (598000)	/* KHz */
 
+#ifdef CONFIG_SONOS
+#define DVFS_V0     (1280)	/* mV */
+#else
 #define DVFS_V0     (1300)	/* mV */
+#endif
 #define DVFS_V1     (1250)	/* mV */
 #define DVFS_V2     (1150)	/* mV */
 
@@ -237,7 +242,11 @@ static void __iomem *pwrap_base;
 #define TOP_CKMUXSEL_UNIVPLL 0x3
 
 #define PLL_SETTLE_TIME (30)	/* us */
+#ifdef CONFIG_SONOS
+#define PMIC_SETTLE_TIME (500)	/* us */
+#else
 #define PMIC_SETTLE_TIME (40)	/* us */
+#endif
 
 #define VOLT_TO_PMIC_VAL(volt)  ((((volt) - 700) * 100 + 625 - 1) / 625)
 #define PMIC_VAL_TO_VOLT(pmic)  (((pmic) * 625) / 100 + 700)	/* (((pmic) * 625 + 100 - 1) / 100 + 700) */
@@ -685,6 +694,7 @@ static int mt_cpufreq_keep_max_freq(unsigned int freq_old, unsigned int freq_new
 	if (mt_cpufreq_pause)
 		return 1;
 
+#ifndef CONFIG_SONOS
 	/* check if system is going to ramp down */
 	if (freq_new < freq_old)
 		g_ramp_down_count++;
@@ -693,6 +703,7 @@ static int mt_cpufreq_keep_max_freq(unsigned int freq_old, unsigned int freq_new
 
 	if (g_ramp_down_count < RAMP_DOWN_TIMES)
 		return 1;
+#endif
 
 	return 0;
 }
@@ -854,6 +865,101 @@ static void mt_cpufreq_set(unsigned int freq_old, unsigned int freq_new, unsigne
 		     cpufreq_read(ARMPLL_CON0), cpufreq_read(ARMPLL_CON1), g_cur_freq);
 }
 
+#ifdef CONFIG_SONOS
+static struct device *cpu_dev = NULL;
+
+void get_voltage(int index, struct mt_cpu_freq_info *freqs, unsigned long freq)
+{
+	struct dev_pm_opp *opp;
+	unsigned long volt;
+
+	freq = freq * 1000;
+
+	rcu_read_lock();
+	opp = dev_pm_opp_find_freq_ceil(cpu_dev, &freq);
+	if (IS_ERR(opp)) {
+		rcu_read_unlock();
+		dev_err(cpu_dev, "failed to find OPP for %ld\n", freq);
+		//return PTR_ERR(opp);
+		return;
+	}
+
+	volt = dev_pm_opp_get_voltage(opp);
+	rcu_read_unlock();
+	if ( volt ) {
+		freqs[index].cpufreq_khz = freq / 1000;
+		freqs[index].cpufreq_volt = volt / 1000;
+	}
+}
+
+int get_freqs_table_dtb(int old_num, struct mt_cpu_freq_info *freqs,
+		struct cpufreq_frequency_table *table)
+{
+	int ret = old_num;
+	int i;
+	struct device_node *np;
+	int num;
+	bool free_opp;
+	static struct cpufreq_frequency_table *freq_table;
+
+	cpu_dev = get_cpu_device(0);
+	if (!cpu_dev) {
+		pr_err("failed to get cpu0 device\n");
+		return ret;
+	}
+
+	np = of_node_get(cpu_dev->of_node);
+	if (!np) {
+		dev_err(cpu_dev, "failed to find cpu0 node\n");
+		goto err_cpu_node;
+	}
+
+	num = dev_pm_opp_get_opp_count(cpu_dev);
+	if (num < 0) {
+		ret = dev_pm_opp_of_add_table(cpu_dev);
+		if (ret < 0) {
+			dev_err(cpu_dev, "failed to init OPP table: %d\n", ret);
+			goto free_node;
+		}
+
+		/* Because we have added the OPPs here, we must free them */
+		free_opp = true;
+
+		num = dev_pm_opp_get_opp_count(cpu_dev);
+		if (num < 0) {
+			dev_err(cpu_dev, "no OPP table is found: %d\n", num);
+			goto out_free_opp;
+		}
+	}
+
+	if ( num != old_num ) {
+		dev_err(cpu_dev, "number not match old %d new %d\n", old_num, num);
+		num = old_num;
+		goto out_free_opp;
+	}
+
+	ret = dev_pm_opp_init_cpufreq_table(cpu_dev, &freq_table);
+	if (ret) {
+		dev_err(cpu_dev, "failed to init cpufreq table: %d\n", ret);
+		goto out_free_opp;
+	}
+
+	/*mtk cpufreq table is reversed order of pm oop cpufreq table*/
+	for ( i = 0; i < num; i++ ) {
+		table[i].frequency = freq_table[num - i - 1].frequency;
+		get_voltage(num - i - 1, freqs, freq_table[i].frequency);
+	}
+
+out_free_opp:
+	if (free_opp)
+		dev_pm_opp_of_remove_table(cpu_dev);
+free_node:
+	of_node_put(np);
+err_cpu_node:
+	return num;
+}
+#endif
+
 /*****************************
 * cpufreq_driver function pointer
 * mt_cpufreq_init()
@@ -880,6 +986,9 @@ static int mt_setup_freqs_table(struct cpufreq_policy *policy, struct mt_cpu_fre
 		mt_cpu_freqs_num = num;
 		mt_cpu_freqs_table = table;
 
+#ifdef CONFIG_SONOS
+		mt_cpu_freqs_num = get_freqs_table_dtb(num, freqs, table);
+#endif
 		mt_cpufreq_freq_table_allocated = true;
 	}
 
