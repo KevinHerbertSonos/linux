@@ -925,6 +925,21 @@ static int mtk_poll_rx(struct napi_struct *napi, int budget,
 
 		netdev = eth->netdev[mac];
 
+#ifdef CONFIG_SONOS
+		/* FIXME The root cause of the issue is passing
+		 * NULL point to eth_type_trans
+		 * We don't know if the mac is from
+		 * MAC zero which should never occur
+		 * since the mac zero is not been used
+		 * add code to provent Kernel crash and
+		 * have more info to debug
+		 */
+		if (!netdev) {
+			printk(KERN_EMERG "ASSERT: invalid mac id packet: %d\n", mac);
+			goto release_desc;
+		}
+#endif
+
 		if (unlikely(test_bit(MTK_RESETTING, &eth->state)))
 			goto release_desc;
 
