@@ -17,6 +17,7 @@
 #include <linux/earlysuspend.h>
 #endif
 #include <sound/soc.h>
+#include "mt8521p-dai.h"
 #include "mt8521p-afe.h"
 
 
