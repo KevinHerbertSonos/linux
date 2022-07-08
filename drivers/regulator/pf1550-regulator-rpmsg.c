@@ -464,9 +464,15 @@ static int pf1550_regulator_probe(struct platform_device *pdev)
 		desc = &pf1550_info.regulators[i];
 		rdev = devm_regulator_register(&pdev->dev, desc, &config);
 		if (IS_ERR(rdev)) {
+#ifdef CONFIG_SONOS_RPMSG_SPI
+			dev_err(&pdev->dev,
+				"defer to initialize regulator-%d\n", i);
+			return -EPROBE_DEFER;
+#else
 			dev_err(&pdev->dev,
 				"Failed to initialize regulator-%d\n", i);
 			return PTR_ERR(rdev);
+#endif
 		}
 	}
 
@@ -499,10 +505,28 @@ static struct platform_driver pf1550_regulator_driver = {
 	.probe = pf1550_regulator_probe,
 };
 
+#ifdef CONFIG_SONOS_RPMSG_SPI
+static struct timer_list pf1550_rpmsg_delay_timer;
+static void pf1550_rpmsg_delay_probe(unsigned long __data)
+{
+	register_rpmsg_driver(&rpmsg_regulator_driver);
+}
+
+static int __init pf1550_rpmsg_init(void)
+{
+	init_timer(&pf1550_rpmsg_delay_timer);
+	pf1550_rpmsg_delay_timer.function = pf1550_rpmsg_delay_probe;
+	/* FIXME due to M33 is busy on cold boot, delay pf1550 rpmsg 30 sec */
+	pf1550_rpmsg_delay_timer.expires = jiffies + 30 * HZ;
+	add_timer(&pf1550_rpmsg_delay_timer);
+	return 0;
+}
+#else
 static int __init pf1550_rpmsg_init(void)
 {
 	return register_rpmsg_driver(&rpmsg_regulator_driver);
 }
+#endif
 
 module_platform_driver(pf1550_regulator_driver);
 module_init(pf1550_rpmsg_init);
