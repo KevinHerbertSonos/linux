@@ -1,0 +1,61 @@
+/*
+ * Copyright (c) 2021, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Hideout HW versions
+ *	6 - hideout_v6.dts	- Hideout - remove RT8092
+ * 	7 - hideout_v7.dts	- Hideout - replace led controller - lp5562 with adp8863
+ * 	8 - hideout_v8.dts	- Hideout - replace dspic
+ */
+/dts-v1/;
+#include "hideout.dtsi"
+
+/ {
+	model = "Sonos Hideout V8";
+
+	/delete-node/ dspic;
+	/delete-node/ ampmcu;
+	/delete-node/ qca_ddfa;
+
+	cpus {
+		cpu@0 {
+			operating-points = <
+				/* kHz    uV */
+				1300000  1300000
+				1196000  1300000
+				1040000  1300000
+				747500   1300000
+				598000   1300000
+			>;
+		};
+	};
+
+	mtcpufreq {
+		regulators {
+			reg-vproc-supply = <&vproc_fixed_reg>;
+		};
+	};
+
+	vproc_fixed_reg: vproc_fixed_reg@0 {
+		compatible = "regulator-fixed";
+		regulator-name = "reg-vproc";
+		regulator-min-microvolt = <1300000>;
+		regulator-max-microvolt = <1300000>;
+	};
+};
+
+&i2c0 {
+	adp8863@0 {     // LED controller
+		compatible = "analog-devices,adp8863";
+		reg = <0x2b>;
+	};
+
+	lp5562@0 {	// LED controller
+		status = "disabled";
+	};
+};
+
+&sonos_rt8092_reg {
+	status = "disabled";
+};

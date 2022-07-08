@@ -1,0 +1,14 @@
+/*
+ * Copyright (c) 2017-2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* El Rey HW versions
+ *      6 - elrey.dts    - El Rey post-PVT - cut-over from v2 auth chip to v3
+ */
+/dts-v1/;
+#include "elrey6.dtsi"
+
+/ {
+	model = "Sonos El Rey HT V6";
+};

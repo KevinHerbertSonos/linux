@@ -1,0 +1,14 @@
+/*
+ * Copyright (c) 2017-2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Hideout HW versions
+ *      5 - hideout.dts    - Hideout - replacing Apple auth v2 with v3
+ */
+/dts-v1/;
+#include "hideout.dtsi"
+
+/ {
+	model = "Sonos Hideout V5";
+};

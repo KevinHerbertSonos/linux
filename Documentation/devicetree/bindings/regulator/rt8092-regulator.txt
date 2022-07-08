@@ -1,0 +1,36 @@
+RT8092XXX regulators
+
+Required properties:
+- compatible: "richtek,rt8092"
+- reg: I2C slave address
+- Vout-max: Max output voltage limit in uV programmed into the IC
+- Vout-max: Min output voltage limit in uV programmed into the IC
+
+Optional properties:
+- Vsel-high: Indicates the VSEL pin is high.
+  If this property is missing, assume the VSEL pin is low(0).
+
+Any standard regulator properties can be used to configure the single regulator.
+
+Example:
+
+	i2c2 : i2c@80051f00{
+		vsys_rt8092_reg: rt8092@1c{
+			compatible = "richtek,rt8092";
+			reg = <0x1c>;
+			Vout-min = <1150000>;
+			Vout-max = <1300000>;
+			status = "okay";
+
+			regulators {
+				vsys_v1p3: rt8092_reg {
+					regulator-name = "VSYS";
+					regulator-min-microvolt = <1200000>;
+					regulator-max-microvolt = <1400000>;
+					regulator-always-on;
+				};
+			};
+		};
+	};
+
+

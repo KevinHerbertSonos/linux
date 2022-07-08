@@ -1,0 +1,44 @@
+/*
+ * Copyright (c) 2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* El Rey HW versions
+ *      7 - Using fix regulator to replace RT8092
+ */
+/dts-v1/;
+#include "elrey6.dtsi"
+
+/ {
+	model = "Sonos El Rey HT V7";
+
+	cpus {
+		cpu@0 {
+			operating-points = <
+				/* kHz    uV */
+				1300000  1300000
+				1196000  1300000
+				1040000  1300000
+				747500   1300000
+				598000   1300000
+			>;
+		};
+	};
+
+	mtcpufreq {
+		regulators {
+			reg-vproc-supply = <&vproc_fixed_reg>;
+		};
+	};
+
+	vproc_fixed_reg: vproc_fixed_reg@0 {
+		compatible = "regulator-fixed";
+		regulator-name = "reg-vproc";
+		regulator-min-microvolt = <1300000>;
+		regulator-max-microvolt = <1300000>;
+	};
+};
+
+&sonos_rt8092_reg {
+	status = "disabled";
+};

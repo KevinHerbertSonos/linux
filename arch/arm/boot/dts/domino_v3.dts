@@ -1,0 +1,14 @@
+/*
+- * Copyright (c) 2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Domino HW versions
+ *	3 - evt/dvt - regulator and CPU thermal sensor moved to i2c2
+ */
+/dts-v1/;
+#include "domino.dtsi"
+
+/ {
+	model = "Sonos Domino V3";
+};

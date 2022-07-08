@@ -1,0 +1,72 @@
+/*
+- * Copyright (c) 2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Domino HW versions
+ *	5 - replace the AK4458 DAC with the TI PCM1690
+ */
+/dts-v1/;
+#include "domino.dtsi"
+
+/ {
+	model = "Sonos Domino V5";
+
+        sonos-product-id = <0x02>;
+
+        sonos-platform {
+                sonos-ampctl {
+                        hw-inits-index = <2>;
+                        hw-exits-index = <2>;
+                        sonos-ampctl-signals {
+                                sonos-ampsignal@0 {             // DACRESET
+                                        more-work-index = <4>;
+                                } ;
+                                sonos-ampsignal@2 {             // AMP MUTE
+                                        more-work-index = <3>;
+				};
+			};
+		};
+	};
+
+	cpus {
+		cpu@0 {
+			operating-points = <
+				/* kHz    uV */
+				1300000  1300000
+				1196000  1300000
+				1040000  1300000
+				747500   1300000
+				598000   1300000
+			>;
+		};
+	};
+
+	mtcpufreq {
+		regulators {
+			reg-vproc-supply = <&vproc_fixed_reg>;
+		};
+	};
+
+	vproc_fixed_reg: vproc_fixed_reg@0 {
+		compatible = "regulator-fixed";
+		regulator-name = "reg-vproc";
+		regulator-min-microvolt = <1300000>;
+		regulator-max-microvolt = <1300000>;
+	};
+};
+
+&i2c1 {
+	dac0: ak4458@10 {
+		status = "disabled";
+	};
+
+	dac1: pcm1690@4d {
+		compatible = "ti,pcm1690";
+		reg = <0x4d>;
+	};
+};
+
+&sonos_rt8092_reg {
+	status = "disabled";
+};

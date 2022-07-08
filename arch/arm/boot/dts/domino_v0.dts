@@ -1,0 +1,663 @@
+/*
+ * Copyright (c) 2019-2020, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ */
+/* Domino HW versions
+ *      0 - hacked up Hideout board for proto build enablement`
+ */
+/dts-v1/;
+#include "sonos_mtk8521p.dtsi"
+
+/ {
+	model = "Sonos Domino V0";
+	compatible = "mediatek,mt8521p-evb2", "mediatek,mt8521p";
+
+	sonos-product-id = <0x02>;
+
+	sonos-platform {
+		/* Sonos platform specific values for shared driver source & binaries */
+
+		sonos-ampctl {
+			sonos-ampfaults {
+				num-faults = <0x01>;
+				status = "okay";
+
+				ampfault@0 {
+					fault-gpio = <&pio 243 0>;
+					fault-flags = <IRQ_TYPE_EDGE_FALLING>;
+					fault-label = "Amp fault";
+				};
+			};
+		};
+
+		misc-gpio {
+			connect-button = <&pio 19 GPIO_ACTIVE_LOW>;
+			linein-detect = <&pio 241 GPIO_ACTIVE_HIGH>;
+			subwoof-detect = <&pio 238 GPIO_ACTIVE_HIGH>;
+			adc-pdn = <&pio 267 GPIO_ACTIVE_LOW>;
+			subwoof-mute = <&pio 239 GPIO_ACTIVE_LOW>;
+		};
+
+		dspic-gpio {
+			icsp-gpio-mclr = <&pio 264 0>;
+			icsp-gpio-data = <&pio 23 0>;
+			icsp-gpio-clk = <&pio 26 0>;
+		};
+
+		simulated-buttons {
+			/* event-sources are offsets from EVTSOURCE_BUTTON_PLAYPAUSE, some generate an event for more than one source */
+			join {
+				event-sources = <3>;
+			};
+		};
+
+		thermal-mgmt {
+			AMP {
+				fault-temperature = <95>;
+				warn-temperature = <92>;
+			};
+			CPU {
+				fault-temperature = <95>;
+				warn-temperature = <92>;
+			};
+			SOC {
+				fault-temperature = <112>;
+				warn-temperature = <109>;
+			};
+			POWER {
+				fault-temperature = <102000>; /* near the max computed by Ed from max ADC voltage */
+				warn-temperature = <100000>;
+			};
+		};
+		thermal-mgmt-poll {
+			msec = <500>;
+		};
+
+/*
+ Measured on Hideout milli-volts to Celsius
+-------------------------------------------
+ 200 <= 86
+ 650    92
+ 950    94
+1100    95
+1200    96.5
+1300    97.5
+1425    98
+1500    99
+1650   102
+1750   104.5
+1800   106+
+
+temp (milli-Celsius) = (mVolts / conv-slope) + zero-offset
+*/
+
+		thermistors {
+			POWER {
+				adc-channel = <0>;
+				input-signal-swing = <1500000>; /* micro-volts */
+				resolution-bits = <12>;
+				zero-offset = <90000>;
+				conversion-slope = <120>;
+			};
+		};
+	};
+
+	aliases {
+		ethernet0 = &gmac1;
+	};
+
+	chosen {
+		bootargs = "";
+	};
+
+	memory {
+		reg = <0 0x80000000 0 0x3fc00000>;
+	};
+
+	mtcpufreq {
+		compatible = "mediatek,mt2701-cpufreq";
+		status = "okay";
+		regulators {
+			reg-vproc-supply = <&vproc_v1p3>;
+		};
+	};
+
+	ice: ice_debug {
+		compatible = "mediatek,mt8521p-ice_debug",
+			     "mediatek,mt2701-ice_debug";
+		clocks = <&infracfg CLK_INFRA_DBG>;
+		clock-names = "ice_dbg";
+	};
+
+	vdd_fixed_vgpu_reg: fixedregulator@0 {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_fixed_vgpu";
+		regulator-min-microvolt = <1150000>;
+		regulator-max-microvolt = <1150000>;
+	};
+
+	mtk_m4 {
+		compatible = "sonos,mtk-m4";
+		reg = <0 0x11018000 0 0x400>,
+			  <0 0x11300000 0 0x30000>,
+			  <0 0x11340000 0 0x20000>;
+		clocks = <&topckgen CLK_TOP_CMSYS_SEL>;
+		clock-names = "cmsys_sel";
+		interrupts = <GIC_SPI 130 IRQ_TYPE_LEVEL_LOW>;
+		status = "okay";
+	};
+
+	mtk_timer {
+		compatible = "sonos,mtk-timer";
+		reg = <0 0x100080a8 0 0x2c>;
+		clocks = <&system_clk>, <&rtc_clk>;
+		clock-names = "system-clk", "rtc-clk";
+		status = "okay";
+	};
+
+	fuse_ctrl {
+		compatible = "Sonos,fuse_ctrl";
+		#address-cells = <0x1>;
+		#size-cells = <0x0>;
+		fuse-ctrl-gpio = <&pio 27 0>;
+	};
+
+	ir_rcvr {
+		compatible = "sonos,ir-rcvr";
+		ir-gpio = <&pio 46 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&irrx_pins_gpio_input>;
+		status = "okay";
+	};
+
+	thermal_zones: thermal-zones {
+		ampthermal: ampthermal {
+			polling-delay-passive = <1000>;
+			polling-delay = <1000>;
+			/* sensor ID */
+			thermal-sensors = <&amptempsensor 0>;
+		};
+		cputhermal: cputhermal {
+			polling-delay-passive = <1000>;
+			polling-delay = <1000>;
+			/* sensor ID */
+			thermal-sensors = <&cputempsensor 0>;
+		};
+	};
+
+	sonos_rollback: sonos_rollback@10007024 {
+		compatible = "sonos,sonos-rollback";
+		wdt-node = "mediatek,mt8521p-wdt";
+		offset = <0x24>;
+		shift = <3>;
+	};
+
+	dspic {
+		compatible = "Sonos,dspic";
+		image-name =
+			<0x4e11>, "dspic.4e11.blob", /* dsPIC33EP32GS502 */
+			<0x4e21>, "dspic.4e21.blob"; /* dsPIC33EP64GS502 */
+		status = "okay";
+		i2c_bus = <2>;
+		i2c_reg = <0x42>;
+	};
+
+	ampmcu {
+		compatible = "Sonos,ampmcu";
+		status = "disabled";
+		i2c_bus = <2>;
+		i2c_reg = <0x42>;
+		reset-gpio = <&pio 264 0>;
+	};
+
+	qca_ddfa {
+		compatible = "Sonos,qca_ddfa";
+		image-name = "qca_ddfa.hex";
+		status = "okay";
+	};
+};
+
+&auxadc {
+	status = "okay";
+};
+
+&eth {
+	mac-address = [00 00 00 00 00 00];
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&ephy_default>;
+	pinctrl-1 = <&sonos_pins_gpio>;
+
+	gmac1: mac@1 {
+		compatible = "mediatek,eth-mac";
+		mac-address = [00 00 00 00 00 00];
+		phy-reset-gpio = <&pio 271 0>;
+		reg = <0x1>;
+		phy-handle = <&phy1>;
+	};
+
+	mdio-bus {
+		#address-cells = <0x1>;
+		#size-cells = <0x0>;
+		phy1: ethernet-phy@1d {
+			compatible = "Sonos,mv88e6020_phy";
+			reg = <0x1d>;
+			phy-mode = "rmii";
+			interrupts = <&pio 22 0>;
+		};
+	};
+};
+
+&dpi0 {
+	status = "okay";
+};
+
+&i2c0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c0_pins_a>;
+	pinctrl-1 = <&sonos_pins_gpio>;
+	status = "okay";
+
+	sge@0 {  // Sigdetail Gesture Engine
+		compatible = "Sonos,sge-psoc4";
+		pinctrl-names = "mode-flow-ctrl", "mode-uart-hiz";
+		pinctrl-0 = <&uart1_pins_flowctrl>;
+		pinctrl-1 = <&uart1_pins_hiz>;
+		reg = <0x40>;
+		gpio-addr = <0x10005000 0x1000 0x514 0x518 0x640 0x534 0x538 0x0>;
+		gpio-params = "base-addr", "len", "io-set", "io-clr", "io-din", "scl-set", "scl-clr", "scl-din";
+		scl-bitmask =  <0x000040>;
+		io-bitmask  =  <0x001000>;
+		xres-gpio = <&pio 14 1>;
+		io-gpio   = <&pio 28 1>;
+		scl-gpio  = <&pio 54 1>;
+		irq-gpio  = <&pio 18 1>;
+		zonea = "vol1";
+		zoneb = "pp";
+		zonec = "vol2";
+		finger-threshold = <49>;
+		noise-threshold = <24>;
+		hysteresis = <4>;
+		share-swd-uart = <0>;
+		status = "okay";
+
+		psoc-images {
+			image@0 {
+				model-num = <4247>;
+				ident = <0x4d>;
+				flash-rows = <1024>;
+				flash-row-size = <128>;
+				flash-protection-size = <128>;
+			};
+		};
+	};
+
+	lp5562@0 {	// LED controller
+		compatible = "ti,lp5562";
+		reg = <0x30>;
+		reset-gpio = <&pio 15 0>;
+	};
+
+	auth0: apple_auth@11 {
+		compatible = "Sonos,apple_auth";
+		reg = <0x11>;
+		status = "okay";
+	};
+};
+
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_pins_a>;
+	status = "okay";
+
+	/* dsPIC and ampmcu share address 0x42,
+	 * but register with Linux directly.
+	 */
+};
+
+&i2c2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c2_pins_a>;
+	status = "okay";
+
+	cputempsensor: tmp102@4a {
+		compatible = "tmp102";
+		reg = <0x4a>;
+		device_type="CPU";
+		#thermal-sensor-cells = <1>;
+	};
+	amptempsensor: tmp102@48 {
+		compatible = "tmp102";
+		reg = <0x48>;
+		device_type="AMP";
+		#thermal-sensor-cells = <1>;
+	};
+	sonos_rt8092_reg: rt8092@1c {
+		compatible = "richtek,rt8092";
+		reg = <0x1c>;
+		/* Sonos::Allen - Please think twice(or thrice) before changing these limit values.
+		 * These values are programmed into the rt8092 voltage regulator at init to prevent the
+		 * cpufreq/regulator drivers from going rogue and overshooting/undershooting the output voltage while switching
+		 * through the frequency-voltage table. Intentionally changing the max/min values set below may blow up the CPU
+		 * or cause the CPU to brown out when driver is probed */
+		Vout-min = <1150000>;
+		Vout-max = <1300000>;
+		status = "okay";
+		regulators {
+			vproc_v1p3: rt8092_reg {
+				regulator-name = "reg-vproc";
+				regulator-min-microvolt = <1150000>;
+				regulator-max-microvolt = <1300000>;
+				regulator-always-on;
+				regulator-boot-on;
+			};
+		};
+	};
+};
+
+&irrx {
+	pinctrl-names = "default";
+	pinctrl-0 = <&irrx_pins_ir_input>;
+	status = "disabled";
+};
+
+&mali {
+	vdd_g3d-supply = <&vdd_fixed_vgpu_reg>;
+	status = "okay";
+};
+
+&pcie {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie_default>;
+	status = "okay";
+
+	pcie@1,0 {
+		rst-gpio = <&pio 261 0>;
+		wake-gpio = <&pio 110 0>;
+		clk-req-gpio = <&pio 109 0>;
+	};
+	pcie@2,0 {
+		rst-gpio = <&pio 106 0>;
+		wake-gpio = <&pio 110 0>;
+		clk-req-gpio = <&pio 109 0>;
+	};
+};
+
+&pio {
+	aud_pins_i2s0: audioi2s0default {
+		pins_cmd_dat {
+			pinmux = <MT2701_PIN_49_I2S0_DATA__FUNC_I2S0_DATA>,
+				 <MT2701_PIN_72_I2S0_DATA_IN__FUNC_I2S0_DATA_IN>,
+				 <MT2701_PIN_73_I2S0_LRCK__FUNC_I2S0_LRCK>,
+				 <MT2701_PIN_74_I2S0_BCK__FUNC_I2S0_BCK>,
+				 <MT2701_PIN_126_I2S0_MCLK__FUNC_I2S0_MCLK>,
+				 <MT2701_PIN_203_PWM0__FUNC_I2S2_DATA>,
+				 <MT2701_PIN_204_PWM1__FUNC_I2S3_DATA>;
+			drive-strength = <MTK_DRIVE_12mA>;
+			bias-pull-down;
+		};
+	};
+
+	aud_pins_default: audiodefault {
+		pins_cmd_dat {
+			pinmux = <MT2701_PIN_33_I2S1_DATA__FUNC_I2S1_DATA>,
+				 <MT2701_PIN_34_I2S1_DATA_IN__FUNC_I2S1_DATA_IN>,
+				 <MT2701_PIN_35_I2S1_BCK__FUNC_I2S1_BCK>,
+				 <MT2701_PIN_36_I2S1_LRCK__FUNC_I2S1_LRCK>,
+				 <MT2701_PIN_37_I2S1_MCLK__FUNC_I2S1_MCLK>;
+			drive-strength = <MTK_DRIVE_8mA>;
+			bias-pull-down;
+		};
+	};
+
+	aud_pins_spdifin0_mode0_gpio: spdifin0_mode0_gpio {
+		pins_cmd_dat {
+			pinmux = <MT2701_PIN_201_SPDIF_IN0__FUNC_GPIO201>;
+		};
+	};
+	aud_pins_spdifin0_mode1_spdif: spdifin0_mode1_spdif {
+		pins_cmd_dat {
+			pinmux = <MT2701_PIN_201_SPDIF_IN0__FUNC_SPDIF_IN0>;
+		};
+	};
+	aud_pins_spdifin1_mode0_gpio: spdifin1_mode0_gpio {
+		pins_cmd_dat {
+			pinmux = <MT2701_PIN_202_SPDIF_IN1__FUNC_GPIO202>;
+		};
+	};
+	aud_pins_spdifin1_mode1_spdif: spdifin1_mode1_spdif {
+		pins_cmd_dat {
+			pinmux = <MT2701_PIN_202_SPDIF_IN1__FUNC_SPDIF_IN1>;
+		};
+	};
+
+	sonos_pins_gpio: sonos_pins_gpio{
+		pins_cmd_gpio {
+			pinmux = <MT2701_PIN_19_PCM_SYNC__FUNC_GPIO19>,
+				<MT2701_PIN_21_PCM_TX__FUNC_GPIO21>,
+				<MT2701_PIN_22_EINT0__FUNC_GPIO22>;
+			bias-disable;
+		};
+	};
+
+	ephy_default: ephy_default {
+		pins_eth {
+			pinmux = <MT2701_PIN_275_MDC__FUNC_MDC>,
+				<MT2701_PIN_276_MDIO__FUNC_MDIO>,
+				<MT2701_PIN_262_G2_TXEN__FUNC_G2_TXEN>,
+				<MT2701_PIN_265_G2_TXD1__FUNC_G2_TXD1>,
+				<MT2701_PIN_266_G2_TXD0__FUNC_G2_TXD0>,
+				<MT2701_PIN_268_G2_RXC__FUNC_G2_RXC>,
+				<MT2701_PIN_269_G2_RXD0__FUNC_G2_RXD0>,
+				<MT2701_PIN_270_G2_RXD1__FUNC_G2_RXD1>,
+				<MT2701_PIN_274_G2_RXDV__FUNC_G2_RXDV>;
+		};
+	};
+
+	i2c0_pins_a: i2c0@0 {
+		pins1 {
+			pinmux = <MT2701_PIN_75_SDA0__FUNC_SDA0>,
+				 <MT2701_PIN_76_SCL0__FUNC_SCL0>;
+			bias-disable;
+		};
+	};
+
+	i2c1_pins_a: i2c1@0 {
+		pins1 {
+			pinmux = <MT2701_PIN_57_SDA1__FUNC_SDA1>,
+				 <MT2701_PIN_58_SCL1__FUNC_SCL1>;
+			bias-disable;
+		};
+	};
+
+	i2c2_pins_a: i2c2@0 {
+		pins1 {
+			pinmux = <MT2701_PIN_77_SDA2__FUNC_SDA2>,
+				 <MT2701_PIN_78_SCL2__FUNC_SCL2>;
+			bias-disable;
+		};
+	};
+
+	irrx_pins_ir_input: irrx_pin_ir {
+		pins_cmd_dat {
+			pinmux = <MT2701_PIN_46_IR__FUNC_IR>;
+			bias-disable;
+		};
+	};
+
+	irrx_pins_gpio_input: irrx_pin_gpio {
+		pins_ir {
+			pinmux = <MT2701_PIN_46_IR__FUNC_GPIO46>;
+			bias-disable;
+		};
+	};
+
+	pcie_default: pcie_pin_default {
+		pins_cmd_dat {
+			pinmux = <MT2701_PIN_22_EINT0__FUNC_PCIE0_PERST_N>,
+				 <MT2701_PIN_209_AUD_EXT_CK2__FUNC_PCIE1_PERST_N>;
+		};
+	};
+
+	spi_pins_a: spi0@0 {
+		pins_spi {
+			pinmux = <MT2701_PIN_53_SPI0_CSN__FUNC_SPI0_CS>,
+				 <MT2701_PIN_54_SPI0_CK__FUNC_SPI0_CK>,
+				 <MT2701_PIN_55_SPI0_MI__FUNC_SPI0_MI>,
+				 <MT2701_PIN_56_SPI0_MO__FUNC_SPI0_MO>;
+			bias-disable;
+		};
+	};
+
+	spi_pins_b: spi1@0 {
+		pins_spi {
+			pinmux = <MT2701_PIN_7_SPI1_CSN__FUNC_SPI1_CS>,
+				 <MT2701_PIN_8_SPI1_MI__FUNC_SPI1_MI>,
+				 <MT2701_PIN_9_SPI1_MO__FUNC_SPI1_MO>,
+				 <MT2701_PIN_199_SPI1_CLK__FUNC_SPI1_CK>;
+			bias-disable;
+		};
+	};
+
+	spi_pins_c: spi2@0 {
+		pins_spi {
+			pinmux = <MT2701_PIN_101_SPI2_CSN__FUNC_SPI2_CS>,
+				 <MT2701_PIN_102_SPI2_MI__FUNC_SPI2_MI>,
+				 <MT2701_PIN_103_SPI2_MO__FUNC_SPI2_MO>,
+				 <MT2701_PIN_104_SPI2_CLK__FUNC_SPI2_CK>;
+			bias-disable;
+		};
+	};
+
+	uart1_pins_hiz: mode_hiz {
+		pins_dat {
+			pinmux = <MT2701_PIN_81_URXD1__FUNC_GPIO81>,
+				 <MT2701_PIN_82_UTXD1__FUNC_GPIO82>,
+				 <MT2701_PIN_25_EINT3__FUNC_GPIO25>,
+				 <MT2701_PIN_24_EINT2__FUNC_GPIO24>;
+			bias-disable;
+		};
+	};
+
+	uart1_pins_flowctrl: mode_flowctrl {
+		pins_dat {
+			pinmux = <MT2701_PIN_81_URXD1__FUNC_URXD1>,
+				 <MT2701_PIN_82_UTXD1__FUNC_UTXD1>,
+				 <MT2701_PIN_25_EINT3__FUNC_URTS1>,
+				 <MT2701_PIN_24_EINT2__FUNC_UCTS1>;
+			bias-disable;
+		};
+	};
+};
+
+&sound {
+	/* CS42448 Machine name */
+	compatible = "mediatek,mt8521p-cs42448-machine",
+			"mediatek,mt8521p-soc-machine";
+	pinctrl-names = "default", "audspdifin0-mode0-gpio",
+			"audspdifin0-mode1-spdif", "audspdifin1-mode0-gpio",
+			"audspdifin1-mode1-spdif", "aud_pins_i2s0";
+	pinctrl-0 = <&aud_pins_default>;
+	pinctrl-1 = <&aud_pins_spdifin0_mode0_gpio>;
+	pinctrl-2 = <&aud_pins_spdifin0_mode1_spdif>;
+	pinctrl-3 = <&aud_pins_spdifin1_mode0_gpio>;
+	pinctrl-4 = <&aud_pins_spdifin1_mode1_spdif>;
+	pinctrl-5 = <&aud_pins_i2s0>;
+	pinctrl-6 = <&sonos_pins_gpio>;
+	status = "okay";
+	lla-spdif-rx {
+		lla-type = <2>;
+		frames-per-second = <0>;
+		channel-len = <3>;
+		channel-mask = <0x00000003>;
+		channels-per-frame = <2>;
+		frames-per-buffer = <192>;
+		buffer-cnt = <128>;
+		status = "okay";
+	};
+	lla-spdif-tx {
+		lla-type = <3>;
+		frames-per-second = <44100>;
+		channel-len = <2>;
+		channel-mask = <0x00000003>;
+		channels-per-frame = <2>;
+		frames-per-buffer = <128>;
+		buffer-cnt = <64>;
+		status = "okay";
+	};
+	lla-line-in {
+		lla-type = <4>;
+		frames-per-second = <44100>;
+		channel-len = <4>;
+		channel-mask = <0x03>;
+		channels-per-frame = <2>;
+		frames-per-buffer = <128>;
+		buffer-cnt = <64>;
+		uses-mclk;
+		status = "okay";
+	};
+	lla-dac {
+		lla-type = <0>;
+		frames-per-second = <44100>;
+		channel-len = <4>;
+		channel-mask = <0x0e>;
+		channels-per-frame = <4>;
+		frames-per-buffer = <128>;
+		buffer-cnt = <64>;
+		status = "okay";
+	};
+};
+
+&spi0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi_pins_a>;
+	pinctrl-1 = <&sonos_pins_gpio>;
+	status = "okay";
+};
+
+&spi1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi_pins_b>;
+	status = "disabled";
+
+	spidev1: spi@0 {
+		compatible = "linux,spidev";
+		reg = <0>;
+		spi-max-frequency = <1000000>;
+	};
+};
+
+&spi2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi_pins_c>;
+	status = "disabled";
+
+	spidev2: spi@0 {
+		compatible = "linux,spidev";
+		reg = <0>;
+		spi-max-frequency = <1000000>;
+	};
+};
+
+&uart0 {
+	status = "okay";
+};
+
+&uart1 {
+	status = "okay";
+};
+
+&bch {
+	status = "okay";
+};
+
+&nandc {
+	status = "okay";
+	nand@0 {
+		reg = <0>;
+		nand-ecc-mode = "hw";
+		nand-ecc-strength = <0>;
+		nand-ecc-step-size = <1024>;
+	};
+};
