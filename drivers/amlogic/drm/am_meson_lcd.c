@@ -73,6 +73,7 @@ static struct display_timing am_lcd_timing = {
 	.vsync_len = { 10, 10, 10 },
 	.flags = DISPLAY_FLAGS_DE_HIGH,
 };
+static int cur_vrefresh = 6000; 
 
 /* ***************************************************************** */
 /*     drm driver function                                           */
@@ -257,13 +258,21 @@ static void am_lcd_encoder_mode_set(struct drm_encoder *encoder,
 	struct lcd_config_s *all_conf = lcd->lcd_drv->lcd_conf_multi;
 	int i = 0;
 
-	pr_info("am_drm_lcd: %s %d, cur conf:%p, all:%p\n", __func__, __LINE__, cur_conf, all_conf);
-	pr_info("am_drm_lcd: adj_mode, h:%d w:%d\n", adj_mode->hdisplay, adj_mode->vdisplay);
+	pr_info("am_drm_lcd: adj_mode, h:%d w:%d, vrefresh:%d\n",
+			adj_mode->hdisplay, adj_mode->vdisplay, adj_mode->vrefresh);
 	drm_mode_copy(lcd->mode, adj_mode);
 	if (adj_mode->hdisplay == cur_conf->lcd_basic.h_active &&
-			adj_mode->vdisplay == cur_conf->lcd_basic.v_active)
+			adj_mode->vdisplay == cur_conf->lcd_basic.v_active &&
+			adj_mode->vrefresh * 100 == cur_vrefresh)
 		return;
+
+	//store current frame rate, pass it to mipi driver when enable mipi
+	cur_vrefresh = adj_mode->vrefresh*100;
 	
+	if (all_conf == NULL) {
+		pr_err("no found multi lcd confs\n");
+		return;
+	}
 	/* find proper mipi setting */
 	for (i=0; i < LCD_CONFIGS_MAX; i++) {
 		pr_info("%s conf[%d] name:%s \n", __func__, i, all_conf[i].lcd_propname?all_conf[i].lcd_propname:"null");
@@ -296,6 +305,8 @@ static void am_lcd_encoder_enable(struct drm_encoder *encoder)
 	pr_info("am_drm_lcd: %s %d\n", __func__, __LINE__);
 	vout_notifier_call_chain(VOUT_EVENT_MODE_CHANGE_PRE, &vmode);
 	mutex_lock(&lcd->lcd_drv->power_mutex);
+	//pass current frame rate to mipi driver before initial mipi
+	aml_lcd_notifier_call_chain(LCD_EVENT_FRAME_RATE_ADJUST, &cur_vrefresh);
 	aml_lcd_notifier_call_chain(LCD_EVENT_PREPARE, NULL);
 	aml_lcd_notifier_call_chain(LCD_EVENT_ENABLE, NULL);
 

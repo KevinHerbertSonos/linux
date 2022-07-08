@@ -905,6 +905,7 @@ void lcd_tablet_driver_init_pre(void)
 	if (ret)
 		return;
 
+	lcd_vmode_change(pconf);
 	lcd_tablet_clk_update(pconf);
 	lcd_tablet_config_update(pconf);
 	lcd_tablet_config_post_update(pconf);

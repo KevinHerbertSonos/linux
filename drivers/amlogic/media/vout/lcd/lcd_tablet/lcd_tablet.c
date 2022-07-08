@@ -449,7 +449,7 @@ static void lcd_tablet_vinfo_update_default(void)
 		LCDERR("no lcd_info exist\n");
 		return;
 	}
-
+	pr_info("%s \n", __func__);
 	h_active = lcd_vcbus_read(ENCL_VIDEO_HAVON_END)
 			- lcd_vcbus_read(ENCL_VIDEO_HAVON_BEGIN) + 1;
 	v_active = lcd_vcbus_read(ENCL_VIDEO_VAVON_ELINE)
@@ -468,8 +468,6 @@ static void lcd_tablet_vinfo_update_default(void)
 		vinfo->aspect_ratio_den = v_active;
 		vinfo->screen_real_width = h_active;
 		vinfo->screen_real_height = v_active;
-		vinfo->sync_duration_num = 60;
-		vinfo->sync_duration_den = 1;
 		vinfo->video_clk = 0;
 		vinfo->htotal = h_total;
 		vinfo->vtotal = v_total;
@@ -1008,22 +1006,18 @@ static int lcd_config_load_from_dts(struct lcd_config_s *pconf,
 
 		ret = of_property_read_u32_array(child, "clk_attr", &para[0], 4);
 		if (ret) {
-			LCDERR("failed to get clk_attr\n");
 			pconf->lcd_timing.fr_adjust_type = 0;
 			pconf->lcd_timing.ss_level = 0;
 			pconf->lcd_timing.clk_auto = 1;
 			pconf->lcd_timing.lcd_clk = 60;
 		} else {
-			LCDERR("ok to get clk_attr\n");
 			pconf->lcd_timing.fr_adjust_type = (unsigned char)(para[0]);
 			pconf->lcd_timing.ss_level = (unsigned char)(para[1]);
 			pconf->lcd_timing.clk_auto = (unsigned char)(para[2]);
 			if (para[3] > 0) {
 				pconf->lcd_timing.lcd_clk = para[3];
-				LCDERR("ok to get clk_attr, lcd_clk:%d\n", para[3]);
 			} else { /* avoid 0 mistake */
 				pconf->lcd_timing.lcd_clk = 60;
-				LCDERR("lcd_clk is 0, default to 60Hz\n");
 			}
 		}
 		if (pconf->lcd_timing.clk_auto == 0) {
@@ -1238,31 +1232,11 @@ static void lcd_set_vinfo(unsigned int sync_duration)
 	/* update vinfo */
 	lcd_drv->lcd_info->sync_duration_num = sync_duration;
 	lcd_drv->lcd_info->sync_duration_den = 100;
+	/* update frame rate to lcd_timing, this is used for calculating the mipi clk */
+	lcd_drv->lcd_config->lcd_timing.sync_duration_num = sync_duration;
 
-	/* update interface timing */
-	lcd_tablet_config_update(lcd_drv->lcd_config);
-#ifdef CONFIG_AMLOGIC_VPU
-	request_vpu_clk_vmod(
-		lcd_drv->lcd_config->lcd_timing.lcd_clk, VPU_VENCL);
-#endif
+	return;
 
-	/* change clk parameter */
-	switch (lcd_drv->lcd_config->lcd_timing.clk_change) {
-	case LCD_CLK_PLL_CHANGE:
-		lcd_clk_generate_parameter(lcd_drv->lcd_config);
-		lcd_clk_set(lcd_drv->lcd_config);
-		break;
-	case LCD_CLK_FRAC_UPDATE:
-		lcd_clk_update(lcd_drv->lcd_config);
-		break;
-	default:
-		break;
-	}
-	lcd_tablet_config_post_update(lcd_drv->lcd_config);
-	lcd_venc_change(lcd_drv->lcd_config);
-
-	vout_notifier_call_chain(VOUT_EVENT_MODE_CHANGE,
-		&lcd_drv->lcd_info->mode);
 }
 
 static int lcd_frame_rate_adjust_notifier(struct notifier_block *nb,

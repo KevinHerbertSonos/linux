@@ -895,7 +895,10 @@ static void lcd_set_pll_axg(struct lcd_clk_config_s *cConf)
 	lcd_hiu_write(HHI_GP0_PLL_CNTL2_AXG, pll_ctrl2);
 	lcd_hiu_write(HHI_GP0_PLL_CNTL3_AXG, 0x0a59a288);
 	lcd_hiu_write(HHI_GP0_PLL_CNTL4_AXG, 0xc000004d);
-	lcd_hiu_write(HHI_GP0_PLL_CNTL5_AXG, 0x00078000);
+	if (cConf->pll_fvco >= 1632000)
+		lcd_hiu_write(HHI_GP0_PLL_CNTL5_AXG, 0x00058000);
+	else
+		lcd_hiu_write(HHI_GP0_PLL_CNTL5_AXG, 0x00078000);
 	lcd_hiu_setb(HHI_GP0_PLL_CNTL_AXG, 1, LCD_PLL_RST_AXG, 1);
 	lcd_hiu_setb(HHI_GP0_PLL_CNTL_AXG, 0, LCD_PLL_RST_AXG, 1);
 
@@ -1913,7 +1916,7 @@ static void lcd_clk_generate_axg(struct lcd_config_s *pconf)
 		cConf->xd_max = CRT_VID_DIV_MAX;
 		tmp = pconf->lcd_control.mipi_config->bit_rate_max;
 		dsi_bit_rate_max = tmp * 1000; /* change to kHz */
-		dsi_bit_rate_min = dsi_bit_rate_max - cConf->fout;
+		dsi_bit_rate_min = (cConf->fout * 8 * 3) /pconf->lcd_control.mipi_config->lane_num  - 1;
 
 		for (xd = 1; xd <= cConf->xd_max; xd++) {
 			pll_fout = cConf->fout * xd;
@@ -1925,6 +1928,7 @@ static void lcd_clk_generate_axg(struct lcd_config_s *pconf)
 				LCDPR("fout=%d, xd=%d\n", cConf->fout, xd);
 
 			pconf->lcd_control.mipi_config->bit_rate = pll_fout * 1000;
+			pr_info("%s bit_rate:%d ...\n", __func__, pconf->lcd_control.mipi_config->bit_rate);
 			pconf->lcd_control.mipi_config->clk_factor = xd;
 			cConf->xd = xd;
 			done = check_pll_axg(cConf, pll_fout);
