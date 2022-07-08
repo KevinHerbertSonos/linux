@@ -301,7 +301,7 @@ int mtk_cec_get_phy_addr(struct device *dev, u8 *edid, int len)
 		return err;
 	}
 
-	dev_err(dev, "phy_addr is 0x%x\n", phy_addr);
+	dev_dbg(dev, "phy_addr is 0x%x\n", phy_addr);
 	cec_s_phys_addr(cec->adap, phy_addr, true);
 
 	return 0;
@@ -332,7 +332,7 @@ bool mtk_cec_hpd_high(struct device *dev)
 
 	status = readl(cec->regs + RX_EVENT);
 
-	return (status & (HDMI_PORD | HDMI_HTPLG)) == (HDMI_PORD | HDMI_HTPLG);
+	return !!(status & HDMI_HTPLG);
 }
 
 static void mtk_cec_htplg_irq_init(struct mtk_cec *cec)
@@ -665,7 +665,7 @@ static int mtk_cec_send_msg(struct mtk_cec *cec)
 	size = frame->msg->len;
 	msg_data_size = size - frame->offset;
 
-	mtk_cec_print_cec_frame(frame);
+	/* mtk_cec_print_cec_frame(frame); */
 
 	if (!(mtk_cec_tx_hw_status(cec) & CEC_FSM_IDLE)
 	    || mtk_cec_tx_retry_max(cec))
