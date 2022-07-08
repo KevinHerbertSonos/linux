@@ -66,6 +66,10 @@
 #include <linux/memcontrol.h>
 #include <linux/khugepaged.h>
 
+#ifdef CONFIG_AMLOGIC_PAGE_TRACE
+#include <linux/amlogic/page_trace.h>
+#endif /* CONFIG_AMLOGIC_PAGE_TRACE */
+
 #include <asm/sections.h>
 #include <asm/tlbflush.h>
 #include <asm/div64.h>
@@ -825,6 +829,12 @@ static inline void __free_one_page(struct page *page,
 	unsigned long uninitialized_var(buddy_idx);
 	struct page *buddy;
 	unsigned int max_order;
+#ifdef CONFIG_AMLOGIC_MEMORY_EXTEND
+	int buddy_mg;
+
+	migratetype = get_pageblock_migratetype(page);
+#endif /* CONFIG_AMLOGIC_MEMORY_EXTEND */
+
 
 	max_order = min_t(unsigned int, MAX_ORDER - 1, pageblock_order);
 

@@ -2984,6 +2984,11 @@ redo:
 	/* Same with comment on barrier() in slab_alloc_node() */
 	barrier();
 
+#ifdef CONFIG_AMLOGIC_SLAB_TRACE
+	slab_trace_remove_object(head, s);
+#endif
+
+
 	if (likely(page == c->page)) {
 		void **freelist = READ_ONCE(c->freelist);
 
