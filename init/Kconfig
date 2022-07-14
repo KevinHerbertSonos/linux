@@ -1938,6 +1938,16 @@ config TRACEPOINTS
 
 endmenu		# General setup
 
+menu "Sonos setup"
+config SONOS
+	bool "Sonos features added"
+	default n
+
+if SONOS
+source "init/Kconfig.sonos"
+endif
+endmenu
+
 source "arch/Kconfig"
 
 config RT_MUTEXES
