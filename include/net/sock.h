@@ -503,6 +503,10 @@ struct sock {
 #ifdef CONFIG_SECURITY
 	void			*sk_security;
 #endif
+#if defined(CONFIG_SONOS) || defined(__SONOS_LINUX__)
+	unsigned short sonos_options;
+	unsigned short sonos_options_pad;
+#endif
 	struct sock_cgroup_data	sk_cgrp_data;
 	struct mem_cgroup	*sk_memcg;
 	void			(*sk_state_change)(struct sock *sk);
