@@ -100,6 +100,9 @@
 #ifdef CONFIG_LOCKUP_DETECTOR
 #include <linux/nmi.h>
 #endif
+#ifdef CONFIG_SONOS
+#include "mdp.h"
+#endif
 
 #if defined(CONFIG_SYSCTL)
 
@@ -139,6 +142,13 @@ static int ten_thousand = 10000;
 #endif
 #ifdef CONFIG_PERF_EVENTS
 static int six_hundred_forty_kb = 640 * 1024;
+#ifdef CONFIG_SONOS
+extern struct manufacturing_data_page sys_mdp;
+int proc_dointvec_sonos_ep(struct ctl_table *table, int write,
+		     void __user *buffer, size_t *lenp, loff_t *ppos);
+int proc_dointvec_sonos_lo(struct ctl_table *table, int write,
+		     void __user *buffer, size_t *lenp, loff_t *ppos);
+#endif	// CONFIG_SONOS
 #endif
 
 /* this is needed for the proc_doulongvec_minmax of vm_dirty_bytes */
@@ -1328,6 +1338,24 @@ static struct ctl_table kern_table[] = {
 		.extra2		= SYSCTL_ONE,
 	},
 #endif
+#ifdef CONFIG_SONOS
+#ifdef CONFIG_PRINTK
+	{
+		.procname 	= "enable_printk",
+		.data		= &sys_mdp.mdp_flags,
+		.maxlen		= sizeof(int),
+		.mode		= 0666,
+		.proc_handler = &proc_dointvec_sonos_ep,
+	},
+	{
+		.procname	= "printk_log_only",
+		.data		= &sys_mdp.mdp_flags,
+		.maxlen		= sizeof(int),
+		.mode		= 0666,
+		.proc_handler = &proc_dointvec_sonos_lo,
+	},
+#endif
+#endif	// CONFIG_SONOS
 	{ }
 };
 
@@ -2361,6 +2389,40 @@ static int do_proc_dointvec_conv(bool *negp, unsigned long *lvalp,
 	return 0;
 }
 
+#ifdef CONFIG_SONOS
+static int do_proc_dointvec_conv_sonos_ep(bool *negp, unsigned long *lvalp,
+				 int *valp,
+				 int write, void *data)
+{
+	if (write) {
+		*valp = (*(unsigned long*)data & ~MDP_KERNEL_PRINTK_ENABLE) | (*lvalp & MDP_KERNEL_PRINTK_ENABLE);
+	} else {
+		*negp = false;
+		*lvalp = (unsigned long)(*(unsigned long*)data & MDP_KERNEL_PRINTK_ENABLE);
+	}
+	return 0;
+}
+
+static int do_proc_dointvec_conv_sonos_lo(bool *negp, unsigned long *lvalp,
+				 int *valp,
+				 int write, void *data)
+{
+	unsigned long val;
+
+	if (write) {
+		val = *lvalp & MDP_KERNEL_PRINTK_ENABLE;
+		val = (val) ? 0 : MDP_KERNEL_PRINTK_ENABLE;
+		*valp = (*(unsigned long*)data & ~MDP_KERNEL_PRINTK_ENABLE) | val;
+	} else {
+		*negp = false;
+		val = (*(unsigned long*)data & MDP_KERNEL_PRINTK_ENABLE);
+		*lvalp = (val) ? 0 : MDP_KERNEL_PRINTK_ENABLE;
+	}
+	return 0;
+}
+#endif	// CONFIG_SONOS
+
+
 static int do_proc_douintvec_conv(unsigned long *lvalp,
 				  unsigned int *valp,
 				  int write, void *data)
@@ -2628,6 +2690,22 @@ int proc_dointvec(struct ctl_table *table, int write,
 {
 	return do_proc_dointvec(table, write, buffer, lenp, ppos, NULL, NULL);
 }
+
+#ifdef CONFIG_SONOS
+int proc_dointvec_sonos_ep(struct ctl_table *table, int write,
+		     void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+    return do_proc_dointvec(table,write,buffer,lenp,ppos,
+		    	    do_proc_dointvec_conv_sonos_ep,&sys_mdp.mdp_flags);
+}
+
+int proc_dointvec_sonos_lo(struct ctl_table *table, int write,
+		     void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+    return do_proc_dointvec(table,write,buffer,lenp,ppos,
+		    	    do_proc_dointvec_conv_sonos_lo,&sys_mdp.mdp_flags);
+}
+#endif	// CONFIG_SONOS
 
 /**
  * proc_douintvec - read a vector of unsigned integers
