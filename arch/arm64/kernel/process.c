@@ -114,6 +114,9 @@ void machine_power_off(void)
 	smp_send_stop();
 	do_kernel_power_off();
 }
+#ifdef CONFIG_SONOS
+EXPORT_SYMBOL(machine_power_off);
+#endif
 
 /*
  * Restart requires that the secondary CPUs stop performing any activity

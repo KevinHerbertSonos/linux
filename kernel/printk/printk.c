@@ -49,6 +49,10 @@
 #include <linux/sched/debug.h>
 #include <linux/sched/task_stack.h>
 
+#ifdef CONFIG_SONOS
+#include "mdp.h"
+#endif
+
 #include <linux/uaccess.h>
 #include <asm/sections.h>
 
@@ -80,6 +84,13 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(console);
  */
 int oops_in_progress;
 EXPORT_SYMBOL(oops_in_progress);
+#ifdef CONFIG_SONOS
+#if defined CONFIG_SONOS_DIAGS && !defined SONOS_STRICT_DIAG_BUILD
+static int enable_printk = 1;
+#else
+static int enable_printk = 0;
+#endif
+#endif
 
 /*
  * console_mutex protects console_list updates and console->flags updates.
@@ -2055,12 +2066,25 @@ static int console_trylock_spinning(void)
  * additional NMI context per CPU is also separately tracked. Until per-CPU
  * is available, a separate "early tracking" is performed.
  */
+
 static DEFINE_PER_CPU(u8, printk_count);
 static u8 printk_count_early;
 #ifdef CONFIG_HAVE_NMI
 static DEFINE_PER_CPU(u8, printk_count_nmi);
 static u8 printk_count_nmi_early;
 #endif
+
+static void call_console_drivers(const char *ext_text, size_t ext_len,
+				 const char *text, size_t len)
+{
+	struct console *con;
+
+#ifdef CONFIG_SONOS
+	if (enable_printk == 0 && oops_in_progress == 0 ) {
+		return;
+	}
+#endif
+	trace_console_rcuidle(text, len);
 
 /*
  * Recursion is limited to keep the output sane. printk() should not require
@@ -2617,6 +2641,24 @@ static int __init console_setup(char *str)
 	return 1;
 }
 __setup("console=", console_setup);
+
+#ifdef CONFIG_SONOS
+#ifdef CONFIG_PRINTK
+static int __init enable_printk_setup(char *str)
+{
+	int ret;
+	if(!str) return 1;
+
+	// when uboot passes enable_printk it always passes enable_printk=1
+	if((ret = kstrtoint(str, 10, &enable_printk))) {
+		return ret;
+	} else {
+		return 1;
+	}
+}
+__setup("enable_printk=", enable_printk_setup);
+#endif
+#endif
 
 /**
  * add_preferred_console - add a device to the list of preferred consoles.
