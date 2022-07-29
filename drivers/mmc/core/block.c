@@ -687,15 +687,16 @@ static int __mmc_blk_ioctl_cmd(struct mmc_card *card, struct mmc_blk_data *md,
 	 * detection, but here it's needed since some commands may indicate the
 	 * error through the R1 status bits.
 	 */
-	if (idata->rpmb || idata->ic.write_flag || r1b_resp) {
-		struct mmc_blk_busy_data cb_data = {
-			.card = card,
-		};
-
-		err = __mmc_poll_for_busy(card->host, 0, busy_timeout_ms,
-					  &mmc_blk_busy_cb, &cb_data);
-
-		idata->ic.response[0] = cb_data.status;
+	if (idata->rpmb || (cmd.flags & MMC_RSP_R1B) == MMC_RSP_R1B) {
+		/*
+		 * Ensure RPMB command has completed by polling CMD13
+		 * "Send Status".
+		 */
+		err = ioctl_rpmb_card_status_poll(card, &status, 5);
+		if (err)
+			dev_err(mmc_dev(card->host),
+					"%s: Card Status=0x%08X, error %d\n",
+					__func__, status, err);
 	}
 
 	return err;
@@ -3280,6 +3281,17 @@ static int mmc_blk_probe(struct mmc_card *card)
 	ret = mmc_blk_alloc_parts(card, md);
 	if (ret)
 		goto out;
+
+#ifdef CONFIG_MMC_MESON_GX
+#ifndef CONFIG_SONOS /* FIXME: Temp Hack to boot Optimo. Will deal with later */
+	aml_emmc_partition_ops(card, md->disk);
+#endif
+#endif
+
+	list_for_each_entry(part_md, &md->part, part) {
+		if (mmc_add_disk(part_md))
+			goto out;
+	}
 
 	/* Add two debugfs entries */
 	mmc_blk_add_debugfs(card, md);
