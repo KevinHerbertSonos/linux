@@ -611,7 +611,7 @@ static int __mmc_blk_ioctl_cmd(struct mmc_card *card, struct mmc_blk_data *md,
 
 	memcpy(&(idata->ic.response), cmd.resp, sizeof(cmd.resp));
 
-	if (idata->rpmb) {
+	if (idata->rpmb || (cmd.flags & MMC_RSP_R1B) == MMC_RSP_R1B) {
 		/*
 		 * Ensure RPMB command has completed by polling CMD13
 		 * "Send Status".
@@ -2937,6 +2937,12 @@ static int mmc_blk_probe(struct mmc_card *card)
 
 	if (mmc_add_disk(md))
 		goto out;
+
+#ifdef CONFIG_MMC_MESON_GX
+#ifndef CONFIG_SONOS /* FIXME: Temp Hack to boot Optimo. Will deal with later */
+	aml_emmc_partition_ops(card, md->disk);
+#endif
+#endif
 
 	list_for_each_entry(part_md, &md->part, part) {
 		if (mmc_add_disk(part_md))
