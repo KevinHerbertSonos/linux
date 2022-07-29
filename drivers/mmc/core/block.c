@@ -597,7 +597,6 @@ static int __mmc_blk_ioctl_cmd(struct mmc_card *card, struct mmc_blk_data *md,
 	}
 
 	mmc_wait_for_req(card->host, &mrq);
-	memcpy(&idata->ic.response, cmd.resp, sizeof(cmd.resp));
 
 	if (cmd.error) {
 		dev_err(mmc_dev(card->host), "%s: cmd error %d\n",
@@ -646,6 +645,8 @@ static int __mmc_blk_ioctl_cmd(struct mmc_card *card, struct mmc_blk_data *md,
 	 */
 	if (idata->ic.postsleep_min_us)
 		usleep_range(idata->ic.postsleep_min_us, idata->ic.postsleep_max_us);
+
+	memcpy(&(idata->ic.response), cmd.resp, sizeof(cmd.resp));
 
 	if (idata->rpmb || (cmd.flags & MMC_RSP_R1B) == MMC_RSP_R1B) {
 		/*
@@ -1500,7 +1501,8 @@ void mmc_blk_cqe_recovery(struct mmc_queue *mq)
 	err = mmc_cqe_recovery(host);
 	if (err)
 		mmc_blk_reset(mq->blkdata, host, MMC_BLK_CQE_RECOVERY);
-	mmc_blk_reset_success(mq->blkdata, MMC_BLK_CQE_RECOVERY);
+	else
+		mmc_blk_reset_success(mq->blkdata, MMC_BLK_CQE_RECOVERY);
 
 	pr_debug("%s: CQE recovery done\n", mmc_hostname(host));
 }
@@ -2991,7 +2993,9 @@ static int mmc_blk_probe(struct mmc_card *card)
 	if (mmc_add_disk(md))
 		goto out;
 #ifdef CONFIG_MMC_MESON_GX
+#ifndef CONFIG_SONOS /* FIXME: Temp Hack to boot Optimo. Will deal with later */
 	aml_emmc_partition_ops(card, md->disk);
+#endif
 #endif
 
 	list_for_each_entry(part_md, &md->part, part) {
