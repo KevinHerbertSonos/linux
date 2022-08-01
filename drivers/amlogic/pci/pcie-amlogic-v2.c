@@ -48,6 +48,8 @@ int keep_init;
 #define USE_TEE_WHITELIST 0
 #endif
 
+int keep_init;
+
 struct amlogic_pcie {
 	struct dw_pcie		*pci;
 	struct pcie_phy		*phy;
@@ -958,6 +960,7 @@ static int amlogic_pcie_probe(struct platform_device *pdev)
 		  tee_start,
 		  tee_end - tee_start,
 		  &handle);
+		keep_init = 1;
 #if USE_TEE_WHITELIST
 	}
 #endif
