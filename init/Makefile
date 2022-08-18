@@ -14,6 +14,8 @@ endif
 obj-$(CONFIG_GENERIC_CALIBRATE_DELAY) += calibrate.o
 
 obj-y                          += init_task.o
+obj-$(CONFIG_SONOS_SECBOOT) += firmware_allowlist.o
+
 
 mounts-y			:= do_mounts.o
 mounts-$(CONFIG_BLK_DEV_RAM)	+= do_mounts_rd.o
