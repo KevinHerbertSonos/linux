@@ -31,6 +31,10 @@
 static u32 handle;
 static struct device *dev_pcie_reserved_mem;
 
+static int link_speed = 2;
+module_param(link_speed, int, 0444);
+MODULE_PARM_DESC(link_speed, "select pcie link speed ");
+
 #ifdef CONFIG_SWIOTLB
 #define USE_TEE_WHITELIST 1
 #else
