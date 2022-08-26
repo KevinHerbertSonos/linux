@@ -24,6 +24,9 @@
 #include <linux/phy.h>
 #include <net/selftests.h>
 
+#ifdef CONFIG_SONOS
+#include <linux/debugfs.h>
+#endif
 #include "smsc95xx.h"
 
 #define SMSC_CHIPNAME			"smsc95xx"
@@ -73,6 +76,13 @@ struct smsc95xx_priv {
 	struct mii_bus *mdiobus;
 	struct phy_device *phydev;
 	struct task_struct *pm_task;
+	u8 mdix_ctrl;
+	bool link_ok;
+	struct delayed_work carrier_check;
+	struct usbnet *dev;
+#ifdef CONFIG_SONOS
+	struct dentry *d;
+#endif
 };
 
 static bool turbo_mode = true;
@@ -771,6 +781,46 @@ static int smsc95xx_ethtool_get_sset_count(struct net_device *ndev, int sset)
 		return -EOPNOTSUPP;
 	}
 }
+  =======
+	struct usbnet *dev = netdev_priv(net);
+	struct smsc95xx_priv *pdata = (struct smsc95xx_priv *)(dev->data[0]);
+	int retval;
+#ifdef CONFIG_SONOS
+	int ret;
+#endif
+
+	retval = usbnet_get_link_ksettings(net, cmd);
+
+#ifdef CONFIG_SONOS
+	ret = smsc95xx_mdio_read(dev->net, dev->mii.phy_id, MII_BMSR);
+	if (ret < 0) {
+		netdev_warn(dev->net, "Failed to read MII_BMSR\n");
+		return retval;
+	}
+	if (!(ret & BMSR_LSTATUS))
+		cmd->speed = 0;
+#endif
+
+	cmd->base.eth_tp_mdix = pdata->mdix_ctrl;
+	cmd->base.eth_tp_mdix_ctrl = pdata->mdix_ctrl;
+
+	return retval;
+}
+
+static int smsc95xx_set_link_ksettings(struct net_device *net,
+				       const struct ethtool_link_ksettings *cmd)
+{
+	struct usbnet *dev = netdev_priv(net);
+	struct smsc95xx_priv *pdata = (struct smsc95xx_priv *)(dev->data[0]);
+	int retval;
+
+	if (pdata->mdix_ctrl != cmd->base.eth_tp_mdix_ctrl)
+		set_mdix_status(net, cmd->base.eth_tp_mdix_ctrl);
+
+	retval = usbnet_set_link_ksettings(net, cmd);
+
+	return retval;
+}
 
 static const struct ethtool_ops smsc95xx_ethtool_ops = {
 	.get_link	= smsc95xx_get_link,
@@ -1092,6 +1142,84 @@ static void smsc95xx_handle_link_change(struct net_device *net)
 	usbnet_defer_kevent(dev, EVENT_LINK_CHANGE);
 }
 
+#ifdef CONFIG_SONOS
+static int smsc95xx_debugfs_phydump(struct seq_file *m, void *v)
+{
+	struct smsc95xx_priv *pdata = (struct smsc95xx_priv *)m->private;
+	struct usbnet *dev = pdata->dev;
+	int reg, ret;
+	u32 read_buf;
+
+	for (reg = ID_REV; reg <= COE_CR; reg += (sizeof(u32))) {
+		ret = smsc95xx_read_reg(dev, reg, &read_buf);
+		if (ret < 0)
+			break;
+		if ((reg & 0x0f) == 0x0)
+			seq_printf(m, "\n %04x: ", reg);
+		else if ((reg & 0x07) == 0x0)
+			seq_printf(m, "  ");
+		seq_printf(m, "%08x ", read_buf);
+	}
+	seq_printf(m, "\n ");
+	return 0;
+}
+
+static int smsc95xx_phy_debugfs_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, smsc95xx_debugfs_phydump, inode->i_private);
+}
+
+static ssize_t smsc95xx_phy_debugfs_write(struct file *file,
+		const char __user *buffer, size_t count, loff_t *pos)
+{
+	struct inode *inode = file_inode(file);
+	struct smsc95xx_priv *pdata = (struct smsc95xx_priv *)inode->i_private;
+	struct usbnet *dev = pdata->dev;
+	char buf[200];
+	char *peq;
+	int ret, result = 0;
+	long longtemp;
+	u32  regnum;
+	u16  val;
+
+	if (count > 200)
+		result = -EIO;
+	else if (copy_from_user(buf, buffer, count)) {
+		result = -EFAULT;
+	}
+
+	if ( result == 0 ) {
+		buf[count] = '\0';
+		peq = strchr(buf, '=');
+		if (peq != NULL) {
+			*peq = 0;
+			if ( kstrtol(peq+1, 16, &longtemp) != 0 )
+				return -EIO;
+			val = longtemp;
+			if (strncmp(buf, "reg", 3) == 0) {
+				if (kstrtol(buf+3, 16, &longtemp) != 0 )
+					return -EIO;
+				regnum = longtemp;
+				ret = smsc95xx_write_reg(dev, regnum, val);
+				if (ret < 0)
+					return -EFAULT;
+			}
+		}
+		result = count;
+	}
+	return result;
+}
+
+static const struct file_operations smsc95xx_phy_debugfs_fops = {
+	.owner		= THIS_MODULE,
+	.open		= smsc95xx_phy_debugfs_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+	.write		= smsc95xx_phy_debugfs_write,
+};
+#endif
+
 static int smsc95xx_bind(struct usbnet *dev, struct usb_interface *intf)
 {
 	struct smsc95xx_priv *pdata;
@@ -1237,6 +1365,22 @@ static int smsc95xx_bind(struct usbnet *dev, struct usb_interface *intf)
 
 	phy_attached_info(dev->net->phydev);
 
+#ifdef CONFIG_SONOS
+	if ( pdata->d == NULL ) {
+		pdata->d = debugfs_create_dir(SMSC_CHIPNAME, NULL);
+		if (pdata->d == NULL) {
+			printk("Couldn't create base dir debugfs/%s\n",
+			       SMSC_CHIPNAME);
+			return -ENOMEM;
+		}
+		if (!debugfs_create_file("reg", S_IRWXUGO, pdata->d,
+			pdata, &smsc95xx_phy_debugfs_fops)) {
+			printk("%s/phy not created\n", SMSC_CHIPNAME);
+			return -ENOMEM;
+		}
+	}
+#endif
+
 	return 0;
 
 unregister_mdio:
@@ -1261,16 +1405,21 @@ free_pdata:
 
 static void smsc95xx_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct smsc95xx_priv *pdata = dev->driver_priv;
+	struct smsc95xx_priv *pdata = (struct smsc95xx_priv *)(dev->data[0]);
 
-	phy_disconnect(dev->net->phydev);
-	mdiobus_unregister(pdata->mdiobus);
-	mdiobus_free(pdata->mdiobus);
-	irq_dispose_mapping(irq_find_mapping(pdata->irqdomain, PHY_HWIRQ));
-	irq_domain_remove(pdata->irqdomain);
-	irq_domain_free_fwnode(pdata->irqfwnode);
-	netif_dbg(dev, ifdown, dev->net, "free pdata\n");
-	kfree(pdata);
+	if (pdata) {
+		cancel_delayed_work_sync(&pdata->carrier_check);
+#ifdef CONFIG_SONOS
+		if ( pdata->d ) {
+			debugfs_remove_recursive(pdata->d);
+		}
+		pdata->d = NULL;
+
+		netif_dbg(dev, ifdown, dev->net, "free pdata\n");
+		kfree(pdata);
+		pdata = NULL;
+		dev->data[0] = 0;
+	}
 }
 
 static int smsc95xx_start_phy(struct usbnet *dev)
@@ -1830,6 +1979,9 @@ static int smsc95xx_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 		u32 header, align_count;
 		struct sk_buff *ax_skb;
 		unsigned char *packet;
+#ifdef CONFIG_SONOS
+		unsigned char *data;
+#endif
 		u16 size;
 
 		header = get_unaligned_le32(skb->data);
@@ -1879,7 +2031,21 @@ static int smsc95xx_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 				return 1;
 			}
 
-			ax_skb = netdev_alloc_skb_ip_align(dev->net, size);
+#ifdef CONFIG_SONOS
+			ax_skb = netdev_alloc_skb_ip_align(dev->net, 2* size);
+			if (unlikely(!ax_skb)) {
+				netdev_warn(dev->net, "Error allocating skb\n");
+				return 0;
+			}
+
+			data = skb_put(ax_skb, size);
+			memcpy(data, packet, size);
+
+			if (dev->net->features & NETIF_F_RXCSUM)
+				smsc95xx_rx_csum_offload(ax_skb);
+#else
+			ax_skb = skb_clone(skb, GFP_ATOMIC);
+
 			if (unlikely(!ax_skb)) {
 				netdev_warn(dev->net, "Error allocating skb\n");
 				return 0;
@@ -1891,6 +2057,8 @@ static int smsc95xx_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 			if (dev->net->features & NETIF_F_RXCSUM)
 				smsc95xx_rx_csum_offload(ax_skb);
 			skb_trim(ax_skb, ax_skb->len - 4); /* remove fcs */
+			ax_skb->truesize = size + sizeof(struct sk_buff);
+#endif
 
 			usbnet_skb_return(dev, ax_skb);
 		}

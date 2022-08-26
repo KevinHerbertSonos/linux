@@ -5269,4 +5269,8 @@ extern struct net_device *blackhole_netdev;
 		atomic_long_add((VAL), &(DEV)->stats.__##FIELD)
 #define DEV_STATS_READ(DEV, FIELD) atomic_long_read(&(DEV)->stats.__##FIELD)
 
+#if defined(CONFIG_SONOS)
+void sonos_announce_linkup(struct net_device *dev);
+#endif
+
 #endif	/* _LINUX_NETDEVICE_H */

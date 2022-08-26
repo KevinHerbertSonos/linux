@@ -5375,19 +5375,38 @@ static void r8152_eee_en(struct r8152 *tp, bool enable)
 	config2 = ocp_reg_read(tp, OCP_EEE_CONFIG2);
 	config3 = ocp_reg_read(tp, OCP_EEE_CONFIG3) & ~fast_snr_mask;
 
-	if (enable) {
-		ocp_data |= EEE_RX_EN | EEE_TX_EN;
-		config1 |= EEE_10_CAP | EEE_NWAY_EN | TX_QUIET_EN | RX_QUIET_EN;
-		config1 |= sd_rise_time(1);
-		config2 |= RG_DACQUIET_EN | RG_LDVQUIET_EN;
-		config3 |= fast_snr(42);
+	if (speed & LINK_STATUS) {
+		if (!netif_carrier_ok(netdev)) {
+			tp->rtl_ops.enable(tp);
+			netif_stop_queue(netdev);
+			napi_disable(napi);
+			netif_carrier_on(netdev);
+			rtl_start_rx(tp);
+			clear_bit(RTL8152_SET_RX_MODE, &tp->flags);
+			_rtl8152_set_rx_mode(netdev);
+			napi_enable(&tp->napi);
+			netif_wake_queue(netdev);
+			netif_info(tp, link, netdev, "carrier on\n");
+#ifdef CONFIG_SONOS
+			sonos_announce_linkup(netdev);
+#endif
+		} else if (netif_queue_stopped(netdev) &&
+			   skb_queue_len(&tp->tx_queue) < tp->tx_qlen) {
+			netif_wake_queue(netdev);
+		}
 	} else {
-		ocp_data &= ~(EEE_RX_EN | EEE_TX_EN);
-		config1 &= ~(EEE_10_CAP | EEE_NWAY_EN | TX_QUIET_EN |
-			     RX_QUIET_EN);
-		config1 |= sd_rise_time(7);
-		config2 &= ~(RG_DACQUIET_EN | RG_LDVQUIET_EN);
-		config3 |= fast_snr(511);
+		if (netif_carrier_ok(netdev)) {
+			netif_carrier_off(netdev);
+			tasklet_disable(&tp->tx_tl);
+			napi_disable(napi);
+			tp->rtl_ops.disable(tp);
+			napi_enable(napi);
+			tasklet_enable(&tp->tx_tl);
+			netif_info(tp, link, netdev, "carrier off\n");
+#ifdef CONFIG_SONOS
+			sonos_announce_linkup(netdev);
+#endif
+		}
 	}
 
 	ocp_write_word(tp, MCU_TYPE_PLA, PLA_EEE_CR, ocp_data);
@@ -5432,6 +5451,11 @@ static void r8156_eee_en(struct r8152 *tp, bool enable)
 		config &= ~MDIO_EEE_2_5GT;
 
 	ocp_reg_write(tp, OCP_EEE_ADV2, config);
+
+	usb_autopm_put_interface(tp->intf);
+#ifdef CONFIG_SONOS
+	sonos_announce_linkup(tp->netdev);
+#endif
 }
 
 static void rtl_eee_enable(struct r8152 *tp, bool enable)
@@ -10040,6 +10064,10 @@ static void rtl8152_disconnect(struct usb_interface *intf)
 
 		unregister_netdev(tp->netdev);
 		tasklet_kill(&tp->tx_tl);
+#ifdef CONFIG_SONOS
+		if ( netif_carrier_ok(tp->netdev) )
+			sonos_announce_linkup(tp->netdev);
+#endif
 		cancel_delayed_work_sync(&tp->hw_phy_work);
 		if (tp->rtl_ops.unload)
 			tp->rtl_ops.unload(tp);
