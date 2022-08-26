@@ -520,6 +520,8 @@ static const struct usb_device_id usb_quirk_list[] = {
 	/* INTEL VALUE SSD */
 	{ USB_DEVICE(0x8086, 0xf1a5), .driver_info = USB_QUIRK_RESET_RESUME },
 
+	{ USB_DEVICE(0x1fc9, 0x0011), .driver_info = USB_QUIRK_DEVICE_QUALIFIER },
+
 	{ }  /* terminating entry must be last */
 };
 
@@ -543,6 +545,10 @@ static const struct usb_device_id usb_amd_resume_quirk_list[] = {
 
 	/* Logitech Optical Mouse M90/M100 */
 	{ USB_DEVICE(0x046d, 0xc05a), .driver_info = USB_QUIRK_RESET_RESUME },
+
+	/* ASUS Base Station(T100) */
+	{ USB_DEVICE(0x0b05, 0x17e0), .driver_info =
+			USB_QUIRK_IGNORE_REMOTE_WAKEUP },
 
 	{ }  /* terminating entry must be last */
 };
