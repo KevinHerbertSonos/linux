@@ -4879,4 +4879,8 @@ do {								\
 
 extern struct net_device *blackhole_netdev;
 
+#if defined(CONFIG_SONOS)
+void sonos_announce_linkup(struct net_device *dev);
+#endif
+
 #endif	/* _LINUX_NETDEVICE_H */

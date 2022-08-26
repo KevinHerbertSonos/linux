@@ -601,6 +601,51 @@ enum {
 #define TCA_RTA(r)  ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct tcmsg))))
 #define TCA_PAYLOAD(n) NLMSG_PAYLOAD(n,sizeof(struct tcmsg))
 
+/**************************************************************
+ *       Rincon Wireless Messages and Attributes
+ ****/
+
+enum
+{
+	RWM_ASSOC,
+	RWM_PROBE,
+	RWM_HHID,
+	RWM_MII,
+	RWM_INFRA_NEIGHBOR,
+	RWM_NETSTART_STA,
+	RWM_CLIENT_ASSOC,
+	RWM_SUPPLICANT,
+	RWM_SONOSNET_PATH,
+	RWM_RENEW_DHCP,
+	RWM_SONOSNET_FULL_MESH,
+	RWM_PRIMARY_FOUND,
+	RWM_PRIMARY_LOST,
+	RWM_DUPE_IP,
+	RWM_HTAP_CONN,
+	RWM_CMD_TIMEOUT,
+	RWM_NETWORK_SETTINGS,
+};
+
+enum
+{
+	RWA_DEV_NAME,
+	RWA_ASSOC_MAC,
+	RWA_ASSOC_UUID,
+	RWA_PROBE_MAC,
+	RWA_PROBE_DATA,
+	RWA_HHID,
+	RWA_INFRA_NEIGHBOR_MAC,
+	RWA_RSSI,
+	RWA_RSSI_PER_CHAIN,
+	RWA_NETSTART_STA_MAC,
+	RWA_CLIENT_ASSOC_DATA,
+	RWA_SUPPLICANT_EVENT,
+	RWA_SUPPLICANT_EVENT_DATA,
+	RWA_PATH_LENGTH,
+	RWA_DUPE_TIME,
+	RWA_NETWORK_SETTINGS_DATA,
+};
+
 /********************************************************************
  *		Neighbor Discovery userland options
  ****/
@@ -706,6 +751,7 @@ enum rtnetlink_groups {
 #define RTNLGRP_MPLS_ROUTE	RTNLGRP_MPLS_ROUTE
 	RTNLGRP_NSID,
 #define RTNLGRP_NSID		RTNLGRP_NSID
+        RTNLGRP_RINCON,
 	RTNLGRP_MPLS_NETCONF,
 #define RTNLGRP_MPLS_NETCONF	RTNLGRP_MPLS_NETCONF
 	RTNLGRP_IPV4_MROUTE_R,
@@ -717,6 +763,11 @@ enum rtnetlink_groups {
 	__RTNLGRP_MAX
 };
 #define RTNLGRP_MAX	(__RTNLGRP_MAX - 1)
+#ifdef __KERNEL__
+#define RTMGRP_Rincon   RTNLGRP_RINCON
+#else
+#define RTMGRP_Rincon   (1 << ((unsigned long)RTNLGRP_RINCON - 1))
+#endif
 
 /* TC action piece */
 struct tcamsg {
