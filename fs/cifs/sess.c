@@ -1449,11 +1449,65 @@ static int select_sec(struct cifs_ses *ses, struct sess_data *sess_data)
 	return 0;
 }
 
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+/* Server has provided av pairs/target info in the type 2 challenge
+ * packet and we have plucked it and stored within smb session.
+ * We parse that blob here to find the server timestamp to be used as part
+ * of ntlmv2 authentication.
+ * (Base processing code copied from cifsencrypt.c, find_domain_name)
+ */
+static int
+find_av_timestamp(struct cifs_ses *ses, struct timespec64 *timestamp)
+{
+	int rc = -1;
+
+	unsigned int attrsize;
+	unsigned int type;
+	unsigned int onesize = sizeof(struct ntlmssp2_name);
+	unsigned char *blobptr;
+	unsigned char *blobend;
+	struct ntlmssp2_name *attrptr;
+
+	if (!ses->auth_key.len || !ses->auth_key.response)
+		return rc;
+
+	blobptr = ses->auth_key.response;
+	blobend = blobptr + ses->auth_key.len;
+
+	while (blobptr + onesize < blobend) {
+		attrptr = (struct ntlmssp2_name *) blobptr;
+		type = le16_to_cpu(attrptr->type);
+		if (type == NTLMSSP_AV_EOL)
+			break;
+		blobptr += 2; /* advance attr type */
+		attrsize = le16_to_cpu(attrptr->length);
+		blobptr += 2; /* advance attr size */
+		if (blobptr + attrsize > blobend)
+			break;
+		if (type == NTLMSSP_AV_TIMESTAMP) {
+			if (!attrsize)
+				break;
+			if (attrsize == 8) {
+				*timestamp = cifs_NTtimeToUnix(*((__le64*)blobptr));
+				rc = 0;
+				break;
+			}
+		}
+		blobptr += attrsize; /* advance attr  value */
+	}
+
+	return rc;
+}
+#endif
+
 int CIFS_SessSetup(const unsigned int xid, struct cifs_ses *ses,
 		    const struct nls_table *nls_cp)
 {
 	int rc = 0;
 	struct sess_data *sess_data;
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	struct timespec64 timestamp;
+#endif
 
 	if (ses == NULL) {
 		WARN(1, "%s: ses == NULL!", __func__);
@@ -1476,6 +1530,18 @@ int CIFS_SessSetup(const unsigned int xid, struct cifs_ses *ses,
 	while (sess_data->func)
 		sess_data->func(sess_data);
 
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	if (0 == find_av_timestamp(ses, &timestamp)) {
+		struct timespec64 utc;
+
+		ktime_get_coarse_real_ts64(&utc);
+		ses->timeOff = timestamp.tv_sec - utc.tv_sec;
+		cifs_dbg(FYI, "found av timestamp %lld.%06ld local %lld.%06ld delta %ld",
+			timestamp.tv_sec, timestamp.tv_nsec/1000,
+			utc.tv_sec, utc.tv_nsec/1000,
+			ses->timeOff);
+	}
+#endif
 	/* Store result before we free sess_data */
 	rc = sess_data->result;
 
