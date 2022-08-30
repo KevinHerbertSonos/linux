@@ -621,6 +621,10 @@ decode_lanman_negprot_rsp(struct TCP_Server_Info *server, NEGOTIATE_RSP *pSMBr)
 	}
 	cifs_dbg(FYI, "server->timeAdj: %d seconds\n", server->timeAdj);
 
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+		// should be zero already, but just make sure
+		server->timeOff = 0;
+#endif
 
 	/* BB get server time for time conversions and add
 	code to use it and timezone since this is not UTC */
@@ -672,6 +676,9 @@ CIFSSMBNegotiate(const unsigned int xid, struct cifs_ses *ses)
 	int i;
 	struct TCP_Server_Info *server = ses->server;
 	u16 count;
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	struct timespec64 ts, utc;
+#endif
 
 	if (!server) {
 		WARN(1, "%s: server is NULL!\n", __func__);
@@ -747,6 +754,16 @@ CIFSSMBNegotiate(const unsigned int xid, struct cifs_ses *ses)
 	server->timeAdj = (int)(__s16)le16_to_cpu(pSMBr->ServerTimeZone);
 	server->timeAdj *= 60;
 
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	ktime_get_coarse_real_ts64(&utc);
+	ts = cifs_NTtimeToUnix(*((__le64*)(&pSMBr->SystemTimeLow)));
+	server->timeOff = ts.tv_sec - utc.tv_sec;
+	ses->timeOff = server->timeOff;
+	cifs_dbg(FYI, "found server timestamp %lld.%06ld local %lld.%06ld delta %ld",
+		ts.tv_sec, ts.tv_nsec/1000,
+		utc.tv_sec, utc.tv_nsec/1000,
+		ses->timeOff);
+#endif
 	if (pSMBr->EncryptionKeyLength == CIFS_CRYPTO_KEY_SIZE) {
 		server->negflavor = CIFS_NEGFLAVOR_UNENCAP;
 		memcpy(ses->server->cryptkey, pSMBr->u.EncryptionKey,
