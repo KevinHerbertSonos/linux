@@ -200,6 +200,11 @@ static int cifs_debug_data_proc_show(struct seq_file *m, void *v)
 	struct cifs_ses *ses;
 	struct cifs_tcon *tcon;
 	int i, j;
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+	struct timespec64 utc;
+
+	ktime_get_coarse_real_ts64(&utc);
+#endif
 
 	seq_puts(m,
 		    "Display Internal CIFS Data Structures for Debugging\n"
@@ -376,6 +381,12 @@ skip_rdma:
 				seq_puts(m, " encrypted");
 			if (ses->sign)
 				seq_puts(m, " signed");
+
+#ifdef CONFIG_CIFS_NTLMSSP_SONOS
+			ktime_get_coarse_real_ts64(&utc);
+			seq_printf(m, "\n\tSince 1970: %lld / %lld",
+				utc.tv_sec + ses->timeOff, utc.tv_sec + server->timeOff);
+#endif
 
 			seq_puts(m, "\n\tShares:");
 			j = 0;
