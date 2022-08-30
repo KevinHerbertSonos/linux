@@ -1651,8 +1651,9 @@ iget_root:
 	}
 
 	if (!inode) {
-		inode = ERR_PTR(rc);
-		goto out;
+		kfree(path);	/* sonos */
+		_free_xid(xid);
+		return ERR_PTR(-ENOMEM);
 	}
 
 	if (!rc && fattr.cf_flags & CIFS_FATTR_DELETE_PENDING)
@@ -1669,11 +1670,12 @@ iget_root:
 		inode->i_gid = cifs_sb->ctx->linux_gid;
 		spin_unlock(&inode->i_lock);
 	} else if (rc) {
+		kfree(path);	/* sonos */
+		_free_xid(xid);
 		iget_failed(inode);
-		inode = ERR_PTR(rc);
+		return ERR_PTR(rc);
 	}
 
-out:
 	kfree(path);
 	free_xid(xid);
 	kfree(fattr.cf_symlink_target);
