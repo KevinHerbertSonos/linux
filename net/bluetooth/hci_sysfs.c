@@ -80,6 +80,146 @@ void hci_conn_del_sysfs(struct hci_conn *conn)
 	hci_dev_put(hdev);
 }
 
+#ifdef CONFIG_SONOS
+static ssize_t show_adv_min(struct device *dev,
+			    struct device_attribute *attr, char *buf)
+{
+	struct hci_dev *hdev = to_hci_dev(dev);
+	u64 val;
+	hci_dev_lock(hdev);
+	val = hdev->le_adv_min_interval;
+	hci_dev_unlock(hdev);
+
+	return sprintf(buf, "%llu\n", val);
+}
+
+static ssize_t show_adv_max(struct device *dev,
+			    struct device_attribute *attr, char *buf)
+{
+	struct hci_dev *hdev = to_hci_dev(dev);
+	u64 val;
+	hci_dev_lock(hdev);
+	val = hdev->le_adv_max_interval;
+	hci_dev_unlock(hdev);
+
+	return sprintf(buf, "%llu\n", val);
+}
+
+static ssize_t show_conn_min_interval(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+	struct hci_dev *hdev = to_hci_dev(dev);
+	u64 val;
+
+	hci_dev_lock(hdev);
+	val = hdev->le_conn_min_interval;
+	hci_dev_unlock(hdev);
+
+	return sprintf(buf, "%llu\n", val);
+}
+
+static ssize_t show_conn_max_interval(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+	struct hci_dev *hdev = to_hci_dev(dev);
+	u64 val;
+
+	hci_dev_lock(hdev);
+	val = hdev->le_conn_max_interval;
+	hci_dev_unlock(hdev);
+
+	return sprintf(buf, "%llu\n", val);
+}
+
+static ssize_t store_adv_min(struct device *dev,
+			    struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct hci_dev *hdev = to_hci_dev(dev);
+	u64 val;
+
+	sscanf(buf, "%llu\n", &val);
+
+	if (val < 0x0020 || val > 0x4000 || val > hdev->le_adv_max_interval)
+		return -EINVAL;
+
+	hci_dev_lock(hdev);
+	hdev->le_adv_min_interval = val;
+	hci_dev_unlock(hdev);
+
+	return count;
+}
+
+static ssize_t store_adv_max(struct device *dev,
+			    struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct hci_dev *hdev = to_hci_dev(dev);
+	u64 val;
+
+	sscanf(buf, "%llu\n", &val);
+
+	if (val < 0x0020 || val > 0x4000 || val < hdev->le_adv_min_interval)
+		return -EINVAL;
+
+	hci_dev_lock(hdev);
+	hdev->le_adv_max_interval = val;
+	hci_dev_unlock(hdev);
+
+	return count;
+}
+
+static ssize_t store_conn_min_interval(struct device *dev,
+                struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct hci_dev *hdev = to_hci_dev(dev);
+	u64 val;
+
+	sscanf(buf, "%llu\n", &val);
+
+	if (val < 0x0006 || val > 0x0c80 || val > hdev->le_conn_max_interval)
+		return -EINVAL;
+
+	hci_dev_lock(hdev);
+	hdev->le_conn_min_interval = val;
+	hci_dev_unlock(hdev);
+
+	return count;
+}
+
+
+static ssize_t store_conn_max_interval(struct device *dev,
+                struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct hci_dev *hdev = to_hci_dev(dev);
+	u64 val;
+
+	sscanf(buf, "%llu\n", &val);
+
+	if (val < 0x0006 || val > 0x0c80 || val < hdev->le_conn_min_interval)
+		return -EINVAL;
+
+	hci_dev_lock(hdev);
+	hdev->le_conn_max_interval = val;
+	hci_dev_unlock(hdev);
+
+	return count;
+}
+
+static DEVICE_ATTR(adv_min_interval, S_IRUGO | S_IWUSR, show_adv_min, store_adv_min);
+static DEVICE_ATTR(adv_max_interval, S_IRUGO | S_IWUSR, show_adv_max, store_adv_max);
+static DEVICE_ATTR(conn_min_interval, S_IRUGO | S_IWUSR, show_conn_min_interval, store_conn_min_interval);
+static DEVICE_ATTR(conn_max_interval, S_IRUGO | S_IWUSR, show_conn_max_interval, store_conn_max_interval);
+
+static struct attribute *bt_host_attrs[] = {
+	&dev_attr_adv_min_interval.attr,
+	&dev_attr_adv_max_interval.attr,
+	&dev_attr_conn_min_interval.attr,
+	&dev_attr_conn_max_interval.attr,
+	NULL
+};
+
+ATTRIBUTE_GROUPS(bt_host);
+#endif
+
 static void bt_host_release(struct device *dev)
 {
 	struct hci_dev *hdev = to_hci_dev(dev);
@@ -92,6 +232,9 @@ static void bt_host_release(struct device *dev)
 
 static const struct device_type bt_host = {
 	.name    = "host",
+#ifdef CONFIG_SONOS
+	.groups = bt_host_groups,
+#endif
 	.release = bt_host_release,
 };
 
