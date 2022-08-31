@@ -3591,6 +3591,10 @@ static void stmmac_free_irq(struct net_device *dev,
 	case REQ_IRQ_ERR_NO:
 		/* If MAC IRQ request error, no more IRQ to free */
 		break;
+	ret = stmmac_hw_setup(dev, false);
+	if (ret < 0) {
+		netdev_err(priv->dev, "%s: Hw setup failed\n", __func__);
+		goto init_error;
 	}
 }
 
