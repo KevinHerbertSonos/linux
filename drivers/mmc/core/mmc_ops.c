@@ -677,6 +677,122 @@ out:
 }
 EXPORT_SYMBOL_GPL(mmc_send_tuning);
 
+int mmc_gen_cmd(struct mmc_card *card, void *buf, unsigned int args, int write)
+{
+   struct mmc_request mrq;
+   struct mmc_command cmd;
+   struct mmc_data data;
+   struct mmc_command stop;
+   struct scatterlist sg;
+   void *data_buf;
+   // unsigned long timeout;
+   // u32 status;
+   // int err;
+   // int i;
+
+   BUG_ON(!card);
+   BUG_ON(!card->host);
+
+   mmc_set_blocklen(card, 512);
+
+   data_buf = kmalloc(512, GFP_KERNEL);
+   if (data_buf == NULL)
+       return -ENOMEM;
+
+   if (write != 0)
+       memcpy(data_buf, buf, 512);
+
+   memset(&mrq, 0, sizeof(struct mmc_request));
+   memset(&cmd, 0, sizeof(struct mmc_command));
+   memset(&data, 0, sizeof(struct mmc_data));
+   memset(&stop, 0, sizeof(struct mmc_command));
+
+   mrq.cmd = &cmd;
+   mrq.data = &data;
+   mrq.stop = NULL;
+
+   cmd.opcode = MMC_GEN_CMD;
+   cmd.arg = write? 0x00: 0x01;
+   cmd.arg |= (args << 1);
+
+   cmd.flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC;
+
+   data.blksz = 512;
+   data.blocks = 1;
+   data.flags = write ? MMC_DATA_WRITE : MMC_DATA_READ;
+   data.sg = &sg;
+   data.sg_len = 1;
+
+   /*stop.opcode = MMC_STOP_TRANSMISSION;
+   stop.arg = 0;
+   stop.flags = MMC_RSP_SPI_R1B | MMC_RSP_R1B | MMC_CMD_AC;*/
+
+   sg_init_one(&sg, data_buf, 512);
+
+   mmc_set_data_timeout(&data, card);
+
+   mmc_claim_host(card->host);
+   mmc_wait_for_req(card->host, &mrq);
+   mmc_release_host(card->host);
+ #if 0
+   /* Must check status to be sure of no errors */
+   timeout = jiffies + msecs_to_jiffies(MMC_OPS_TIMEOUT_MS);
+   do {
+       err = mmc_send_status(card, &status);
+       if (err)
+           return err;
+       if (card->host->caps & MMC_CAP_WAIT_WHILE_BUSY)
+           break;
+       if (mmc_host_is_spi(card->host))
+           break;
+
+       /* Timeout if the device never leaves the program state. */
+       if (time_after(jiffies, timeout)) {
+           pr_err("%s: Card stuck in programming state! %s\n",
+               mmc_hostname(card->host), __func__);
+           return -ETIMEDOUT;
+       }
+   } while (R1_CURRENT_STATE(status) == R1_STATE_PRG);
+ #endif
+   if (write == 0)
+   {
+       memcpy(buf, data_buf, 512);
+   }
+   kfree(data_buf);
+
+   /*if (write == 0)
+       pr_info("\n\nCMD56 read content as below:\n");
+   else
+       pr_info("\n\nCMD56 write content as below:\n");
+   for (i = 0; i < 512; i++)
+   {
+       printk("0x%2x ", *(u8 *)(buf+i));
+
+       if ((i+1)%16 == 0)
+           printk("\n");
+   }*/
+
+
+   if (cmd.error)
+   {
+       pr_err("%s, cmd error, error code %d\n", __func__, cmd.error);
+       return cmd.error;
+   }
+   if (data.error)
+   {
+       pr_err("%s, data error, error code %d\n", __func__, data.error);
+       return data.error;
+   }
+   if (stop.error)
+   {
+       pr_err("%s, stop error, error code %d\n", __func__, stop.error);
+       return stop.error;
+   }
+
+   return 0;
+}
+EXPORT_SYMBOL_GPL(mmc_gen_cmd);
+
 int mmc_abort_tuning(struct mmc_host *host, u32 opcode)
 {
 	struct mmc_command cmd = {};
