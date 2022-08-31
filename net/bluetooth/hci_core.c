@@ -2460,8 +2460,6 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv)
 	hdev->sniff_min_interval = 80;
 
 	hdev->le_adv_channel_map = 0x07;
-	hdev->le_adv_min_interval = 0x0800;
-	hdev->le_adv_max_interval = 0x0800;
 	hdev->le_scan_interval = DISCOV_LE_SCAN_INT_FAST;
 	hdev->le_scan_window = DISCOV_LE_SCAN_WIN_FAST;
 	hdev->le_scan_int_suspend = DISCOV_LE_SCAN_INT_SLOW1;
@@ -2472,8 +2470,13 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv)
 	hdev->le_scan_window_adv_monitor = DISCOV_LE_SCAN_WIN_FAST;
 	hdev->le_scan_int_connect = DISCOV_LE_SCAN_INT_CONN;
 	hdev->le_scan_window_connect = DISCOV_LE_SCAN_WIN_CONN;
-	hdev->le_conn_min_interval = 0x0018;
-	hdev->le_conn_max_interval = 0x0028;
+#ifdef CONFIG_SONOS
+	hdev->le_conn_min_interval = 0x0006;
+	hdev->le_conn_max_interval = 0x0010;
+#else
+	hdev->le_adv_min_interval = 0x0800;
+	hdev->le_adv_max_interval = 0x0800;
+#endif
 	hdev->le_conn_latency = 0x0000;
 	hdev->le_supv_timeout = 0x002a;
 	hdev->le_def_tx_len = 0x001b;
