@@ -1423,7 +1423,12 @@ static int hub_configure(struct usb_hub *hub,
 	} else if (hub->descriptor->bNbrPorts == 0) {
 		message = "hub doesn't have any ports!";
 		ret = -ENODEV;
+#ifdef CONFIG_SONOS
+		/*return here since we don't support USB3*/
+		return ret;
+#else
 		goto fail;
+#endif
 	}
 
 	/*
