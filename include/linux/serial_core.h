@@ -1177,7 +1177,17 @@ static inline int uart_handle_sysrq_char(struct uart_port *port, u8 ch)
 		if (uart_try_toggle_sysrq(port, ch))
 			return 1;
 	}
+#ifdef CONFIG_SONOS
+	else if uart_console(port) {
+		/* CTRL-Q is sysrq */
+		if ((ch & 0xff) == 0x11) {
+			port->sysrq = jiffies + HZ * 5;
+			return 1;
+		}
+	}
+#else  
 	port->sysrq = 0;
+#endif // CONFIG_SONOS
 
 	return 0;
 }
