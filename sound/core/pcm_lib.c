@@ -239,7 +239,8 @@ static void update_audio_tstamp(struct snd_pcm_substream *substream,
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	u64 audio_frames, audio_nsecs;
-	struct timespec64 driver_tstamp;
+	u32 remainder;
+	struct timespec driver_tstamp;
 
 	if (runtime->tstamp_mode != SNDRV_PCM_TSTAMP_ENABLE)
 		return;
@@ -261,9 +262,9 @@ static void update_audio_tstamp(struct snd_pcm_substream *substream,
 			else
 				audio_frames +=  runtime->delay;
 		}
-		audio_nsecs = div_u64(audio_frames * 1000000000LL,
-				runtime->rate);
-		*audio_tstamp = ns_to_timespec64(audio_nsecs);
+		audio_nsecs = audio_frames * div_u64_rem(1000000000LL, runtime->rate, &remainder);
+		audio_nsecs += div_u64(audio_frames * remainder, runtime->rate);
+		*audio_tstamp = ns_to_timespec(audio_nsecs);
 	}
 
 	if (runtime->status->audio_tstamp.tv_sec != audio_tstamp->tv_sec ||
