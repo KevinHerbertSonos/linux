@@ -609,6 +609,10 @@ static void uart_flush_chars(struct tty_struct *tty)
 	uart_start(tty);
 }
 
+#ifdef CONFIG_SONOS_SECBOOT
+extern int enable_console;
+#endif // CONFIG_SONOS_SECBOOT
+
 static ssize_t uart_write(struct tty_struct *tty, const u8 *buf, size_t count)
 {
 	struct uart_state *state = tty->driver_data;
@@ -629,8 +633,26 @@ static ssize_t uart_write(struct tty_struct *tty, const u8 *buf, size_t count)
 		return 0;
 	}
 
-	if (port)
-		ret = kfifo_in(&state->port.xmit_fifo, buf, count);
+	while (port) {
+#ifdef CONFIG_SONOS_SECBOOT
+		if (!(enable_console) && port->line == 0) {
+			/* pretend all bytes were written */
+			ret = count;
+			break;
+		}
+#endif // CONFIG_SONOS_SECBOOT
+
+		c = CIRC_SPACE_TO_END(circ->head, circ->tail, UART_XMIT_SIZE);
+		if (count < c)
+			c = count;
+		if (c <= 0)
+			break;
+		memcpy(circ->buf + circ->head, buf, c);
+		circ->head = (circ->head + c) & (UART_XMIT_SIZE - 1);
+		buf += c;
+		count -= c;
+		ret += c;
+	}
 
 	__uart_start(state);
 	uart_port_unlock(port, flags);
@@ -3545,6 +3567,13 @@ void uart_insert_char(struct uart_port *port, unsigned int status,
 		      unsigned int overrun, u8 ch, u8 flag)
 {
 	struct tty_port *tport = &port->state->port;
+
+#ifdef CONFIG_SONOS_SECBOOT
+	if (!(enable_console) && port->line == 0) {
+		/* ignore the char */
+		return;
+	}
+#endif // CONFIG_SONOS_SECBOOT
 
 	if ((status & port->ignore_status_mask & ~overrun) == 0)
 		if (tty_insert_flip_char(tport, ch, flag) == 0)
