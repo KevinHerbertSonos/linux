@@ -472,6 +472,16 @@ uart_handle_sysrq_char(struct uart_port *port, unsigned int ch)
 		}
 		port->sysrq = 0;
 	}
+#ifdef CONFIG_SONOS
+	else if uart_console(port) {
+		/* CTRL-Q is sysrq */
+		if ((ch & 0xff) == 0x11) {
+			port->sysrq = jiffies + HZ * 5;
+			return 1;
+		}
+	}
+#endif // CONFIG_SONOS
+
 	return 0;
 }
 static inline int
