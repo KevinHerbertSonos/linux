@@ -20,6 +20,11 @@
 #include <linux/amlogic/cpu_version.h>
 #include "../phy/phy-aml-new-usb-v2.h"
 
+#if defined(CONFIG_SONOS)
+#include <linux/amlogic/usb-common.h>
+static int sonos_eye_value;
+#endif
+
 struct amlogic_usb_v2	*g_phy2_v2;
 char name[32];
 #define TUNING_DISCONNECT_THRESHOLD 0x3f
@@ -232,6 +237,10 @@ static int amlogic_new_usb2_init(struct usb_phy *x)
 	struct u2p_aml_regs_v2 u2p_aml_regs;
 	union u2p_r0_v2 reg0;
 	union u2p_r1_v2 reg1;
+#if defined(CONFIG_SONOS)
+	union phy_tune_data reg2;
+#endif
+
 	u32 val;
 	u32 temp = 0;
 	u32 portnum = phy->portnum;
@@ -272,6 +281,13 @@ static int amlogic_new_usb2_init(struct usb_phy *x)
 		}
 
 		writel(reg0.d32, u2p_aml_regs.u2p_r_v2[0]);
+#if defined(CONFIG_SONOS)
+		/* Adjust the eye for monaco */
+		reg2.d32 = readl(u2p_aml_regs.u2p_r_v2[1]);
+		reg2.b.tx_vref_tune = sonos_eye_value;
+		writel(reg2.d32, u2p_aml_regs.u2p_r_v2[1]);
+#endif
+
 	}
 
 	udelay(10);
@@ -409,6 +425,12 @@ static int amlogic_new_usb2_probe(struct platform_device *pdev)
 		otg_phy_index = of_read_ulong(prop, 1);
 	else
 		otg_phy_index = 1;
+
+#if defined(CONFIG_SONOS)
+	prop = of_get_property(dev->of_node, "sonos-eye-value", NULL);
+	if (prop)
+		sonos_eye_value = of_read_ulong(prop, 1);
+#endif
 
 	phy_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	phy_base = devm_ioremap_resource(dev, phy_mem);
