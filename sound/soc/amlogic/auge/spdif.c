@@ -147,15 +147,14 @@ static const unsigned int spdifin_extcon[] = {
 };
 
 /* current sample mode and its sample rate */
-static const char *const spdifin_samplerate[] = {
-	"N/A",
-	"32000",
-	"44100",
-	"48000",
-	"88200",
-	"96000",
-	"176400",
-	"192000"
+int sample_mode[] = {
+	32000,
+	44100,
+	48000,
+	88200,
+	96000,
+	176400,
+	192000,
 };
 
 static void spdif_sharebuffer_prepare(struct snd_pcm_substream *substream,
@@ -419,25 +418,26 @@ unsigned int spdif_get_codec(void)
 	return 0;
 }
 
-static int spdifin_samplerate_get_enum(struct snd_kcontrol *kcontrol,
+static int spdifin_samplerate_info(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	return 0;
+}
+
+static int spdifin_samplerate_get(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
 	int val = spdifin_get_sample_rate();
 
-	if (val == 0x7)
-		val = 0;
+	if (val >= 0x7)
+		ucontrol->value.integer.value[0] = 0;
 	else
-		val += 1;
-
-	ucontrol->value.integer.value[0] = val;
+		ucontrol->value.integer.value[0] += sample_mode[val];
 
 	return 0;
 }
-
-static const struct soc_enum spdifin_sample_rate_enum[] = {
-	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(spdifin_samplerate),
-			spdifin_samplerate),
-};
 
 static const struct soc_enum spdif_audio_type_enum =
 	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(audio_type_texts),
@@ -828,40 +828,32 @@ static int spdif_set_cs(struct snd_kcontrol *kcontrol,
 }
 
 static const struct snd_kcontrol_new snd_spdif_controls[] = {
-	SOC_ENUM_EXT("SPDIFIN audio samplerate",
-				spdifin_sample_rate_enum,
-				spdifin_samplerate_get_enum,
-				NULL),
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = "SPDIFIN Sample Rate",
+		.info = spdifin_samplerate_info,
+		.get = spdifin_samplerate_get,
+	},
 
-	SOC_ENUM_EXT("SPDIFIN Audio Type",
-				spdif_audio_type_enum,
-				spdifin_audio_type_get_enum,
-				NULL),
+	SOC_ENUM_EXT("SPDIFIN Audio Type", spdif_audio_type_enum,
+		     spdifin_audio_type_get_enum, NULL),
 
-	SOC_ENUM_EXT("Audio spdif format",
-				aud_codec_type_enum,
-				spdif_format_get_enum,
-				spdif_format_set_enum),
+	SOC_ENUM_EXT("Audio spdif format", aud_codec_type_enum,
+		     spdif_format_get_enum, spdif_format_set_enum),
 
-	SOC_SINGLE_BOOL_EXT("Audio spdif mute",
-				0, aml_audio_get_spdif_mute,
-				aml_audio_set_spdif_mute),
+	SOC_SINGLE_BOOL_EXT("Audio spdif mute", 0, aml_audio_get_spdif_mute,
+			    aml_audio_set_spdif_mute),
 
-	SOC_ENUM_EXT("Audio spdifin source",
-				spdifin_src_enum,
-				spdifin_source_get_enum,
-				spdifin_source_set_enum),
+	SOC_ENUM_EXT("Audio spdifin source", spdifin_src_enum,
+		     spdifin_source_get_enum, spdifin_source_set_enum),
 
 #ifdef CONFIG_AMLOGIC_HDMITX
-	SOC_SINGLE_BOOL_EXT("Audio hdmi-out mute",
-				0, aml_get_hdmi_out_audio,
-				aml_set_hdmi_out_audio),
+	SOC_SINGLE_BOOL_EXT("Audio hdmi-out mute", 0, aml_get_hdmi_out_audio,
+			    aml_set_hdmi_out_audio),
 #endif
 
-	SOC_SINGLE_EXT("spdif out channel status",
-			0, 0, 0xffffffff, 0,
-			spdif_get_cs,
-			spdif_set_cs),
+	SOC_SINGLE_EXT("spdif out channel status", 0, 0, 0xffffffff, 0,
+		       spdif_get_cs, spdif_set_cs),
 };
 
 static const struct snd_kcontrol_new snd_spdif_clk_controls[] = {
@@ -955,10 +947,10 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 				EXTCON_SPDIFIN_SAMPLERATE, 0);
 		} else if (mode >= 0) {
 			if (p_spdif->last_sample_rate_mode != mode) {
-				pr_info("Event: EXTCON_SPDIFIN_SAMPLERATE, new sample rate:%s\n",
-					spdifin_samplerate[mode + 1]);
+				pr_debug("Event: EXTCON_SPDIFIN_SAMPLERATE, new sample rate:%d\n",
+					sample_mode[mode]);
 				extcon_set_state(p_spdif->edev,
-					EXTCON_SPDIFIN_SAMPLERATE, 1);
+						 EXTCON_SPDIFIN_SAMPLERATE, 1);
 			}
 		}
 		p_spdif->last_sample_rate_mode = mode;
