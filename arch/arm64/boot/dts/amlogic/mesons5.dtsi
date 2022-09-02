@@ -1427,7 +1427,7 @@
 				/*downstream I/O */
 				<0x82000000 0 0xe1000000 0x0 0xe1000000
 				0 0x4000000>;
-				/* non-prefetched memory */
+				/* non-prefetchable memory */
 			num-lanes = <1>;
 			port-num = <1>;
 			phy-type = <1>;
@@ -1462,7 +1462,7 @@
 			power-domains = <&pwrdm PDID_S5_PCIE1>;
 			status = "disabled";
 			/* iommu-map = <0x100 &smmu P1_SID_PCIE 0x10>; */
-			dma-ranges = <0x0 0x0 0x0 0x0 0x0 0x0 0xe0000000>;
+			dma-ranges = <0x0 0x0 0x0 0x0 0x0 0x0 0x80000000>;
 		};
 
 		pcie0: pcie@e8000000 {
@@ -1475,11 +1475,7 @@
 				0x0 0xfe002040 0x0 0x10>;
 			reg-names = "apb-base", "pcictrl-base", "axi-base",
 				    "ecam-base", "phy-base", "reset-base";
-			interrupts = <GIC_SPI 78 IRQ_TYPE_EDGE_RISING
-				      GIC_SPI 188 IRQ_TYPE_EDGE_RISING
-				      GIC_SPI 91 IRQ_TYPE_EDGE_RISING
-				      GIC_SPI 92 IRQ_TYPE_EDGE_RISING
-				      GIC_SPI 93 IRQ_TYPE_EDGE_RISING>;
+			interrupts = <GIC_SPI 78 IRQ_TYPE_EDGE_RISING>;
 			#interrupt-cells = <1>;
 			msi-controller;
 			msi-parent = <&pcie0>;
@@ -1505,7 +1501,7 @@
 				/*downstream I/O */
 				<0x82000000 0 0xe8200000 0x0 0xe8200000
 				0 0x7c00000>;
-				/* non-prefetched memory */
+				/* non-prefetchable memory */
 			num-lanes = <1>;
 			port-num = <0>;
 			phy-type = <1>;
@@ -1540,7 +1536,7 @@
 			power-domains = <&pwrdm PDID_S5_PCIE0>;
 			status = "disabled";
 			/* iommu-map = <0x100 &smmu P1_SID_PCIE 0x10>; */
-			dma-ranges = <0x0 0x0 0x0 0x0 0x0 0x0 0xe0000000>;
+			dma-ranges = <0x0 0x0 0x0 0x0 0x0 0x0 0x80000000>;
 		};
 
 		sd_emmc_c: mmc@fe08c000 {
