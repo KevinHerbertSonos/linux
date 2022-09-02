@@ -899,11 +899,13 @@ static struct platform_driver meson_ir_driver = {
 
 static int __init meson_ir_driver_init(void)
 {
+#ifndef CONFIG_SONOS
 	int ret;
 
 	ret = meson_ir_xmp_decode_init();
 	if (ret)
 		return ret;
+#endif
 
 	return platform_driver_register(&meson_ir_driver);
 }
@@ -911,7 +913,9 @@ module_init(meson_ir_driver_init);
 
 static void __exit meson_ir_driver_exit(void)
 {
+#ifndef CONFIG_SONOS
 	meson_ir_xmp_decode_exit();
+#endif
 	platform_driver_unregister(&meson_ir_driver);
 }
 module_exit(meson_ir_driver_exit);
