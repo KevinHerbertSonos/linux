@@ -270,7 +270,7 @@ void aml_spdif_fifo_ctrl(struct aml_audio_controller *actrl,
 		unsigned int mode6_timer = (counter_192k >> 1);
 
 		aml_audiobus_write(actrl, EE_AUDIO_SPDIFIN_CTRL1,
-			0xff << 20 | (spdifin_clk / 10000) << 0);
+			0x04 << 20 | (spdifin_clk / 10000) << 0);
 
 		aml_audiobus_write(actrl, EE_AUDIO_SPDIFIN_CTRL2,
 			mode0_th << 20 |
@@ -295,7 +295,7 @@ void aml_spdif_fifo_ctrl(struct aml_audio_controller *actrl,
 
 		aml_audiobus_update_bits(actrl, EE_AUDIO_SPDIFIN_CTRL0,
 			0x1 << 25 | 0x1 << 24 | 0xfff << 12,
-			0x1 << 25 | 0x0 << 24 | 0xff << 12);
+			0x0 << 25 | 0x0 << 24 | 0xff << 12);
 	}
 
 }
