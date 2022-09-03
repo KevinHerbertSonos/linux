@@ -92,7 +92,7 @@ static int lcd_set_current_vmode(enum vmode_e mode, void *data)
 		return -1;
 
 	if ((mode & VMODE_MODE_BIT_MASK) != VMODE_LCD) {
-		LCDPR("[%d]: unsupport mode 0x%x\n", pdrv->index, mode & VMODE_MODE_BIT_MASK);
+		LCDDBG("[%d]: unsupport mode 0x%x\n", pdrv->index, mode & VMODE_MODE_BIT_MASK);
 		return -1;
 	}
 
@@ -215,7 +215,7 @@ static int lcd_framerate_automation_set_mode(struct aml_lcd_drv_s *pdrv)
 	if (!pdrv)
 		return -1;
 
-	LCDPR("%s\n", __func__);
+	LCDDBG("%s\n", __func__);
 	lcd_vout_notify_mode_change_pre(pdrv);
 
 	/* update clk & timing config */

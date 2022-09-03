@@ -185,11 +185,11 @@ static void lcd_power_ctrl(struct aml_lcd_drv_s *pdrv, int status)
 	int value = -1;
 
 	if (pdrv->lcd_pxp) {
-		LCDPR("[%d]: %s: lcd_pxp bypass\n", pdrv->index, __func__);
+		LCDDBG("[%d]: %s: lcd_pxp bypass\n", pdrv->index, __func__);
 		return;
 	}
 
-	LCDPR("[%d]: %s: %d\n", pdrv->index, __func__, status);
+	LCDDBG("[%d]: %s: %d\n", pdrv->index, __func__, status);
 	i = 0;
 	while (i < LCD_PWR_STEP_MAX) {
 		if (status)
@@ -284,7 +284,7 @@ static void lcd_dlg_switch_mode(struct aml_lcd_drv_s *pdrv)
 	unsigned int i = 0, index;
 	unsigned long long local_time[3];
 
-	LCDPR("[%d]: %s\n", pdrv->index, __func__);
+	LCDDBG("[%d]: %s\n", pdrv->index, __func__);
 	while (i < LCD_PWR_STEP_MAX) {
 		power_step = &pdrv->config.power.power_on_step[i];
 
@@ -304,9 +304,9 @@ static void lcd_dlg_switch_mode(struct aml_lcd_drv_s *pdrv)
 		case LCD_POWER_TYPE_EXTERN:
 			local_time[0] = sched_clock();
 			if (lcd_debug_print_flag & LCD_DBG_PR_NORMAL) {
-				LCDPR("[%d]: power_ctrl step %d\n",
+				LCDDBG("[%d]: power_ctrl step %d\n",
 					pdrv->index, i);
-				LCDPR("[%d]: %s: type=%d, index=%d, value=%d, delay=%d\n",
+				LCDDBG("[%d]: %s: type=%d, index=%d, value=%d, delay=%d\n",
 					pdrv->index, __func__,
 					power_step->type, power_step->index,
 					power_step->value, power_step->delay);
@@ -330,7 +330,7 @@ static void lcd_dlg_switch_mode(struct aml_lcd_drv_s *pdrv)
 		i++;
 	}
 	if (lcd_debug_print_flag & LCD_DBG_PR_NORMAL)
-		LCDPR("[%d]: %s finished\n", pdrv->index, __func__);
+		LCDDBG("[%d]: %s finished\n", pdrv->index, __func__);
 }
 
 static void lcd_dlg_power_ctrl(struct aml_lcd_drv_s *pdrv, int status)
@@ -1149,7 +1149,7 @@ static int lcd_io_open(struct inode *inode, struct file *file)
 	file->private_data = pdrv;
 
 	if (lcd_debug_print_flag & LCD_DBG_PR_NORMAL)
-		LCDPR("[%d]: %s\n", pdrv->index, __func__);
+		LCDDBG("[%d]: %s\n", pdrv->index, __func__);
 
 	return 0;
 }
@@ -1196,7 +1196,7 @@ static long lcd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	pctrl = &pdrv->config.control;
 	opt_info = &pdrv->config.optical;
 	mcd_nr = _IOC_NR(cmd);
-	LCDPR("[%d]: %s: cmd_dir = 0x%x, cmd_nr = 0x%x\n",
+	LCDDBG("[%d]: %s: cmd_dir = 0x%x, cmd_nr = 0x%x\n",
 	      pdrv->index, __func__, _IOC_DIR(cmd), mcd_nr);
 
 	argp = (void __user *)arg;
@@ -2377,7 +2377,7 @@ static int lcd_remove(struct platform_device *pdev)
 	lcd_drv_init_state &= ~(1 << index);
 	lcd_global_remove_once();
 
-	LCDPR("[%d]: %s, init_state:0x%x\n", index, __func__, lcd_drv_init_state);
+	LCDDBG("[%d]: %s, init_state:0x%x\n", index, __func__, lcd_drv_init_state);
 	return 0;
 }
 
@@ -2392,10 +2392,10 @@ static int lcd_resume(struct platform_device *pdev)
 		return 0;
 
 	mutex_lock(&lcd_power_mutex);
-	LCDPR("[%d]: %s\n", pdrv->index, __func__);
+	LCDDBG("[%d]: %s\n", pdrv->index, __func__);
 	pdrv->resume_flag |= LCD_RESUME_PREPARE;
 	aml_lcd_notifier_call_chain(LCD_EVENT_PREPARE, (void *)pdrv);
-	LCDPR("[%d]: %s finished\n", pdrv->index, __func__);
+	LCDDBG("[%d]: %s finished\n", pdrv->index, __func__);
 	mutex_unlock(&lcd_power_mutex);
 
 	return 0;
@@ -2415,7 +2415,7 @@ static int lcd_suspend(struct platform_device *pdev, pm_message_t state)
 	pdrv->resume_flag &= ~LCD_RESUME_PREPARE;
 	if (pdrv->status & LCD_STATUS_ENCL_ON) {
 		aml_lcd_notifier_call_chain(LCD_EVENT_UNPREPARE, (void *)pdrv);
-		LCDPR("[%d]: %s finished\n", pdrv->index, __func__);
+		LCDDBG("[%d]: %s finished\n", pdrv->index, __func__);
 	}
 	mutex_unlock(&lcd_power_mutex);
 	return 0;
