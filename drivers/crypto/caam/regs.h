@@ -429,6 +429,10 @@ struct caam_perfmon {
 #define CSTA_MOO		GENMASK(9, 8)
 #define CSTA_MOO_SECURE	1
 #define CSTA_MOO_TRUSTED	2
+#define CSTA_MOO_0		BIT(8)
+#define CSTA_MOO_1		BIT(9)
+#define CSTA_MOO_SHIFT		8
+
 	u32 status;		/* CSTA - CAAM Status */
 	u64 rsvd3;
 
