@@ -1547,7 +1547,7 @@ static int aml_dai_tdm_prepare(struct snd_pcm_substream *substream,
 			return -EINVAL;
 		}
 
-		dev_info(substream->pcm->card->dev, "tdm prepare capture\n");
+		dev_dbg(substream->pcm->card->dev, "tdm prepare capture\n");
 		aml_tdmin_set_src(p_tdm);
 
 		fmt.type      = toddr_type;
@@ -1635,7 +1635,7 @@ static int aml_dai_tdm_trigger(struct snd_pcm_substream *substream, int cmd,
 			if (p_tdm->samesource_sel != SHAREBUFFER_NONE)
 				tdm_sharebuffer_mute(p_tdm, false);
 		} else {
-			dev_info(substream->pcm->card->dev,
+			dev_dbg(substream->pcm->card->dev,
 				 "TDM[%d] Capture enable\n",
 				 p_tdm->id);
 			aml_toddr_enable(p_tdm->tddr, 1);
@@ -1693,7 +1693,7 @@ static int aml_dai_tdm_trigger(struct snd_pcm_substream *substream, int cmd,
 			aml_tdm_enable(p_tdm->actrl,
 				substream->stream, p_tdm->id, false, p_tdm->tdm_fade_out_enable,
 				p_tdm->chipinfo->use_vadtop);
-			dev_info(substream->pcm->card->dev,
+			dev_dbg(substream->pcm->card->dev,
 				 "TDM[%d] Capture stop\n",
 				 p_tdm->id);
 
@@ -2192,7 +2192,7 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 		p_chipinfo->lane_cnt = LANE_MAX1;
 
 	p_tdm->lane_cnt = p_chipinfo->lane_cnt;
-	pr_info("%s, tdm ID = %u, lane_cnt = %d\n", __func__,
+	pr_debug("%s, tdm ID = %u, lane_cnt = %d\n", __func__,
 			p_tdm->id, p_tdm->lane_cnt);
 
 	/* get audio controller */
@@ -2267,7 +2267,7 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 	if (ret < 0)
 		p_tdm->i2s2hdmitx = 0;
 	else
-		pr_info("TDM id %d i2s2hdmi:%d\n",
+		pr_debug("TDM id %d i2s2hdmi:%d\n",
 			p_tdm->id,
 			p_tdm->i2s2hdmitx);
 
@@ -2293,7 +2293,7 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 	if (ret < 0)
 		p_tdm->setting.lane_mask_out = 0x1;
 
-	dev_info(&pdev->dev, "lane_mask_out = %x\n",
+	dev_dbg(&pdev->dev, "lane_mask_out = %x\n",
 		 p_tdm->setting.lane_mask_out);
 
 	p_tdm->clk = devm_clk_get(&pdev->dev, "clk_srcpll");
