@@ -359,7 +359,7 @@ static int set_vout_init_mode(void)
 
 	vout_init_vmode = validate_vmode(local_name, frac);
 	if (vout_init_vmode >= VMODE_MAX) {
-		VOUTERR("no matched vout_init mode %s, force to invalid\n",
+		VOUTDBG("no matched vout_init mode %s, force to invalid\n",
 			vout_mode_uboot);
 		nulldisp_index = 1;
 		vout_init_vmode = nulldisp_vinfo[nulldisp_index].mode;
@@ -855,7 +855,7 @@ static long vout_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	mcd_nr = _IOC_NR(cmd);
 	if (vout_debug_print) {
-		VOUTPR("%s: cmd: 0x%x, cmd_dir = 0x%x, cmd_nr = 0x%x\n",
+		VOUTDBG("%s: cmd: 0x%x, cmd_dir = 0x%x, cmd_nr = 0x%x\n",
 			__func__, cmd, _IOC_DIR(cmd), mcd_nr);
 	}
 
@@ -1165,7 +1165,7 @@ static int aml_vout_probe(struct platform_device *pdev)
 	vout_register_server(&nulldisp_vout_server);
 	set_vout_init_mode();
 
-	VOUTPR("%s OK\n", __func__);
+	VOUTDBG("%s OK\n", __func__);
 	return ret;
 }
 
@@ -1187,7 +1187,7 @@ static int aml_vout_remove(struct platform_device *pdev)
 
 static void aml_vout_shutdown(struct platform_device *pdev)
 {
-	VOUTPR("%s\n", __func__);
+	VOUTDBG("%s\n", __func__);
 	vout_shutdown();
 }
 

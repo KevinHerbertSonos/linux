@@ -453,7 +453,7 @@ static void check_phy_status(struct aml_lcd_drv_s *pdrv)
 	while (dsi_host_getb(pdrv, MIPI_DSI_DWC_PHY_STATUS_OS,
 			     BIT_PHY_STOPSTATECLKLANE, 1) == 0) {
 		if (i == 0)
-			LCDPR(" Waiting STOP STATE LANE\n");
+			LCDDBG(" Waiting STOP STATE LANE\n");
 		if (i++ >= DPHY_TIMEOUT) {
 			LCDERR("%s: lane_state timeout\n", __func__);
 			break;
@@ -1297,12 +1297,12 @@ static int mipi_dsi_check_state(struct aml_lcd_drv_s *pdrv, unsigned char reg, i
 		else
 			len += sprintf(str + len, ",0x%02x", rd_data[i]);
 	}
-	pr_info("%s\n", str);
+	pr_debug("%s\n", str);
 
 	dconf->check_state = 1;
 	lcd_vcbus_setb(L_VCOM_VS_ADDR + offset, 1, 12, 1);
 	pdrv->config.retry_enable_flag = 0;
-	LCDPR("%s: %d\n", __func__, dconf->check_state);
+	LCDDBG("%s: %d\n", __func__, dconf->check_state);
 	kfree(rd_data);
 	return 0;
 
@@ -1310,7 +1310,7 @@ mipi_dsi_check_state_err:
 	if (pdrv->config.retry_enable_cnt >= LCD_ENABLE_RETRY_MAX) {
 		dconf->check_state = 0;
 		lcd_vcbus_setb(L_VCOM_VS_ADDR + offset, 0, 12, 1);
-		LCDPR("%s: %d\n", __func__, dconf->check_state);
+		LCDDBG("%s: %d\n", __func__, dconf->check_state);
 	}
 	pdrv->config.retry_enable_flag = 1;
 	kfree(rd_data);

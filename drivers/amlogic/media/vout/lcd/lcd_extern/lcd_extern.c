@@ -73,7 +73,7 @@ struct lcd_extern_dev_s *lcd_extern_get_dev(struct lcd_extern_driver_s *edrv, in
 			return edrv->dev[i];
 	}
 
-	EXTERR("[%d]: invalid dev_index: %d\n", edrv->index, dev_index);
+	EXTDBG("[%d]: invalid dev_index: %d\n", edrv->index, dev_index);
 	return NULL;
 }
 
