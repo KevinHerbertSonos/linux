@@ -311,7 +311,7 @@ static int ss_free(struct snd_pcm_substream *substream,
 {
 	struct samesrc_ops *ops = NULL;
 
-	pr_info("%s() samesrc %d, lvl %d\n",
+	pr_debug("%s() samesrc %d, lvl %d\n",
 		__func__, samesource_sel, share_lvl);
 	if (aml_check_sharebuffer_valid(pfrddr,
 			samesource_sel)) {
@@ -515,7 +515,7 @@ static int aml_spdif_platform_suspend(struct platform_device *pdev, pm_message_t
 	struct aml_spdif *p_spdif = dev_get_drvdata(&pdev->dev);
 
 	aml_spdif_suspend(p_spdif);
-	pr_info("%s is mute\n", __func__);
+	pr_debug("%s is mute\n", __func__);
 	return 0;
 }
 
@@ -570,7 +570,7 @@ static int aml_spdif_platform_resume(struct platform_device *pdev)
 	struct aml_spdif *p_spdif = dev_get_drvdata(&pdev->dev);
 
 	aml_spdif_resume(p_spdif);
-	pr_info("%s is unmute\n", __func__);
+	pr_debug("%s is unmute\n", __func__);
 
 	return 0;
 }
@@ -594,7 +594,7 @@ static void aml_spdif_platform_shutdown(struct platform_device *pdev)
 	if (!IS_ERR_OR_NULL(p_spdif->regulator_vcc3v3))
 		regulator_disable(p_spdif->regulator_vcc3v3);
 
-	pr_info("%s is mute\n", __func__);
+	pr_debug("%s is mute\n", __func__);
 }
 
 static int spdif_format_get_enum(struct snd_kcontrol *kcontrol,
@@ -822,7 +822,7 @@ static int spdif_set_cs(struct snd_kcontrol *kcontrol,
 			p_spdif->l_src = 0;
 		}
 	}
-	pr_info("%s(), status0=%#x\n", __func__, status0);
+	pr_debug("%s(), status0=%#x\n", __func__, status0);
 	spdif_set_channel_status0(p_spdif->id, status0);
 	return 0;
 }
@@ -929,9 +929,9 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 			intrpt_status & 0xff);
 
 	if (intrpt_status & 0x1)
-		pr_info("over flow!!\n");
+		pr_debug("over flow!!\n");
 	if (intrpt_status & 0x2)
-		pr_info("parity error\n");
+		pr_debug("parity error\n");
 
 	if (intrpt_status & 0x4) {
 		int mode = (intrpt_status >> 28) & 0x7;
@@ -940,7 +940,7 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 		if (mode == 0x7 || (((intrpt_status >> 18) & 0x3ff) == 0x3ff)) {
 			p_spdif->in_err_cnt++;
 			if (p_spdif->in_err_cnt > SPDIFIN_ERR_CNT) {
-				pr_err("Not detect sample rate, spdifin may be disconnected\n");
+				pr_err("Not detect sample rate, spdifin may be disconneted\n");
 				p_spdif->in_err_cnt = 0;
 			}
 			extcon_set_state(p_spdif->edev,
@@ -978,23 +978,23 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 
 			if (pc_v != p_spdif->pc_last) {
 				p_spdif->pc_last = pc_v;
-				pr_info("Pc changed\n");
+				pr_debug("Pc changed\n");
 			}
 			if (pd_v != p_spdif->pd_last) {
 				p_spdif->pd_last = pd_v;
-				pr_info("Pd changed\n");
+				pr_debug("Pd changed\n");
 			}
 		}
 	}
 
 	if (intrpt_status & 0x20) {
-		pr_info("nonpcm to pcm\n");
+		pr_debug("nonpcm to pcm\n");
 		extcon_set_state(p_spdif->edev,
 			EXTCON_SPDIFIN_AUDIOTYPE, 0);
 	}
 
 	if (intrpt_status & 0x40)
-		pr_info("valid changed\n");
+		pr_debug("valid changed\n");
 }
 
 static irqreturn_t aml_spdif_ddr_isr(int irq, void *devid)
@@ -1029,7 +1029,7 @@ static int release_spdif_same_src(struct aml_spdif *p_spdif,
 	if (!ops || !ops->fr || !ops->hw_free)
 		return 0;
 
-	pr_info("%s(), %d src sel %d\n", __func__, __LINE__, samesource_sel);
+	pr_debug("%s(), %d src sel %d\n", __func__, __LINE__, samesource_sel);
 	ops->hw_free(substream, ops->fr, samesource_sel, ops->share_lvl);
 
 	return 0;
@@ -1333,7 +1333,7 @@ static void aml_dai_spdif_shutdown(struct snd_pcm_substream *substream,
 	/* disable clock and gate */
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		if (p_spdif->clk_cont) {
-			pr_info("spdif_%s keep clk continuous\n",
+			pr_debug("spdif_%s keep clk continuous\n",
 				(p_spdif->id == 0) ? "a" : "b");
 			return;
 		}
@@ -1846,7 +1846,7 @@ static int aml_spdif_parse_of(struct platform_device *pdev)
 	if (ret < 0)
 		p_spdif->syssrc_clk_rate = 0;
 	else
-		pr_info("%s sys-src clk rate from dts:%d\n",
+		pr_debug("%s sys-src clk rate from dts:%d\n",
 			__func__, p_spdif->syssrc_clk_rate);
 
 	ret = of_property_read_u32(dev->of_node, "samesource_sel",
@@ -1948,7 +1948,7 @@ static int aml_spdif_parse_of(struct platform_device *pdev)
 	if (ret < 0)
 		p_spdif->clk_tuning_enable = 0;
 	else
-		pr_info("Spdif id %d tuning clk enable:%d\n",
+		pr_debug("Spdif id %d tuning clk enable:%d\n",
 			p_spdif->id, p_spdif->clk_tuning_enable);
 
 	return 0;
