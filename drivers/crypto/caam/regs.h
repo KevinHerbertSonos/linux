@@ -419,6 +419,10 @@ struct caam_perfmon {
 	u32 rsvd2;
 #define CSTA_PLEND		BIT(10)
 #define CSTA_ALT_PLEND		BIT(18)
+#define CSTA_MOO_0		BIT(8)
+#define CSTA_MOO_1		BIT(9)
+#define CSTA_MOO_SHIFT		8
+
 	u32 status;		/* CSTA - CAAM Status */
 	u64 rsvd3;
 

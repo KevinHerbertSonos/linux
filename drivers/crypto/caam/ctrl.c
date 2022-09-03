@@ -21,6 +21,9 @@
 bool caam_dpaa2;
 EXPORT_SYMBOL(caam_dpaa2);
 
+u32 caam_moo;
+EXPORT_SYMBOL(caam_moo);
+
 #ifdef CONFIG_CAAM_QI
 #include "qi.h"
 #endif
@@ -619,6 +622,10 @@ static int caam_probe(struct platform_device *pdev)
 
 	caam_little_end = !(bool)(rd_reg32(&ctrl->perfmon.status) &
 				  (CSTA_PLEND | CSTA_ALT_PLEND));
+
+	caam_moo = rd_reg32(&ctrl->perfmon.status) & (CSTA_MOO_0 | CSTA_MOO_1);
+	caam_moo = caam_moo >> CSTA_MOO_SHIFT;
+
 	comp_params = rd_reg32(&ctrl->perfmon.comp_parms_ms);
 	if (comp_params & CTPR_MS_PS && rd_reg32(&ctrl->mcr) & MCFGR_LONG_PTR)
 		caam_ptr_sz = sizeof(u64);
