@@ -30,6 +30,10 @@
 #include <linux/usb/r8152.h>
 #include <net/gso.h>
 
+#ifdef CONFIG_SONOS
+#include "mdp.h"
+#endif
+
 /* Information for net-next */
 #define NETNEXT_VERSION		"12"
 
@@ -1804,6 +1808,9 @@ static int determine_ethernet_addr(struct r8152 *tp, struct sockaddr *sa)
 						   sa->sa_data);
 		}
 	}
+#ifdef CONFIG_SONOS
+	memcpy(sa->sa_data, sys_mdp.mdp_serial, ETH_ALEN);
+#endif
 
 	if (ret < 0) {
 		netif_err(tp, probe, dev, "Get ether addr fail\n");
