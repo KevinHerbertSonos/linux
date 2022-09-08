@@ -38,6 +38,11 @@
 #define DIAG_MEM_ADJUSTMENT_4MB  (4  * 1024 * 1024)
 #endif
 
+#ifdef CONFIG_SONOS_DIAGS
+#define DIAG_MEM_ADJUSTMENT_16MB (16 * 1024 * 1024)
+#define DIAG_MEM_ADJUSTMENT_4MB  (4  * 1024 * 1024)
+#endif
+
 /*
  * of_fdt_limit_memory - limit the number of regions in the /memory node
  * @limit: maximum entries
