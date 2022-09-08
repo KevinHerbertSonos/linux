@@ -212,6 +212,12 @@ static void mmc_test_prepare_mrq(struct mmc_test_card *test,
 	if (WARN_ON(!mrq || !mrq->cmd || !mrq->data || !mrq->stop))
 		return;
 
+#ifdef CONFIG_SONOS_MMCTEST_OFFSET
+	if (dev_addr < CONFIG_SONOS_MMCTEST_OFFSET) {
+		dev_addr += CONFIG_SONOS_MMCTEST_OFFSET;
+	}
+#endif
+
 	if (blocks > 1) {
 		mrq->cmd->opcode = write ?
 			MMC_WRITE_MULTIPLE_BLOCK : MMC_READ_MULTIPLE_BLOCK;
