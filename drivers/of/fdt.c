@@ -32,6 +32,11 @@
 
 #include "of_private.h"
 
+#ifdef CONFIG_SONOS_DIAGS
+#define DIAG_MEM_ADJUSTMENT_16MB (16 * 1024 * 1024)
+#define DIAG_MEM_ADJUSTMENT_4MB  (4  * 1024 * 1024)
+#endif
+
 /*
  * __dtb_empty_root_begin[] and __dtb_empty_root_end[] magically created by
  * cmd_wrap_S_dtb in scripts/Makefile.dtbs
@@ -1001,6 +1006,16 @@ int __init early_init_dt_scan_memory(void)
 			if (size == 0)
 				continue;
 			pr_debug(" - %llx, %llx\n", base, size);
+
+#ifdef CONFIG_SONOS_DIAGS
+		if (size > 0x8000000) /* if memory size larger than 128MB, we reseve 16MB*/
+			early_init_dt_add_memory_arch(base, size - DIAG_MEM_ADJUSTMENT_16MB);
+		else
+			early_init_dt_add_memory_arch(base, size - DIAG_MEM_ADJUSTMENT_4MB);
+#else
+		early_init_dt_add_memory_arch(base, size);
+#endif
+
 
 			early_init_dt_add_memory_arch(base, size);
 
