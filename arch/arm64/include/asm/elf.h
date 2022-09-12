@@ -119,6 +119,12 @@
  */
 #define compat_elf_read_implies_exec(ex, stk)	(stk == EXSTACK_DEFAULT)
 
+#ifdef CONFIG_SONOS_SECBOOT
+#define elf_read_implies_exec(ex,stk)	(0)
+#else
+#define elf_read_implies_exec(ex,stk)	(stk != EXSTACK_DISABLE_X)
+#endif
+
 #define CORE_DUMP_USE_REGSET
 #define ELF_EXEC_PAGESIZE	PAGE_SIZE
 
