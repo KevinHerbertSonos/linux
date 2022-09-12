@@ -86,3 +86,13 @@ tpm_key_parser-y := \
 
 $(obj)/tpm_parser.o: $(obj)/tpm.asn1.h
 $(obj)/tpm.asn1.o: $(obj)/tpm.asn1.c $(obj)/tpm.asn1.h
+
+#
+# Sonos keys
+#
+obj-$(CONFIG_SONOS) += sonos_signature_common_linux.o
+obj-$(CONFIG_SONOS) += sonos_signature_keys.o
+obj-$(CONFIG_SONOS) += sonos_signature_keys_$(SONOS_KEY_SOC_ARCH).o
+obj-$(CONFIG_SONOS) += \
+  $(foreach a,$(SONOS_KEY_ARCHES),sonos_signature_keys_$(a).o)
+obj-$(CONFIG_SONOS) += sonos_signature_verify_linux.o
