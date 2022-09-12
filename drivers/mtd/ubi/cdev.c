@@ -114,9 +114,8 @@ static int vol_cdev_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int vol_cdev_release(struct inode *inode, struct file *file)
+static int vol_cdev_release_desc(struct ubi_volume_desc *desc)
 {
-	struct ubi_volume_desc *desc = file->private_data;
 	struct ubi_volume *vol = desc->vol;
 
 	dbg_gen("release device %d, volume %d, mode %d",
@@ -138,6 +137,11 @@ static int vol_cdev_release(struct inode *inode, struct file *file)
 
 	ubi_close_volume(desc);
 	return 0;
+}
+
+static int vol_cdev_release(struct inode *inode, struct file *file)
+{
+	return vol_cdev_release_desc(file->private_data);
 }
 
 static loff_t vol_cdev_llseek(struct file *file, loff_t offset, int origin)
@@ -1136,3 +1140,108 @@ const struct file_operations ubi_ctrl_cdev_operations = {
 	.compat_ioctl   = ctrl_cdev_compat_ioctl,
 	.llseek		= no_llseek,
 };
+
+#ifdef CONFIG_SONOS_SECBOOT
+/* compare to vol_cdev_ioctl(UBI_IOCVOLUP) */
+struct ubi_volume_desc *rootfs_start_update(const char *ubi_volume_name,
+					    size_t data_len)
+{
+	struct ubi_volume_desc *desc;
+	struct ubi_volume *vol;
+	struct ubi_device *ubi;
+	size_t rsvd_bytes;
+	int err;
+
+	if (!capable(CAP_SYS_RESOURCE)) {
+		return ERR_PTR(-EPERM);
+	}
+
+	desc = ubi_open_volume_nm(0, ubi_volume_name, UBI_EXCLUSIVE);
+	if (IS_ERR(desc)) {
+		pr_err("rootfs_start_update UBI open volume %s failed: %ld",
+		       ubi_volume_name, PTR_ERR(desc));
+		return desc;
+	}
+	vol = desc->vol;
+	ubi = vol->ubi;
+
+	rsvd_bytes = ((size_t)vol->reserved_pebs) *
+		     ((size_t)vol->usable_leb_size);
+	if (data_len > rsvd_bytes) {
+		ubi_err(ubi,
+			"update (%zu) too large for volume %s capacity (%zu)",
+			data_len, ubi_volume_name, rsvd_bytes);
+		ubi_close_volume(desc);
+		return ERR_PTR(-EINVAL);
+	}
+
+	err = ubi_start_update(ubi, vol, data_len);
+	if (err) {
+		ubi_close_volume(desc);
+		return ERR_PTR(err);
+	}
+	if (data_len == 0) {
+		ubi_volume_notify(ubi, vol, UBI_VOLUME_UPDATED);
+		revoke_exclusive(desc, UBI_READWRITE);
+	}
+
+	return desc;
+}
+EXPORT_SYMBOL(rootfs_start_update);
+
+/* compare to vol_cdev_write */
+ssize_t rootfs_write(struct ubi_volume_desc *desc, const void *buf,
+		     size_t count)
+{
+	int err = 0;
+	struct ubi_volume *vol = desc->vol;
+	struct ubi_device *ubi = vol->ubi;
+
+	if (!vol->updating) {
+		ubi_err(ubi, "not ready");
+		return -EINVAL;
+	}
+
+	if (count > (size_t)INT_MAX) {
+		ubi_err(ubi, "write too big (%zu bytes)", count);
+		return -EINVAL;
+	}
+
+	err = rootfs_ubi_more_update_data(ubi, vol, buf, (int)count);
+	if (err < 0) {
+		ubi_err(ubi, "cannot accept more %zu bytes of data, error %d",
+			count, err);
+		return err;
+	}
+
+	if (err) {
+		/*
+		 * The operation is finished, @err contains number of actually
+		 * written bytes.
+		 */
+		count = err;
+
+		err = ubi_check_volume(ubi, vol->vol_id);
+		if (err < 0)
+			return err;
+
+		if (err) {
+			ubi_warn(ubi, "volume %d on UBI device %d is corrupted",
+				 vol->vol_id, ubi->ubi_num);
+			vol->corrupted = 1;
+		}
+		vol->checked = 1;
+		ubi_volume_notify(ubi, vol, UBI_VOLUME_UPDATED);
+		revoke_exclusive(desc, UBI_READWRITE);
+	}
+
+	return count;
+}
+EXPORT_SYMBOL(rootfs_write);
+
+void rootfs_release(struct ubi_volume_desc *desc)
+{
+	(void)vol_cdev_release_desc(desc);
+}
+EXPORT_SYMBOL(rootfs_release);
+#endif
