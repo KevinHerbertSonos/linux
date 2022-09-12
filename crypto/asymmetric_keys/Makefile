@@ -79,3 +79,24 @@ verify_signed_pefile-y := \
 
 $(obj)/mscode_parser.o: $(obj)/mscode.asn1.h $(obj)/mscode.asn1.h
 $(obj)/mscode.asn1.o: $(obj)/mscode.asn1.c $(obj)/mscode.asn1.h
+
+#
+# TPM private key parsing
+#
+obj-$(CONFIG_TPM_KEY_PARSER) += tpm_key_parser.o
+tpm_key_parser-y := \
+	tpm.asn1.o \
+	tpm_parser.o
+
+$(obj)/tpm_parser.o: $(obj)/tpm.asn1.h
+$(obj)/tpm.asn1.o: $(obj)/tpm.asn1.c $(obj)/tpm.asn1.h
+
+#
+# Sonos keys
+#
+obj-$(CONFIG_SONOS) += sonos_signature_common_linux.o
+obj-$(CONFIG_SONOS) += sonos_signature_keys.o
+obj-$(CONFIG_SONOS) += sonos_signature_keys_$(SONOS_KEY_SOC_ARCH).o
+obj-$(CONFIG_SONOS) += \
+  $(foreach a,$(SONOS_KEY_ARCHES),sonos_signature_keys_$(a).o)
+obj-$(CONFIG_SONOS) += sonos_signature_verify_linux.o
