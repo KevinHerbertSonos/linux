@@ -84,10 +84,12 @@ EXPORT_SYMBOL(elf_set_personality);
  */
 int arm_elf_read_implies_exec(int executable_stack)
 {
+#ifndef CONFIG_SONOS_SECBOOT
 	if (executable_stack != EXSTACK_DISABLE_X)
 		return 1;
 	if (cpu_architecture() < CPU_ARCH_ARMv6)
 		return 1;
+#endif
 	return 0;
 }
 EXPORT_SYMBOL(arm_elf_read_implies_exec);
