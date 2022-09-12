@@ -770,8 +770,8 @@ static int __init chr_dev_init(void)
 		if ((minor == DEVPORT_MINOR) && !arch_has_dev_port())
 			continue;
 
-		device_create(&mem_class, NULL, MKDEV(MEM_MAJOR, minor),
-			      NULL, devlist[minor].name);
+		device_create(mem_class, NULL, MKDEV(MEM_MAJOR, minor),
+			      NULL, "%s", devlist[minor].name);	/* Sonos: format_security */
 	}
 
 	return tty_init();
