@@ -70,7 +70,7 @@ static void snd_request_other(int minor)
 	case SNDRV_MINOR_TIMER:		str = "snd-timer";	break;
 	default:			return;
 	}
-	request_module(str);
+	request_module("%s", str); /* Sonos: format_security */
 }
 
 #endif	/* modular kernel */

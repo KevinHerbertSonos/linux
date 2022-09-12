@@ -171,7 +171,7 @@ static ssize_t runtime_status_show(struct device *dev,
 			return -EIO;
 		}
 	}
-	return sysfs_emit(buf, p);
+	return sprintf(buf, "%s", p); /* Sonos: format_security */
 }
 
 static DEVICE_ATTR_RO(runtime_status);
