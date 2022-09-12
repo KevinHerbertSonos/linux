@@ -363,6 +363,107 @@ int ubi_more_update_data(struct ubi_device *ubi, struct ubi_volume *vol,
 	return err;
 }
 
+#ifdef CONFIG_SONOS_SECBOOT
+/*
+ * A cut/paste of ubi_more_update_data with extremely minor changes:
+ *   -'buf' is not from user space here, copy_from_user changed to memcpy
+ *   -initial dbg_gen message removed
+ */
+int rootfs_ubi_more_update_data(struct ubi_device *ubi, struct ubi_volume *vol,
+				const void *buf, int count)
+{
+	int lnum, offs, err = 0, len, to_write = count;
+
+	if (ubi->ro_mode)
+		return -EROFS;
+
+	lnum = div_u64_rem(vol->upd_received,  vol->usable_leb_size, &offs);
+	if (vol->upd_received + count > vol->upd_bytes)
+		to_write = count = vol->upd_bytes - vol->upd_received;
+
+	/*
+	 * When updating volumes, we accumulate whole logical eraseblock of
+	 * data and write it at once.
+	 */
+	if (offs != 0) {
+		/*
+		 * This is a write to the middle of the logical eraseblock. We
+		 * copy the data to our update buffer and wait for more data or
+		 * flush it if the whole eraseblock is written or the update
+		 * is finished.
+		 */
+
+		len = vol->usable_leb_size - offs;
+		if (len > count)
+			len = count;
+
+		memcpy(vol->upd_buf + offs, buf, len);
+
+		if (offs + len == vol->usable_leb_size ||
+		    vol->upd_received + len == vol->upd_bytes) {
+			int flush_len = offs + len;
+
+			/*
+			 * OK, we gathered either the whole eraseblock or this
+			 * is the last chunk, it's time to flush the buffer.
+			 */
+			ubi_assert(flush_len <= vol->usable_leb_size);
+			err = write_leb(ubi, vol, lnum, vol->upd_buf, flush_len,
+					vol->upd_ebs);
+			if (err)
+				return err;
+		}
+
+		vol->upd_received += len;
+		count -= len;
+		buf += len;
+		lnum += 1;
+	}
+
+	/*
+	 * If we've got more to write, let's continue. At this point we know we
+	 * are starting from the beginning of an eraseblock.
+	 */
+	while (count) {
+		if (count > vol->usable_leb_size)
+			len = vol->usable_leb_size;
+		else
+			len = count;
+
+		memcpy(vol->upd_buf, buf, len);
+
+		if (len == vol->usable_leb_size ||
+		    vol->upd_received + len == vol->upd_bytes) {
+			err = write_leb(ubi, vol, lnum, vol->upd_buf,
+					len, vol->upd_ebs);
+			if (err)
+				break;
+		}
+
+		vol->upd_received += len;
+		count -= len;
+		lnum += 1;
+		buf += len;
+	}
+
+	ubi_assert(vol->upd_received <= vol->upd_bytes);
+	if (vol->upd_received == vol->upd_bytes) {
+		err = ubi_wl_flush(ubi, UBI_ALL, UBI_ALL);
+		if (err)
+			return err;
+		/* The update is finished, clear the update marker */
+		err = clear_update_marker(ubi, vol, vol->upd_bytes);
+		if (err)
+			return err;
+		vol->updating = 0;
+		err = to_write;
+		vfree(vol->upd_buf);
+	}
+
+	return err;
+}
+#endif
+
 /**
  * ubi_more_leb_change_data - accept more data for atomic LEB change.
  * @ubi: UBI device description object
