@@ -1365,11 +1365,13 @@ static const struct of_device_id meson_sar_adc_of_match[] __initconst = {
 };
 MODULE_DEVICE_TABLE(of, meson_sar_adc_of_match);
 
+struct iio_dev *indio_dev;
+
 static int __init meson_sar_adc_probe(struct platform_device *pdev)
 {
 	const struct meson_sar_adc_data *match_data;
 	struct meson_sar_adc_priv *priv;
-	struct iio_dev *indio_dev;
+	//struct iio_dev *indio_dev;
 	struct resource *res;
 	void __iomem *base;
 	int irq, ret;
@@ -1694,6 +1696,18 @@ static struct platform_driver meson_sar_adc_driver = {
 		.pm = &meson_sar_adc_pm_ops,
 	},
 };
+
+#ifdef CONFIG_AMLOGIC_SARADC
+int sonos_sar_adc_iio_info_read_raw(int chan, int *mvolts)
+{  // move to meson_saradn)
+	const struct iio_chan_spec *ad_chan = indio_dev->channels + chan;
+
+	meson_sar_adc_get_sample(indio_dev, ad_chan, NO_FILTER, ONE_SAMPLE,
+				 mvolts);
+	return 0;
+}
+EXPORT_SYMBOL(sonos_sar_adc_iio_info_read_raw);
+#endif
 
 module_platform_driver(meson_sar_adc_driver);
 
