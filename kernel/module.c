@@ -56,6 +56,10 @@
 #include <uapi/linux/module.h>
 #include "module-internal.h"
 
+#if defined(CONFIG_SONOS_SECBOOT)
+#include <linux/sonos_sec_lock.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/module.h>
 
@@ -4236,6 +4240,12 @@ SYSCALL_DEFINE3(init_module, void __user *, umod,
 	int err;
 	struct load_info info = { };
 
+#if defined(CONFIG_SONOS_SECBOOT)
+	if (!sonos_allow_insmod()) {
+		printk(KERN_INFO "Module insertion permission not granted.\n");
+		return 0;
+	}
+#endif
 	err = may_init_module();
 	if (err)
 		return err;
