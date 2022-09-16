@@ -42,6 +42,9 @@
 #include <keys/trusted-type.h>
 
 #include <linux/device-mapper.h>
+#ifdef CONFIG_SONOS_SECBOOT
+#include <linux/sonos_sec_fs_keys.h>
+#endif
 
 #include "dm-audit.h"
 
@@ -2693,6 +2696,12 @@ static int crypt_set_key(struct crypt_config *cc, char *key)
 		r = crypt_set_keyring_key(cc, key + 1);
 		goto out;
 	}
+
+#ifdef CONFIG_SONOS_SECBOOT
+	if (!sonos_replace_luks_key_if_sentinel(key)) {
+		goto out;
+	}
+#endif
 
 	/* clear the flag since following operations may invalidate previously valid key */
 	clear_bit(DM_CRYPT_KEY_VALID, &cc->flags);
