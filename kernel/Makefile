@@ -15,6 +15,11 @@ obj-y     = fork.o exec_domain.o panic.o \
 obj-$(CONFIG_USERMODE_DRIVER) += usermode_driver.o
 
 obj-$(CONFIG_SONOS) += sonos.o
+ifeq ($(CONFIG_SONOS_SECBOOT), y)
+  obj-y += sonos_sec_fs_keys.o
+  obj-y += sonos_sec_unlock.o
+  obj-y += sonos_sec_soc_$(SONOS_SOC_ARCH).o
+endif
 
 obj-$(CONFIG_MODULES) += kmod.o
 
