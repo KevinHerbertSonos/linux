@@ -109,6 +109,20 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/initcall.h>
 
+#ifdef CONFIG_SONOS_SECBOOT
+#include <sonos/firmware_allowlist.h>
+#include <crypto/sonos_signature_common_linux.h>
+#include <crypto/sonos_signature_keys.h>
+#include <crypto/sonos_signature_verify_linux.h>
+#include "mdp.h"
+#include "sonos_lock.h"
+#include "sonos_unlock.h"
+#include <linux/sonos_sec_general.h>
+#include <linux/sonos_mdp_global.h>
+
+extern void check_sysrq_authorization(void);
+#endif
+
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
@@ -1395,6 +1409,70 @@ void __weak free_initmem(void)
 	free_initmem_default(POISON_FREE_INITMEM);
 }
 
+#ifdef CONFIG_SONOS_SECBOOT
+static int get_verified_serial(uint8_t *serial, size_t serialLen)
+{
+	int result = 0;
+	SonosSignature *sig = NULL;
+
+	/*
+	 * Some of these checks may be overkill within Linux (where
+	 * sys_mdp/sys_mdp3 already got some sanity checking/scrubbing)
+	 * but this code may also end up in u-boot.
+	 */
+	if (serialLen != 6 ||
+	    sys_mdp.mdp_magic != MDP_MAGIC ||
+			sys_mdp.mdp_version < MDP_VERSION_AUTH_FLAGS ||
+			!(sys_mdp.mdp_pages_present & MDP_PAGE3_PRESENT) ||
+			sys_mdp3.mdp3_magic != MDP_MAGIC3 ||
+			sys_mdp3.mdp3_version < MDP3_VERSION_SECURE_BOOT) {
+		printk(KERN_ERR "bad MDP in get_verified_serial: %x %x %x %x %x\n",
+		       sys_mdp.mdp_magic,
+		       sys_mdp.mdp_version,
+		       sys_mdp.mdp_pages_present,
+		       sys_mdp3.mdp3_magic,
+		       sys_mdp3.mdp3_version);
+		return result;
+	}
+
+	sig = kmalloc(sizeof(*sig), GFP_KERNEL);
+	if (sig && sonosUnlockVerifyCpuSerialSig(sys_mdp.mdp_serial, 6,
+					   sys_mdp3.mdp3_cpuid_sig,
+					   sizeof(sys_mdp3.mdp3_cpuid_sig),
+					   sig, sonosHash, sonosRawVerify,
+					   sonosKeyLookup, "unit", NULL)) {
+		printk(KERN_DEBUG "good cpuid/serial binding statement\n");
+		memcpy(serial, sys_mdp.mdp_serial, serialLen);
+		result = 1;
+	} else {
+		printk(KERN_ERR "bad cpuid/serial binding statement\n");
+	}
+
+	if (sig) {
+		kfree(sig);
+	}
+	return result;
+}
+
+/* implement some macros needed by the portable allowlist code */
+#define SFW_GETCPUID sonos_get_cpuid
+#define SFW_GETSERIAL get_verified_serial
+#define SFW_PRINT printk
+#define SFW_PLVL_INFO KERN_INFO
+#define SFW_PLVL_EMERG KERN_EMERG
+#define SFW_BE32_TO_CPU __be32_to_cpu
+
+/* get the portable implementation of check_sonos_firmware_allowlist */
+#include "sonos_fw_allowlist.c.inc"
+
+#undef SFW_GETCPUID
+#undef SFW_GETSERIAL
+#undef SFW_PRINT
+#undef SFW_PLVL_INFO
+#undef SFW_PLVL_EMERG
+#undef SFW_BE32_TO_CPU
+#endif
+
 static int __ref kernel_init(void *unused)
 {
 	int ret;
@@ -1415,6 +1493,31 @@ static int __ref kernel_init(void *unused)
 
 	system_state = SYSTEM_RUNNING;
 	numa_default_policy();
+
+#ifdef CONFIG_SONOS_SECBOOT
+	/* Initialize keytable, check firmware allowlist, proceed with booting. */
+	sonosInitKeyTable();
+
+/*
+ * Refuse to run at all if this kernel image is restricted to some
+ * specific allowlist and we are not on it.
+ *
+ * No matter what other kernel customizations you might be tempted
+ * to do, NEVER remove this code.
+ *
+ * This check is how we implement firmware that is specific to one unit.
+ */
+	if (!check_sonos_firmware_allowlist(&SONOS_FIRMWARE_ALLOWLIST.header,
+					    sizeof(SONOS_FIRMWARE_ALLOWLIST.x))) {
+		BUG();
+	}
+
+	/*
+	 * Check the authorization for sysrq, since when we really want it, we'll
+	 * be in an interrupt and unable to...
+	 */
+	check_sysrq_authorization();
+#endif
 
 	rcu_end_inkernel_boot();
 

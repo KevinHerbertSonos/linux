@@ -56,6 +56,12 @@
 
 #include <trace/hooks/sysrqcrash.h>
 
+#ifdef CONFIG_SONOS_SECBOOT
+#include "mdp.h"
+#include "sonos_lock.h"
+extern int is_sysrq_authorized(void);
+#endif
+
 /* Whether we react on sysrq keys or just ignore them */
 static int __read_mostly sysrq_enabled = CONFIG_MAGIC_SYSRQ_DEFAULT_ENABLE;
 static bool __read_mostly sysrq_always_enabled;
@@ -559,6 +565,14 @@ void __handle_sysrq(int key, bool check_mask)
 	orig_suppress_printk = suppress_printk;
 	suppress_printk = 0;
 
+#ifdef CONFIG_SONOS_SECBOOT
+#ifndef CONFIG_OPROFILE
+	if (!is_sysrq_authorized()) {
+		printk("sysrq handling is disabled\n");
+		return;
+	}
+#endif
+#endif
 	rcu_sysrq_start();
 	rcu_read_lock();
 	/*
