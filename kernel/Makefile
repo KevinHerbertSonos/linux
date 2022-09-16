@@ -13,6 +13,11 @@ obj-y     = fork.o exec_domain.o panic.o \
 	    async.o range.o smpboot.o ucount.o
 
 obj-$(CONFIG_SONOS) += sonos.o
+ifeq ($(CONFIG_SONOS_SECBOOT), y)
+  obj-y += sonos_sec_fs_keys.o
+  obj-y += sonos_sec_unlock.o
+  obj-y += sonos_sec_soc_$(SONOS_SOC_ARCH).o
+endif
 
 obj-$(CONFIG_MODULES) += kmod.o
 obj-$(CONFIG_MULTIUSER) += groups.o
