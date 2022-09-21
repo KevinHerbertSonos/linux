@@ -1,0 +1,44 @@
+/*
+ * Copyright (c) 2022, Sonos, Inc.
+ *
+ * SPDX-License-Identifier:     GPL-2.0
+ *
+ */
+/dts-v1/;
+
+#include "sm1_s905d3_ac200.dts"
+
+/ {
+	model = "Lasso";
+	sonos-product-id = <0x05>;
+
+	efuse: efuse {
+		compatible = "amlogic, efuse";
+		read_cmd = <0x82000030>;
+		write_cmd = <0x82000031>;
+		get_max_cmd = <0x82000033>;
+		read_obj_cmd = <0x82000038>;
+		write_obj_cmd = <0x82000039>;
+		mem_in_base_cmd = <0x82000020>;
+		mem_out_base_cmd = <0x82000021>;
+		key = <&efusekey>;
+		clocks = <&clkc CLKID_EFUSE>;
+		clock-names = "efuse_clk";
+		status = "okay";
+	};
+
+	sonos_rollback:sonos-rollback@ff800000 {
+		compatible = "sonos,sonos-rollback";
+		reg = <0x0 0xff800000 0x0 0x4>;
+		offset = <0x00>;
+		shift = <0>;
+	};
+};
+
+&sd_emmc_a {
+	status = "disabled";
+};
+
+&sd_emmc_b {
+	status = "disabled";
+};
