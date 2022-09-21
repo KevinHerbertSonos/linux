@@ -16,16 +16,6 @@
 
 #define EFUSE_CHECK_NAME_LEN   32
 
-struct aml_efuse_dev {
-	struct platform_device *pdev;
-	struct class           cls;
-	struct cdev            cdev;
-	dev_t                  devno;
-	void __iomem	       *reg_base;
-	unsigned int           secureboot_mask;
-	char name[EFUSE_CHECK_NAME_LEN];
-};
-
 struct aml_efuse_key {
 	int                   num;
 	struct efusekey_info *infos;
@@ -66,6 +56,57 @@ enum efuse_obj_info_e {
 	EFUSE_OBJ_LOCK_STATUS,
 };
 
+enum efuse_obj_type_e {
+	EFUSE_OBJ_LICENSE_ENABLE_SECURE_BOOT    = 0,
+	EFUSE_OBJ_LICENSE_ENABLE_ENCRYPTION,
+	EFUSE_OBJ_LICENSE_REVOKE_KPUB_0,
+	EFUSE_OBJ_LICENSE_REVOKE_KPUB_1,
+	EFUSE_OBJ_LICENSE_REVOKE_KPUB_2,
+	EFUSE_OBJ_LICENSE_REVOKE_KPUB_3,
+	EFUSE_OBJ_LICENSE_ENABLE_ANTIROLLBACK,
+	EFUSE_OBJ_LICENSE_ENABLE_JTAG_PASSWORD,
+	EFUSE_OBJ_LICENSE_ENABLE_SCAN_PASSWORD,
+	EFUSE_OBJ_LICENSE_DISABLE_JTAG,
+	EFUSE_OBJ_LICENSE_DISABLE_SCAN,
+	EFUSE_OBJ_LICENSE_ENABLE_USB_BOOT_PASSWORD,
+	EFUSE_OBJ_LICENSE_DISABLE_USB_BOOT,
+#if defined(SONOS_ARCH_ATTR_SOC_IS_S767)
+	EFUSE_OBJ_LICENSE_ENABLE_M3_SECURE_BOOT,
+	EFUSE_OBJ_LICENSE_ENABLE_M3_ENCRYPTION,
+	EFUSE_OBJ_LICENSE_ENABLE_M4_SECURE_BOOT,
+	EFUSE_OBJ_LICENSE_ENABLE_M4_ENCRYPTION,
+	EFUSE_OBJ_LICENSE_REVOKE_M4_KPUB_0,
+	EFUSE_OBJ_LICENSE_REVOKE_M4_KPUB_1,
+	EFUSE_OBJ_LICENSE_ENABLE_M4_JTAG_PASSWORD,
+	EFUSE_OBJ_LICENSE_DISABLE_M3_JTAG,
+	EFUSE_OBJ_LICENSE_DISABLE_M4_JTAG,
+#endif
+
+	EFUSE_OBJ_THERMAL           = 0x100,
+	EFUSE_OBJ_SBOOT_KPUB_SHA,
+	EFUSE_OBJ_SBOOT_AES256,
+	EFUSE_OBJ_JTAG_PASSWD_SHA_SALT,
+	EFUSE_OBJ_SCAN_PASSWD_SHA_SALT,
+	EFUSE_OBJ_SBOOT_AES256_RAW,
+	EFUSE_OBJ_SBOOT_AES256_ENCRYPT,
+	EFUSE_OBJ_SBOOT_AES256_SHA2,
+	EFUSE_OBJ_AUDIO_CUSTOMER_ID,
+#if defined(SONOS_ARCH_ATTR_SOC_IS_S767)
+	EFUSE_OBJ_M4_SBOOT_KPUB_SHA,
+	EFUSE_OBJ_M4_SBOOT_AES256_RAW,
+	EFUSE_OBJ_M4_SBOOT_AES256_SHA2,
+#endif
+
+	/* General Purpose (GP) REE object */
+	EFUSE_OBJ_GP_REE    = 0x200,
+
+	/* General Purpose (GP) TEE object */
+	EFUSE_OBJ_GP_TEE    = 0x300,
+
+	/* Raw object */
+	EFUSE_OBJ_RAW       = 0x400,
+};
+
 struct efuse_obj_field_t {
 	char name[48];
 	unsigned char data[32];
@@ -84,6 +125,8 @@ struct efuse_hal_api_arg {
 struct aml_efuse_cmd {
 	unsigned int read_cmd;
 	unsigned int write_cmd;
+	unsigned int read_obj_cmd;
+	unsigned int write_obj_cmd;
 	unsigned int get_max_cmd;
 	unsigned int mem_in_base_cmd;
 	unsigned int mem_out_base_cmd;

@@ -5,12 +5,5 @@
 
 /dts-v1/;
 
-#include "sm1_s905d3_ac200.dts"
+#include "lasso_common.dtsi"
 
-&sd_emmc_a {
-	status = "disabled";
-};
-
-&sd_emmc_b {
-	status = "disabled";
-};
