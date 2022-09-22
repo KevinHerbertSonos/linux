@@ -25,7 +25,10 @@
 #include <asm/sections.h>
 #include <linux/amlogic/tee.h>
 
+#if 0
 static u32 handle;
+#endif
+
 static int link_speed;
 module_param(link_speed, int, 0444);
 MODULE_PARM_DESC(link_speed, "select pcie link speed ");
@@ -736,7 +739,10 @@ static int amlogic_pcie_probe(struct platform_device *pdev)
 	int pcie_ctrl_a_rst_bit = 0;
 	u32 pwr_ctl = 0;
 	u32 phy_type = 0;
+//TEE memory protect is currently disabled until SWPBL-198250 is complete
+￼#if 0
 	u32 tee_start, tee_end;
+#endif
 	const void *prop;
 	union pcie_phy_m31_r0 r0;
 
@@ -861,6 +867,8 @@ static int amlogic_pcie_probe(struct platform_device *pdev)
 	if (pwr_ctl)
 		power_switch_to_pcie(amlogic_pcie->phy);
 
+//TEE memory protect is currently disabled until SWPBL-198250 is complete
+#if 0
 	tee_start = roundup(virt_to_phys((void *)_text), TEE_MEM_ALIGN_SIZE);
 	tee_end = rounddown(virt_to_phys((void *)_etext), TEE_MEM_ALIGN_SIZE);
 	dev_dbg(dev, "tee_start = 0x%x, tee_end = 0x%x\n", tee_start, tee_end);
@@ -871,7 +879,7 @@ static int amlogic_pcie_probe(struct platform_device *pdev)
 		dev_err(dev, "pcie tee mem protect failed Error = 0x%x\n", ret);
 		return -ENOMEM;
 	}
-
+#endif
 	if (!amlogic_pcie->phy->phy_base) {
 		phy_base = platform_get_resource_byname(
 			pdev, IORESOURCE_MEM, "phy");
@@ -1268,8 +1276,6 @@ static int amlogic_pcie_resume_noirq(struct device *dev)
 		amlogic_pcie->phy->power_state = 1;
 		usleep_range(500, 510);
 	}
-
-	dw_pcie_setup_rc(pp);
 
 	val = amlogic_cfg_readl(amlogic_pcie, PCIE_CFG0);
 	val |= (APP_LTSSM_ENABLE);
