@@ -19,6 +19,7 @@
 #include <linux/profile.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
+#include <linux/moduleparam.h>
 #include <linux/err.h>
 #include <linux/cpu.h>
 #include <linux/smp.h>
