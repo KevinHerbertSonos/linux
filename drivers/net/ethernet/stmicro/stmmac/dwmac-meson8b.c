@@ -19,6 +19,13 @@
 #include <linux/stmmac.h>
 
 #include "stmmac_platform.h"
+#include <linux/amlogic/scpi_protocol.h>
+
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+#include <linux/input.h>
+#include <linux/amlogic/pm.h>
+#include "../../../../amlogic/ethernet/phy/phy_debug.h"
+#endif
 
 #define PRG_ETH0			0x0
 
@@ -45,6 +52,8 @@
 
 #define MUX_CLK_NUM_PARENTS		2
 
+unsigned int support_mac_wol;
+unsigned int support_nfx_doze;
 struct meson8b_dwmac;
 
 struct meson8b_dwmac_data {
@@ -313,6 +322,186 @@ static int meson8b_init_prg_eth(struct meson8b_dwmac *dwmac)
 	return 0;
 }
 
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+int backup_adv;
+void set_wol_notify_bl31(void)
+{
+	struct arm_smccc_res res;
+
+	arm_smccc_smc(0x8200009D, support_mac_wol,
+					0, 0, 0, 0, 0, 0, &res);
+}
+
+static void set_wol_notify_bl30(void)
+{
+	scpi_set_ethernet_wol(support_mac_wol);
+}
+
+void __iomem *ee_reset_base;
+unsigned int internal_phy;
+static int aml_custom_setting(struct platform_device *pdev, struct meson8b_dwmac *dwmac)
+{
+	struct device_node *np = pdev->dev.of_node;
+	struct device *dev = &pdev->dev;
+	void __iomem *addr = NULL;
+	struct resource *res = NULL;
+	unsigned int cali_val = 0;
+	unsigned int mc_val = 0;
+
+	/*get tx amp setting from tx_amp_src*/
+	pr_info("aml_cust_setting\n");
+
+	/*map ETH_RESET address*/
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "eth_reset");
+	if (!res) {
+		dev_err(&pdev->dev, "Unable to get resource(%d)\n", __LINE__);
+		ee_reset_base = NULL;
+	} else {
+		addr = devm_ioremap(dev, res->start, resource_size(res));
+		if (IS_ERR(addr))
+			dev_err(&pdev->dev, "Unable to map reset base\n");
+		ee_reset_base = addr;
+	}
+
+	if (of_property_read_u32(np, "mac_wol", &support_mac_wol) != 0)
+		pr_info("no mac_wol\n");
+
+	if (of_property_read_u32(np, "wol", &support_gpio_wol) != 0)
+		pr_info("no gpio wol %d\n", support_gpio_wol);
+	else
+		pr_info("gpio %d\n", support_gpio_wol);
+
+	if (of_property_read_u32(np, "keep-alive", &support_nfx_doze) != 0)
+		pr_info("no keep-alive\n");
+	/*nfx doze setting ASAP WOL, if not set, do nothing*/
+	if (support_nfx_doze)
+		support_mac_wol = support_nfx_doze;
+
+	if (of_property_read_u32(np, "internal_phy", &internal_phy) != 0)
+		pr_info("use default internal_phy as 0\n");
+
+	if (of_property_read_u32(np, "cali_val", &cali_val) != 0)
+		pr_info("set default cali_val as 0\n");
+	/*internal_phy 1:inphy;2:exphy; 0 as default*/
+	if (internal_phy == 2)
+		writel(cali_val, dwmac->regs + PRG_ETH1);
+
+	/*invole mc_val since special bit which not
+	 *in normal flow
+	 *T3 must set special reg to run ethernet
+	 */
+	if (of_property_read_u32(np, "mc_val", &mc_val) == 0) {
+		pr_info("cover mc_val as 0x%x\n", mc_val);
+		writel(mc_val, dwmac->regs + PRG_ETH0);
+	}
+
+	return 0;
+}
+
+static int dwmac_meson_disable_analog(struct device *dev)
+{
+	if (support_mac_wol)
+		return 0;
+	writel(0x00000000, phy_analog_config_addr + 0x0);
+	writel(0x003e0000, phy_analog_config_addr + 0x4);
+	writel(0x12844008, phy_analog_config_addr + 0x8);
+	writel(0x0800a40c, phy_analog_config_addr + 0xc);
+	writel(0x00000000, phy_analog_config_addr + 0x10);
+	writel(0x031d161c, phy_analog_config_addr + 0x14);
+	writel(0x00001683, phy_analog_config_addr + 0x18);
+	writel(0x09c0040a, phy_analog_config_addr + 0x44);
+	return 0;
+}
+
+static int dwmac_meson_recover_analog(struct device *dev)
+{
+	if (support_mac_wol)
+		return 0;
+	writel(0x19c0040a, phy_analog_config_addr + 0x44);
+	writel(0x0, phy_analog_config_addr + 0x4);
+	return 0;
+}
+
+extern int stmmac_pltfr_suspend(struct device *dev);
+static int aml_dwmac_suspend(struct device *dev)
+{
+	int ret = 0;
+
+	set_wol_notify_bl31();
+	set_wol_notify_bl30();
+	/*nfx doze do nothing for suspend*/
+	if (support_nfx_doze) {
+		pr_info("doze is running\n");
+		return 0;
+	}
+	pr_info("aml_eth_suspend\n");
+	ret = stmmac_pltfr_suspend(dev);
+	/*internal phy only*/
+	if (internal_phy != 2)
+		dwmac_meson_disable_analog(dev);
+	return ret;
+}
+
+extern int stmmac_pltfr_resume(struct device *dev);
+static int aml_dwmac_resume(struct device *dev)
+{
+	int ret = 0;
+	struct meson8b_dwmac *dwmac = get_stmmac_bsp_priv(dev);
+	struct net_device *ndev = dev_get_drvdata(dev);
+	struct stmmac_priv *priv = netdev_priv(ndev);
+
+	/*nfx doze do nothing for resume*/
+	if (support_nfx_doze) {
+		pr_info("doze is running\n");
+		return 0;
+	}
+
+	pr_info("aml_eth_resume\n");
+	if (internal_phy != 2)
+		dwmac_meson_recover_analog(dev);
+
+	ret = stmmac_pltfr_resume(dev);
+	if (support_mac_wol) {
+		if (get_resume_method() == ETH_PHY_WAKEUP) {
+			if (!priv->plat->mdns_wkup) {
+				pr_info("evan---wol rx--KEY_POWER\n");
+				input_event(dwmac->input_dev,
+					EV_KEY, KEY_POWER, 1);
+				input_sync(dwmac->input_dev);
+				input_event(dwmac->input_dev,
+					EV_KEY, KEY_POWER, 0);
+				input_sync(dwmac->input_dev);
+			} else {
+				pr_info("evan---wol rx--pm event\n");
+				pm_wakeup_event(dev, 2000);
+			}
+		}
+	}
+	if (support_gpio_wol) {
+		if (get_resume_method() == ETH_PHY_GPIO) {
+			pr_info("wzh gpio wol rx--KEY_POWER\n");
+			input_event(dwmac->input_dev,
+				EV_KEY, KEY_POWER, 1);
+			input_sync(dwmac->input_dev);
+			input_event(dwmac->input_dev,
+				EV_KEY, KEY_POWER, 0);
+			input_sync(dwmac->input_dev);
+		}
+	}
+	return 0;
+}
+
+void meson8b_dwmac_shutdown(struct platform_device *pdev)
+{
+	pr_info("aml_eth_shutdown\n");
+	stmmac_pltfr_remove(pdev);
+	if (internal_phy != 2)
+		dwmac_meson_disable_analog(&pdev->dev);
+}
+
+
+
+#endif
 static int meson8b_dwmac_probe(struct platform_device *pdev)
 {
 	struct plat_stmmacenet_data *plat_dat;
@@ -377,6 +566,23 @@ static int meson8b_dwmac_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_remove_config_dt;
 
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+	aml_custom_setting(pdev, dwmac);
+	if (support_mac_wol) {
+		if (of_property_read_u32(pdev->dev.of_node, "mdns_wkup", &plat_dat->mdns_wkup) == 0)
+			pr_info("feature mdns_wkup\n");
+
+		pdev_L = pdev;
+		device_init_wakeup(&pdev_L->dev, 1);
+		mac_wol_enable = 1;
+	}
+
+#ifdef CONFIG_REALTEK_PHY
+	if ((support_mac_wol) || (support_gpio_wol))
+#else
+	if (support_mac_wol)
+#endif
+#endif
 	return 0;
 
 err_remove_config_dt:
