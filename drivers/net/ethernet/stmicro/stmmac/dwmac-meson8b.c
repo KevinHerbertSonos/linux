@@ -558,9 +558,6 @@ void meson8b_dwmac_shutdown(struct platform_device *pdev)
 		dwmac_meson_disable_analog(&pdev->dev);
 }
 
-
-
-#endif
 static int meson8b_dwmac_probe(struct platform_device *pdev)
 {
 	struct plat_stmmacenet_data *plat_dat;
@@ -636,12 +633,6 @@ static int meson8b_dwmac_probe(struct platform_device *pdev)
 		mac_wol_enable = 1;
 	}
 
-#ifdef CONFIG_REALTEK_PHY
-	if ((support_mac_wol) || (support_gpio_wol))
-#else
-	if (support_mac_wol)
-#endif
-#endif
 	return 0;
 
 err_remove_config_dt:
