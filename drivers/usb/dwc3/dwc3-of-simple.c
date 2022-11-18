@@ -31,6 +31,53 @@ struct dwc3_of_simple {
 	bool			need_reset;
 };
 
+#if 1
+static int dwc3_of_simple_clk_init(struct dwc3_of_simple *simple, int count)
+{
+	struct device		*dev = simple->dev;
+	struct device_node	*np = dev->of_node;
+	int			i;
+
+	simple->num_clocks = count;
+	if (count <= 0)
+		return 0;
+
+	simple->clks = devm_kcalloc(dev, (size_t)simple->num_clocks,
+			sizeof(struct clk *), GFP_KERNEL);
+	if (!simple->clks)
+		return -ENOMEM;
+
+	for (i = 0; i < simple->num_clocks; i++) {
+		struct clk	*clk;
+		int		ret;
+
+		clk = of_clk_get(np, i);
+		if (IS_ERR(clk)) {
+			while (--i >= 0) {
+				clk_disable_unprepare(simple->clks[i]);
+				clk_put(simple->clks[i]);
+			}
+			return PTR_ERR(clk);
+		}
+
+		ret = clk_prepare_enable(clk);
+		if (ret < 0) {
+			while (--i >= 0) {
+				clk_disable_unprepare(simple->clks[i]);
+				clk_put(simple->clks[i]);
+			}
+			clk_put(clk);
+
+			return ret;
+		}
+
+		simple->clks[i] = clk;
+	}
+
+	return 0;
+}
+#endif
+
 static int dwc3_of_simple_probe(struct platform_device *pdev)
 {
 	struct dwc3_of_simple	*simple;
