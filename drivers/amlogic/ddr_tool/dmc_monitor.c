@@ -438,10 +438,90 @@ static ssize_t dump_show(struct class *cla,
 }
 static CLASS_ATTR_RO(dump);
 
+static ssize_t debug_store(struct class *cla,
+			  struct class_attribute *attr,
+			  const char *buf, size_t count)
+{
+	long val = 0;
+
+	if (kstrtoul(buf, 0, &val)) {
+		pr_info("invalid input:%s\n", buf);
+		return count;
+	}
+
+	if (val <= 7) {
+		dmc_mon->debug = val;
+		if (dmc_mon->addr_start < dmc_mon->addr_end && dmc_mon->ops &&
+				dmc_mon->ops->set_monitor)
+			dmc_mon->ops->set_monitor(dmc_mon);
+
+	} else {
+		pr_err("Current parameters range from 0-7\n");
+	}
+
+	return count;
+}
+
+static ssize_t debug_show(struct class *cla,
+			 struct class_attribute *attr, char *buf)
+{
+	int s = 0;
+
+	s += sprintf(buf + s, "debug: 0x%02x\n", dmc_mon->debug);
+	if (dmc_mon->debug & DMC_DEBUG_WRITE)
+		s += sprintf(buf + s, "bit(0): write monitor enable\n");
+	else
+		s += sprintf(buf + s, "bit(0): write monitor disable\n");
+
+	if (dmc_mon->debug & DMC_DEBUG_READ)
+		s += sprintf(buf + s, "bit(1): read monitor enable\n");
+	else
+		s += sprintf(buf + s, "bit(1): read monitor disable\n");
+
+	if (dmc_mon->debug & DMC_DEBUG_CMA)
+		s += sprintf(buf + s, "bit(2): cma range not ignore\n");
+	else
+		s += sprintf(buf + s, "bit(2): cma range ignore\n");
+
+	return s;
+}
+static CLASS_ATTR_RW(debug);
+
+#if IS_ENABLED(CONFIG_AMLOGIC_DMC_DEV_ACCESS)
+static ssize_t dev_access_store(struct class *cla,
+			  struct class_attribute *attr,
+			  const char *buf, size_t count)
+{
+	int ret;
+	unsigned long addr = 0, size = 0;
+	int id = 0;
+
+	ret = sscanf(buf, "%d %lx %lx", &id, &addr, &size);
+	if (ret != 3) {
+		pr_info("input param num should be 3 (id addr size)\n");
+		return count;
+	}
+	dmc_dev_access(id, addr, size);
+
+	return count;
+}
+
+static ssize_t dev_access_show(struct class *cla,
+			 struct class_attribute *attr, char *buf)
+{
+	return show_dmc_notifier_list(buf);
+}
+static CLASS_ATTR_RW(dev_access);
+#endif
+
 static struct attribute *dmc_monitor_attrs[] = {
 	&class_attr_range.attr,
 	&class_attr_device.attr,
 	&class_attr_dump.attr,
+	&class_attr_debug.attr,
+#if IS_ENABLED(CONFIG_AMLOGIC_DMC_DEV_ACCESS)
+	&class_attr_dev_access.attr,
+#endif
 	NULL
 };
 ATTRIBUTE_GROUPS(dmc_monitor);
