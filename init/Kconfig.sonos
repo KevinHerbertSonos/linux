@@ -1,0 +1,773 @@
+config SONOS_DEVICE
+        tristate "Sonos class device"
+        default n
+        help
+          Support for Sonos class device
+
+config SONOS_DIAGS
+        bool "Sonos diags"
+        default n
+        help
+          Support for Sonos diagnostics
+
+config SONOS_EVENT_QUEUE
+        tristate "Sonos Event Queue"
+        default n
+        help
+          Support for Sonos event queue module
+
+config SONOS_LLA
+        tristate "Sonos LLA"
+        default n
+        help
+          Support for Sonos Low Latency Audio module
+
+config SONOS_IMX6_SOUND
+        bool "Sonos i.MX6 Sound"
+        depends on SONOS
+        depends on SONOS_LLA
+        default n
+        help
+          Support for Sonos i.MX6 audio driver
+
+config SONOS_ESAI
+        bool "Sonos ESAI"
+        depends on SONOS_LLA
+        default n
+        help
+          Support for Sonos ESAI driver
+
+config SONOS_SSI
+        bool "Sonos SSI"
+        depends on SONOS_LLA
+        default n
+        help
+          Support for Sonos SSI driver
+
+config SONOS_IMX_SPDIF
+        bool "Sonos IMX_SPDIF"
+        depends on SONOS_LLA
+        default n
+        help
+          Support for Sonos IMX_SPDIF driver
+
+config SONOS_EPIT
+        bool "Sonos EPIT"
+        depends on SONOS_LLA
+        default n
+        help
+          Support for Sonos EPIT driver
+
+config SONOS_MTK_GPT
+        bool "Sonos MT8521P GPT"
+        depends on SONOS_LLA
+        default n
+        help
+          Support for Sonos GPT driver for MTK chips
+
+config SONOS_MT8521P_SOUND
+        bool "Sonos MT8521P Sound"
+        depends on SONOS_LLA
+        default n
+        help
+          Support for Sonos MT8521P audio driver
+
+config SONOS_A113_HRTIMER
+        bool "Sonos A113 Hrtimer"
+        depends on SONOS_LLA
+        default n
+        help
+          Support for Sonos A113 High Resolution Timer
+
+config SONOS_LLA_ALSA
+        bool "Sonos ALSA<->LLA Shim"
+        depends on SONOS_LLA
+        default n
+        help
+          Support for Sonos ALSA compatibility driver
+
+config SONOS_MT7615
+        tristate "Sonos MT7615 WiFi"
+        select WIRELESS_EXT
+        default n
+        help
+          Support for Sonos MT7615 WiFi driver
+
+config SONOS_MT7663
+        tristate "Sonos MT7663 WiFi"
+        select WIRELESS_EXT
+	select WEXT_PRIV
+        default n
+        help
+          Support for Sonos MT7663 WiFi driver
+
+config SONOS_MT7916
+        tristate "Sonos MT7916 WiFi"
+        select WIRELESS_EXT
+        default n
+        help
+          Support for Sonos MT7916 WiFi driver
+
+config SONOS_MT7921
+        tristate "Sonos MT7921 WiFi"
+        select WIRELESS_EXT
+	select WEXT_PRIV
+        default n
+        help
+          Support for Sonos MT7921 WiFi driver
+
+config SONOS_BANDSPLIT
+	tristate "Sonos Bandsplit WiFi Driver"
+	default n
+	help
+	   Support for Sonos Bandsplit WiFi Driver
+
+config SONOS_APPLE_AUTH
+       tristate "Sonos Apple Authentication Chip driver"
+       default n
+       help
+         Support for Sonos Apple auth driver
+
+config SONOS_SENSORS
+       tristate "Sonos Sensors driver"
+       default n
+       help
+         Support for Sonos Sensors driver
+
+config SONOS_ORIENTATION
+       tristate "Sonos Orientation driver"
+       default n
+       help
+         Support for Sonos Orientation driver
+
+config SONOS_IMX7ULP_CPU_THERMAL
+       tristate "Sonos IMX7ULP CPU Thermal driver"
+       default n
+       help
+         Support for Sonos IMX7ULP CPU Thermal driver
+
+config SONOS_RPMSG_THERMAL
+       tristate "Sonos RPMsg Thermal driver"
+       default n
+       help
+         Support for Sonos RPMsg Thermal driver
+
+config SONOS_TMP102_SHIM
+       tristate "Sonos TMP102 Shim driver"
+       depends on SENSORS_TMP102
+       default n
+       help
+         Support for Sonos TMP102 shim driver
+
+config SONOS_S5851
+       tristate "Sonos S5851 driver"
+       default n
+       help
+         Support for Sonos S5851 driver
+
+config SONOS_NCU15
+       tristate "Sonos NCU15 driver"
+       default n
+       help
+          Support for reading temperature from ADC-connected NCU15 NTC device
+
+config SONOS_BATTERY_TEMP
+       tristate "Sonos battery temperature driver"
+       default n
+       help
+          Support for reading battery temperature
+
+config SONOS_S767_SOC_THERMAL_SHIM
+       tristate "Sonos S767 Thermal shim driver"
+       default n
+       help
+          Support for reading temperature from s767 native kernel driver
+
+config SONOS_THERMAL_MGMT
+       tristate "Sonos Thermal Management driver"
+       default n
+       help
+         Support for Sonos Thermal Management driver
+
+config SONOS_WALL_MOUNT
+       tristate "Sonos Wall Mount driver"
+       default n
+       help
+         Support for Sonos Wall Mount driver
+
+config SONOS_MOTION_DETECTION
+       tristate "Sonos Motion Detection driver"
+       default n
+       help
+         Support for Sonos Motion Detection driver
+
+config SONOS_LIS2HH12
+       tristate "Sonos LIS2HH12 driver"
+       default n
+       help
+         Support for Sonos LIS2HH12 driver
+
+config SONOS_BMA420
+       tristate "Sonos BMA420 driver"
+       default n
+       help
+         Support for Sonos BMA420 driver
+
+config SONOS_FXL6408
+       tristate "Sonos FXL6408 driver"
+       default n
+       help
+         Support for Sonos FXL6408 driver
+
+config SONOS_PIC16F
+       tristate "Sonos PIC16F driver"
+       default n
+       help
+         Support for Sonos PIC16F driver
+
+config SONOS_MMA8453Q
+       tristate "Sonos MMA8453Q driver"
+       default n
+       help
+         Support for Sonos MMA8453Q driver
+
+config SONOS_CYPRESS_PSOC
+       tristate "Sonos Cypress PSoC driver"
+       default n
+       help
+         Support for Sonos Cypress PSoC driver
+
+config SONOS_SDD
+       tristate "Sonos SDD driver"
+       default n
+       help
+         Support for Sonos SDD driver
+
+config SONOS_SYSLINK_RPMSG
+       tristate "Sonos SYSLINK RPMSG"
+       default n
+       help
+         Support for RPMSG using Sonos SYSLINK
+
+config SONOS_SYSLINK
+       tristate "Sonos Syslink driver"
+       default n
+       depends on SONOS_SYSLINK_RPMSG
+       help
+         Support for Sonos Syslink
+
+config SONOS_LEDCTL
+       tristate "Sonos LED control driver"
+       default n
+       help
+         Support for Sonos LED control module
+
+config SONOS_LEDCTL_RPMSG
+        tristate "Sonos LED control via rpmsg"
+        depends on RPMSG
+        default n
+        help
+          Support for Sonos LED control on platforms with access via rpmsg
+
+config SONOS_ADP8863
+        tristate "Sonos ADP8863"
+        select SONOS_LEDCTL
+        default n
+        help
+          Support for Sonos ADP8863 driver
+
+config SONOS_PWM_LED
+        tristate "Sonos PWM LEDs"
+        select SONOS_LEDCTL
+        default n
+        help
+          Support for Sonos PWM LED driver
+
+config SONOS_LP5562
+        tristate "Sonos LP5562"
+        select SONOS_LEDCTL
+        default n
+        help
+          Support for Sonos LP5562 driver
+
+config SONOS_PWM_MM_LED
+        tristate "Sonos Microphone Mute PWM LED"
+        default n
+        help
+          Support for Sonos Microphone Mute PWM LED driver
+
+config SONOS_ICE40_LED
+        tristate "Sonos iCE40 LED"
+        select SONOS_LEDCTL
+        default n
+        help
+          Support for Sonos iCE40 FPGA LED driver
+
+config SONOS_IS31FL3195
+        tristate "Sonos IS31FL3195"
+        select SONOS_LEDCTL
+        default n
+        help
+          Support for Sonos IS31FL3195 driver
+
+config SONOS_HDMICTL
+        tristate "Sonos HDMI control driver"
+        default n
+        help
+         Support for Sonos HDMI control module
+
+config SONOS_AMPCTL
+       tristate "Sonos amp control driver"
+       default n
+       help
+         Support for Sonos amp control module
+
+config SONOS_I2C_AMPCTL
+       tristate "Sonos amp control driver for I2C dac/amp"
+       default n
+       help
+         Support for Sonos amp control module
+
+config SONOS_AK4432
+        bool "Sonos AK4432"
+        depends on SONOS_AMPCTL
+        default n
+        help
+          Support for Sonos AK4432 driver
+
+config SONOS_AK4458
+        bool "Sonos AK4458"
+        depends on SONOS_AMPCTL
+        default n
+        help
+          Support for Sonos AK4458 driver
+
+config SONOS_AK4613
+        bool "Sonos AK4613"
+        depends on SONOS_AMPCTL
+        default n
+        help
+          Support for Sonos AK4613 driver
+
+config SONOS_CS4265
+        bool "Sonos CS4265"
+        depends on SONOS_AMPCTL
+        default n
+        help
+          Support for Sonos CS4265 driver
+
+config SONOS_MAX9837x
+        bool "Sonos MAX9837x"
+        depends on SONOS_I2C_AMPCTL
+        default n
+        help
+          Support for Sonos MAX9837x driver
+
+config SONOS_TAS5720
+        bool "Sonos TAS5720"
+        depends on SONOS_I2C_AMPCTL
+        default n
+        help
+          Support for Sonos TAS5720 driver
+
+config SONOS_TAS58XX
+        tristate "Sonos TAS58XX"
+        select SONOS_I2C_AMPCTL
+        default n
+        help
+          Support for Sonos TAS58XX driver
+
+config SONOS_MA2304
+        tristate "Sonos MA2304"
+        select SONOS_I2C_AMPCTL
+        default n
+        help
+          Support for Sonos MA2304 driver
+
+config SONOS_SSM3582
+        tristate "Sonos SSM3582"
+        select SONOS_I2C_AMPCTL
+        default n
+        help
+          Support for Sonos SSM3582 driver
+
+config SONOS_RT9120S
+        tristate "Sonos RT9120S"
+        select SONOS_I2C_AMPCTL
+        default n
+        help
+          Support for Sonos RT9120S driver
+
+config SONOS_MICCTL
+       tristate "Sonos mic control driver"
+       default n
+       help
+         Support for Sonos mic control module
+
+config SONOS_PCM1864
+        tristate "Sonos PCM1864"
+        depends on SONOS_MICCTL
+        default n
+        help
+          Support for Sonos PCM1864 driver
+
+config SONOS_GPIO_MIC
+        tristate "Sonos GPIO Mic"
+        depends on SONOS_MICCTL
+        default n
+        help
+          Support for Sonos GPIO microphone control
+
+config SONOS_ICE40_MIC
+        tristate "Sonos iCE40 Mic"
+        depends on SONOS_MICCTL && OF
+        default n
+        help
+          Support for Sonos microphone control via iCE40
+
+config SONOS_BLACKBOX
+       tristate "Sonos blackbox kernel trace module"
+       default n
+       help
+         Support for Sonos blackbox module
+
+config SONOS_LINEIN
+        bool "Sonos Line-in"
+        depends on SONOS_SENSORS
+        default n
+        help
+          Support for Sonos line-in driver
+
+config SONOS_BUTTONS
+        tristate "Sonos Buttons"
+        depends on SONOS
+        depends on SONOS_SENSORS
+        default n
+        help
+          Support for Sonos generalized buttons driver
+
+config SONOS_GPIO_BUTTONS
+        tristate "Sonos Physical Buttons"
+        depends on SONOS
+        default n
+        help
+          Support for Sonos physical buttons driver
+
+config SONOS_SYMBOLIC_GPIO
+        bool "Sonos Symbolic GPIO Output Control"
+        depends on SONOS_SENSORS
+        default n
+        help
+          Support for Sonos GPIO toggle through symbolic sysfs files
+
+config SONOS_PSMON
+       tristate "Sonos power supply monitoring (brownout detection) module"
+       default n
+       help
+         Support for Sonos power supply monitoring
+
+config SONOS_CAAMKEYS
+       tristate "Sonos i.MX6 CAAM module"
+       default n
+       help
+         Support for Sonos CAAM driver
+
+config SONOS_MTK_CRYPTO_TEST
+       tristate "Sonos module for testing MTK TEE crypto API"
+       default n
+       help
+         Support for Sonos MTK TEE crypto API testing
+
+config SONOS_M4
+       tristate "Sonos M4 module"
+       default n
+       help
+         Support for Sonos M4 driver
+
+config SONOS_MTK_CM4
+       tristate "Sonos Mediatek CM4 module"
+       default n
+       help
+         Support for Sonos Mediatek CM4 driver
+
+config SONOS_ICE40_FPGA
+       tristate "Sonos ICE40 FPGA module"
+       default n
+       help
+         Support for Sonos ICE40 FPGA driver
+
+config SONOS_CHK
+       tristate "Sonos check module"
+       default n
+       help
+         Support for Sonos check driver
+
+config SONOS_CCG3_SWD
+       tristate "Sonos CCG3/SWD Module"
+       default n
+       help
+         Support for Sonos CCG3/SWD Module
+
+config SONOS_PSOC_SWD
+       tristate "Sonos PSOC/SWD Module"
+       default n
+       help
+         Support for Sonos PSOC/SWD Module
+
+config SONOS_SGE_A113
+       tristate "Sonos PSoC/SGE image"
+       default n
+       help
+         Support for Sonos PSoC/SGE image for A113 platforms
+
+config SONOS_SDD_RTC
+       tristate "Sonos PSoC RTC feature"
+       default n
+       help
+         Support for Sonos PSoC based RTC
+
+config SONOS_SGE_TUPELO_33
+       tristate "Sonos PSoC/SGE image"
+       default n
+       help
+         Support for Sonos PSoC/SGE image for Tupelo platforms
+
+config SONOS_SGE_APOLLO_A1
+       tristate "Sonos PSoC/SGE image"
+       default n
+       help
+         Support for Sonos PSoC/SGE Apollo image
+
+config SONOS_SWD_BYPASS_GPIOLIB
+       tristate "Sonos Bypass GPIO lib for faster bit banging"
+       default n
+       help
+         Support for Sonos GPIOLIB bypass
+
+config SONOS_UWB_SR150
+       tristate "SPI driver for NXP SR150 devices"
+       default n
+       help
+         support for Sonos SR150 based UWB
+
+config SONOS_SGE_TRIDENT
+       tristate "Sonos PSoC/SGE image"
+       default n
+       help
+         Support for Sonos PSoC/SGE Trident P0 main image
+
+config SONOS_SGE_TRIDENT_27
+       tristate "Sonos PSoC/SGE image"
+       default n
+       help
+         Support for Sonos PSoC/SGE Trident P0 remote image
+
+config SONOS_BYPASS_MT8518S
+       tristate "Sonos PSoC/SGE image (mt8518s)"
+       default n
+       help
+         Support for Sonos PSoC/SGE Bravo image
+
+config SONOS_SGE_ELREY
+       tristate "Sonos PSoC/SGE image"
+       default n
+       help
+         Support for Sonos PSoC/SGE ElRey image
+
+config SONOS_SDD_RT_PINCTRL
+       tristate "Sonos SDD run-time pinmuxing"
+       depends on SONOS
+       default n
+       help
+         Support for Sonos hardware platforms that require bypassing Linux Pin Control (iMX6SX/Chaplin/Neptune)
+
+config SONOS_EEPROM
+       tristate "Sonos i2c eeprom module"
+       default n
+       help
+         Support for Sonos i2c eeprom driver
+
+config SONOS_SECBOOT
+        bool "Sonos Secure Boot"
+        depends on CRYPTO
+        depends on CRYPTO_CBC
+        depends on CRYPTO_CTR
+        depends on CRYPTO_AES
+        depends on CRYPTO_RSA
+        depends on CRYPTO_SHA1
+        depends on CRYPTO_SHA256
+        depends on ASYMMETRIC_KEY_TYPE
+        depends on ASYMMETRIC_PUBLIC_KEY_SUBTYPE
+        default n
+        help
+          Support for Sonos Secure Boot stuff
+
+config SONOS_USES_DM_VERITY
+        bool "Sonos Uses dm-verity"
+        depends on SONOS_SECBOOT
+        depends on DM_VERITY
+        default n
+        help
+          Support for Sonos dm-verity information storage and procfile publishing
+
+config SONOS_BRIDGE_PROXY
+        bool "Sonos Bridge Proxy"
+        default n
+        help
+          Support for Sonos Bridge Proxy
+
+config SONOS_ROOTFS_MAX
+        bool "Sonos Use Rootfs Max Size in Kernel Config"
+        default n
+        help
+           Rootfs Max Size is only used by virtual block module (nand/ubi)
+           to avoid using ifdef in the code, the
+           SONOS_ROOTFS_MAX is defined here
+
+config SONOS_ROOTFS_MAX_SIZE
+        int "Sonos Max Rootfs Size in Decimal"
+        depends on SONOS_ROOTFS_MAX
+        default 0
+        help
+          Actual byte size associated with SONOS_ROOTFS_MAX.
+
+config SONOS_FUSE_CTRL
+        tristate "Sonos Fuse Control"
+        default n
+        help
+          Fuse Control GPIO
+
+config SONOS_IR
+	tristate "Sonos IR shim driver"
+	depends on AMLOGIC_REMOTE
+	default n
+	help
+	  On Sonos IR links to decoder.
+
+config SONOS_USB_PD
+       tristate "Sonos USB Power Delivery driver"
+       default n
+       help
+         Support for Sonos USB Power Delivery
+
+config SONOS_BATCTL
+       tristate "Sonos Battery Control driver"
+       default n
+       help
+         Support for Sonos Battery Control Driver
+
+config SONOS_PSY
+        tristate "Sonos PSY"
+        select SONOS_USB_PD
+        default n
+        help
+          Support for Sonos proxy power supply driver
+
+config SONOS_CCG3
+        tristate "Sonos CCG3"
+        select SONOS_USB_PD
+        default n
+        help
+          Support for Sonos CCG3 driver
+
+config SONOS_CCG6
+        tristate "Sonos CCG6"
+        depends on SONOS_PSOC_SWD
+        default n
+        help
+          Support for Sonos CCG6 driver
+
+config SONOS_BQ40Z50
+        tristate "BQ40Z50 Fuel Gauge"
+        default n
+        help
+          Say Y here to enable support for fuel gauge BQ40Z50
+
+config SONOS_BQ25700
+        tristate "BQ25700 Battery Charger"
+        default n
+        help
+          Say Y here to enable support for Battery Charger BQ25700
+
+config SONOS_GPIO_SWITCH
+        tristate "Sonos GPIO switch"
+        depends on SONOS
+        default n
+        help
+          Support for Sonos GPIO switch driver
+
+config SONOS_SUSPEND_WAKEUP
+        tristate "Sonos Suspend Wakeup "
+        depends on SONOS
+        default n
+        help
+          Support for Sonos Suspend Wakeup driver
+
+config SONOS_ALS
+        tristate "Sonos ALS driver"
+        default n
+        help
+          Support for Sonos generalized ALS driver
+
+config SONOS_TIOPT3001
+        tristate "Sonos TI OPT-3001 Lux Meter driver"
+        default n
+        help
+          Support for Sonos TI OPT-3001 Lux Meter
+
+config SONOS_LTR311
+        tristate "Sonos Lite-on LTR-311 Lux Meter driver"
+        default n
+        help
+          Support for Sonos Lite-on LTR-311 Lux Meter
+
+config SONOS_NXP3H2111_NFC
+        tristate "Sonos NXP 3H2111 NFC driver"
+        default n
+        help
+          Support for Sonos NXP 3H2111 NFC driver
+
+config SONOS_RPMSG_SPI
+        tristate "RPMSG driver over SPI"
+        default n
+        depends on RPMSG && SPI && !SPIDEV
+
+config SONOS_BLUETOOTH_RPMSG
+        tristate "Sonos RPMsg Bluetooth bridge driver"
+        default n
+        depends on RPMSG && SPI && !SPIDEV
+        help
+          Support for Sonos RPMsg Bluetooth bridge driver
+
+config SONOS_SII9437
+        tristate "Sonos HDMI eARC driver for Lattice SII9437"
+        default n
+        help
+          Support for Sonos HDMI eARC driver for Lattice SII9437
+
+config SONOS_SNDCRDCTL
+        tristate "Sonos Sound Card control driver"
+        default n
+        help
+          Support for Sonos Sound Card control driver
+
+config SONOS_MMCTEST_OFFSET
+        hex "Sonos MMC test offset in block"
+        default 0x180000
+        depends on MMC_TEST
+        help
+          Sonos MMC test skip real data
+
+config SONOS_IR_MT8518S
+        tristate "support MTK IR receiver"
+        help
+          If the platform is supported for IRRX,
+          this configuration should be configured,
+          and the IRRX driver configuration should
+          be configured as well.
+
+config GALCORE
+        tristate "galcore driver for NPU on S767"
+        default n
+        help
+          Support for galcore driver for NPU on S767
