@@ -1959,6 +1959,11 @@
 				status = "okay";
 			};
 		};
+		aes_hwkey_gcm: aes_hwkey_gcm{
+				compatible = "amlogic, aes_hwkey_gcm";
+				aes_gcm_huk_smc_id = <0x8200007A>;
+				status = "okay";
+		};
 
 		aobus: bus@ff800000 {
 			compatible = "simple-bus";
