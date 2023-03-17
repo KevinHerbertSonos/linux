@@ -30,8 +30,8 @@ struct aml_efuse_key {
 #define AML_DATA_PROCESS            (0x820000FF)
 #define AML_D_P_W_EFUSE_AMLOGIC     (0x20)
 #define EFUSE_PATTERN_SIZE      (0x400)
-#define EFUSE_OBJ_READ          (0x8200003B)
-#define EFUSE_OBJ_WRITE         (0x8200003C)
+#define EFUSE_OBJ_READ          (0x82000038)
+#define EFUSE_OBJ_WRITE         (0x82000039)
 
 enum efuse_obj_status_e {
 	EFUSE_OBJ_SUCCESS		= 0,
