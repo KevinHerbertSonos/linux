@@ -333,7 +333,9 @@ static void show_data(unsigned long addr, int nbytes, const char *name)
  */
 static void show_user_data(unsigned long addr, int nbytes, const char *name)
 {
-	int	i, j;
+	//SONOS START
+	//int	i, j;
+	//SONOS END
 	int	nlines;
 	u32	*p;
 
@@ -360,27 +362,27 @@ static void show_user_data(unsigned long addr, int nbytes, const char *name)
 	nbytes += (addr & (sizeof(u32) - 1));
 	nlines = (nbytes + 31) / 32;
 
-	for (i = 0; i < nlines; i++) {
-		/*
-		 * just display low 16 bits of address to keep
-		 * each line of the dump < 80 characters
-		 */
-		pr_info("%04lx ", (unsigned long)p & 0xffff);
-		if (irqs_disabled())
-			continue;
-		for (j = 0; j < 8; j++) {
-			u32	data;
-			int bad;
-
-			bad = __get_user(data, p);
-			if (bad)
-				pr_cont(" ********");
-			else
-				pr_cont(" %08x", data);
-			++p;
-		}
-		pr_cont("\n");
-	}
+	//SONOS START
+	// for (i = 0; i < nlines; i++) {
+	// 	/*
+	// 	 * just display low 16 bits of address to keep
+	// 	 * each line of the dump < 80 characters
+	// 	 */
+	// 	pr_info("%04lx ", (unsigned long)p & 0xffff);
+	// 	for (j = 0; j < 8; j++) {
+	// 		u32	data;
+	// 		int bad;
+	//
+	// 		bad = __get_user(data, p);
+	// 		if (bad)
+	// 			pr_cont(" ********");
+	// 		else
+	// 			pr_cont(" %08x", data);
+	// 		++p;
+	// 	}
+	// 	pr_cont("\n");
+	// }
+	//SONOS END
 }
 
 static void show_pfn(unsigned long reg, char *s)
