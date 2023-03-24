@@ -6,11 +6,9 @@
 /dts-v1/;
 
 #include "meson-sm1.dtsi"
-#include "partition_normal_linux.dtsi"
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/gpio/meson-g12a-gpio.h>
-#include "mesonsm1_skt-panel.dtsi"
 
 / {
 	amlogic-dt-id = "sm1_s905d3_ac200";
