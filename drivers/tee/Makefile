@@ -1,6 +1,10 @@
-# SPDX-License-Identifier: GPL-2.0
-obj-$(CONFIG_TEE) += tee.o
-tee-objs += tee_core.o
-tee-objs += tee_shm.o
-tee-objs += tee_shm_pool.o
+obj-$(CONFIG_TEE) += optee.o
 obj-$(CONFIG_OPTEE) += optee/
+
+optee-objs := tee_core.o \
+	      tee_shm.o \
+	      tee_shm_pool.o \
+	      tee_data_pipe.o
+
+ccflags-y += -I$(srctree)/$(src)/include/linux
+ccflags-y += -I$(srctree)/$(src)/include
