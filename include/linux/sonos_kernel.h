@@ -59,6 +59,7 @@ extern int sonos_product_id;
 #define PRODUCT_ID_OPTIMO2 0x3
 #define PRODUCT_ID_PRIMA 0x4
 #define PRODUCT_ID_LASSO 0x5
+#define PRODUCT_ID_RYLESS767 0x7
 
 /* NOTE:  usage of these defines should be wrapped in SOC_IS checks, as the product id is only
  * unique on a per-SoC basis.
