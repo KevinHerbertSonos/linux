@@ -1,16 +1,27 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015, Linaro Limited
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  */
 
 #ifndef OPTEE_PRIVATE_H
 #define OPTEE_PRIVATE_H
 
+#include <linux/device.h>
 #include <linux/arm-smccc.h>
 #include <linux/semaphore.h>
-#include <linux/tee_drv.h>
 #include <linux/types.h>
+#include "tee_drv.h"
 #include "optee_msg.h"
+#include "../tee_private.h"
 
 #define OPTEE_MAX_ARG_SIZE	1024
 
@@ -19,7 +30,6 @@
 #define TEEC_ERROR_BAD_PARAMETERS	0xFFFF0006
 #define TEEC_ERROR_COMMUNICATION	0xFFFF000E
 #define TEEC_ERROR_OUT_OF_MEMORY	0xFFFF000C
-#define TEEC_ERROR_SHORT_BUFFER		0xFFFF0010
 
 #define TEEC_ORIGIN_COMMS		0x00000002
 
@@ -66,10 +76,22 @@ struct optee_supp {
 };
 
 /**
+ * struct optee_timer - timer struct
+ * @mutex:          held while accessing timer_list
+ * @timer_list:     list of timer data
+ * @wq:             work queue of the timer
+ */
+
+struct optee_timer {
+	struct mutex mutex;
+	struct list_head timer_list;
+	struct workqueue_struct *wq;
+};
+
+/**
  * struct optee - main service struct
  * @supp_teedev:	supplicant device
  * @teedev:		client device
- * @ctx:		driver internal TEE context
  * @invoke_fn:		function to issue smc or hvc
  * @call_queue:		queue of threads waiting to call @invoke_fn
  * @wait_queue:		queue of threads from secure world waiting for a
@@ -77,20 +99,17 @@ struct optee_supp {
  * @supp:		supplicant synchronization struct for RPC to supplicant
  * @pool:		shared memory pool
  * @memremaped_shm	virtual address of memory in shared memory pool
- * @sec_caps:		secure world capabilities defined by
- *			OPTEE_SMC_SEC_CAP_* in optee_smc.h
  */
 struct optee {
 	struct tee_device *supp_teedev;
 	struct tee_device *teedev;
 	optee_invoke_fn *invoke_fn;
-	struct tee_context *ctx;
 	struct optee_call_queue call_queue;
 	struct optee_wait_queue wait_queue;
 	struct optee_supp supp;
+	struct optee_timer timer;
 	struct tee_shm_pool *pool;
 	void *memremaped_shm;
-	u32 sec_caps;
 };
 
 struct optee_session {
@@ -115,16 +134,7 @@ struct optee_rpc_param {
 	u32	a7;
 };
 
-/* Holds context that is preserved during one STD call */
-struct optee_call_ctx {
-	/* information about pages list used in last allocation */
-	void *pages_list;
-	size_t num_entries;
-};
-
-void optee_handle_rpc(struct tee_context *ctx, struct optee_rpc_param *param,
-		      struct optee_call_ctx *call_ctx);
-void optee_rpc_finalize_call(struct optee_call_ctx *call_ctx);
+void optee_handle_rpc(struct tee_context *ctx, struct optee_rpc_param *param);
 
 void optee_wait_queue_init(struct optee_wait_queue *wq);
 void optee_wait_queue_exit(struct optee_wait_queue *wq);
@@ -154,30 +164,14 @@ int optee_cancel_req(struct tee_context *ctx, u32 cancel_id, u32 session);
 
 void optee_enable_shm_cache(struct optee *optee);
 void optee_disable_shm_cache(struct optee *optee);
-void optee_disable_unmapped_shm_cache(struct optee *optee);
-
-int optee_shm_register(struct tee_context *ctx, struct tee_shm *shm,
-		       struct page **pages, size_t num_pages,
-		       unsigned long start);
-int optee_shm_unregister(struct tee_context *ctx, struct tee_shm *shm);
-
-int optee_shm_register_supp(struct tee_context *ctx, struct tee_shm *shm,
-			    struct page **pages, size_t num_pages,
-			    unsigned long start);
-int optee_shm_unregister_supp(struct tee_context *ctx, struct tee_shm *shm);
 
 int optee_from_msg_param(struct tee_param *params, size_t num_params,
 			 const struct optee_msg_param *msg_params);
 int optee_to_msg_param(struct optee_msg_param *msg_params, size_t num_params,
 		       const struct tee_param *params);
 
-u64 *optee_allocate_pages_list(size_t num_entries);
-void optee_free_pages_list(void *array, size_t num_entries);
-void optee_fill_pages_list(u64 *dst, struct page **pages, int num_pages,
-			   size_t page_offset);
-
-int optee_enumerate_devices(void);
-void optee_unregister_devices(void);
+int optee_log_init(struct tee_device *, phys_addr_t, uint32_t);
+void optee_log_exit(struct tee_device *);
 
 /*
  * Small helpers
@@ -193,5 +187,12 @@ static inline void reg_pair_from_64(u32 *reg0, u32 *reg1, u64 val)
 	*reg0 = val >> 32;
 	*reg1 = val;
 }
+
+void optee_timer_init(struct optee_timer *timer);
+void optee_timer_destroy(struct optee_timer *timer);
+void optee_timer_missed_destroy(struct tee_context *ctx, u32 session);
+
+int optee_wm_irq_register(void);
+void optee_wm_irq_free(void);
 
 #endif /*OPTEE_PRIVATE_H*/

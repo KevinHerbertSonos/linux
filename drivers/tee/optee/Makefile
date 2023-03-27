@@ -1,8 +1,16 @@
-# SPDX-License-Identifier: GPL-2.0
-obj-$(CONFIG_OPTEE) += optee.o
-optee-objs += core.o
-optee-objs += call.o
-optee-objs += rpc.o
-optee-objs += supp.o
-optee-objs += shm_pool.o
-optee-objs += device.o
+obj-y += optee_armtz.o
+
+optee_armtz-objs += core.o
+optee_armtz-objs += call.o
+optee_armtz-objs += rpc.o
+optee_armtz-objs += supp.o
+ifeq ($(KERNEL_A32_SUPPORT), true)
+optee_armtz-objs += smccc-call-a32.o
+else
+optee_armtz-objs += smccc-call.o
+endif
+optee_armtz-objs += log.o
+optee_armtz-objs += watermark.o
+
+ccflags-y += -I$(srctree)/$(src)/../include
+ccflags-y += -I$(srctree)/$(src)/../include/linux
