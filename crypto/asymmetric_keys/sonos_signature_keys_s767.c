@@ -27,6 +27,9 @@ extern SonosRsaKeyEntry SRKE_unitCA_optimo;
 extern SonosRsaKeyEntry SRKE_unlock_prima;
 extern SonosRsaKeyEntry SRKE_unitCA_prima;
 
+extern SonosRsaKeyEntry SRKE_unlock_ryless767;
+extern SonosRsaKeyEntry SRKE_unitCA_ryless767;
+
 /* point the various pointers at the corresponding array fields */
 void
 sonosInitKeyTable(void)
@@ -46,6 +49,10 @@ sonosInitKeyTable(void)
 	else if (sonos_product_id == PRODUCT_ID_PRIMA) {
 		g_SonosSigningKeys[0] = &SRKE_unlock_prima;
 		g_SonosSigningKeys[1] = &SRKE_unitCA_prima;
+	}
+	else if (sonos_product_id == PRODUCT_ID_RYLESS767) {
+		g_SonosSigningKeys[0] = &SRKE_unlock_ryless767;
+		g_SonosSigningKeys[1] = &SRKE_unitCA_ryless767;
 	}
 	if (g_SonosSigningKeys[0] == NULL) {
 		printk(KERN_CRIT "sonosInitKeyTable: failed - bad product_id (%d)\n",
