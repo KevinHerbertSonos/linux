@@ -5,5 +5,5 @@
 
 /dts-v1/;
 
-#include "lasso_common.dtsi"
+#include "ryless767_common.dtsi"
 
