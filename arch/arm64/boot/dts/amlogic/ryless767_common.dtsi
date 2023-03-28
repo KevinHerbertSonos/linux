@@ -9,7 +9,7 @@
 #include "sm1_s905d3_ac200.dts"
 
 / {
-	model = "Lasso";
+	model = "RylesS767";
 	amlogic-dt-id = "sm1_ac200_2g";
 	compatible = "amlogic, g12a";
 	interrupt-parent = <&gic>;
