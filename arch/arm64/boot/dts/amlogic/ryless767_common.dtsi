@@ -500,6 +500,18 @@
 			reg = <0x0 0xff63c000 0x0 0x2000>;
 		};
 	};
+
+	auge_sound {
+		aml-audio-card,dai-link@1 {
+			tdmbcodec: codec {
+				sound-dai = <&dummy_codec>;
+			};
+		};
+	};
+};
+
+&i2c3 {
+	status = "disabled";
 };
 
 &pwm_AO_cd {
