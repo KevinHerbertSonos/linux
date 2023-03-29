@@ -21,6 +21,8 @@
 #include <crypto/public_key.h>
 #include <crypto/sonos_signature_keys.h>
 #include <crypto/hash_info.h>
+#include <linux/string.h>
+#include <linux/slab.h>
 
 int
 sonosRawVerify(SonosSigningKey_t vkey,
@@ -46,22 +48,36 @@ sonosRawVerify(SonosSigningKey_t vkey,
 	pk.key = (void *)keyEntry->der;
 	pk.keylen = keyEntry->derLen;
 	pk.pkey_algo = "rsa";
+	pk.key_is_private = false;
+	/* We don't need to initialize the rest of the public_key fields
+	   (algo, params, paramlen) since they don't apply to RSA
+	   and are already zeroed out
+	*/
 
 	memset(&pks, 0, sizeof(pks));
-	pks.s = (u8 *)signature;
+	/* kmemdup sig and digest so the virt_to_phys check passes */
+	pks.s = (u8 *)kmemdup(signature, sigLen, GFP_KERNEL);
 	pks.s_size = sigLen;
-	pks.digest = (u8 *)digest;
+	pks.digest = (u8 *)kmemdup(digest, digestLen, GFP_KERNEL);
 	pks.digest_size = digestLen;
 	pks.pkey_algo = "rsa";
 	pks.hash_algo = "sha256";
+	pks.encoding = "pkcs1";
 
-	if (public_key_verify_signature(&pk, &pks) == 0) {
-		result = 1;
+	if (!pks.s || !pks.digest) {
+		printk(KERN_ERR "sonosRawVerify: kmemdup failed\n");
 	}
 	else {
-		printk(KERN_ERR "sonosRawVerify: verify_signature failed\n");
+		if (public_key_verify_signature(&pk, &pks) == 0) {
+			result = 1;
+		}
+		else {
+			printk(KERN_ERR "sonosRawVerify: verify_signature failed\n");
+		}
 	}
 
+	kfree(pks.s);
+	kfree(pks.digest);
 	return result;
 }
 
