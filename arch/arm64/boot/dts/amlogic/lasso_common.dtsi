@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Sonos, Inc.
+ * Copyright (c) 2022-2023, Sonos, Inc.
  *
  * SPDX-License-Identifier:     GPL-2.0
  *
@@ -77,6 +77,21 @@
                                 fault-temperature = <105>;
                                 warn-temperature = <105>;
                         };
+		};
+		psoc_gpios: gpiochip4 {
+			compatible = "sonos,psoc-gpio";
+			gpio-controller;
+			num-gpios = <1>;
+			#gpio-cells = <2>;
+			status = "okay";
+		};
+		micctl_gpio:sonos-gpio-micctl {
+			compatible = "sonos,gpio-mics";
+			micctl-gpio = <&psoc_gpios 0 GPIO_ACTIVE_HIGH>;
+		};
+		micctl@1 {
+			compatible = "sonos,micctl";
+			micctl-device = <&micctl_gpio>;
 		};
 	} ;
 	ir-rcvr {
@@ -544,15 +559,6 @@
 		tuner_xtal_cap = <30>; /* when tuner_xtal_mode = 1, set 25 */
 	};
 
-	// FIXME -- update when Lasso P1A is available
-	micctl_gpio:sonos-gpio-micctl {
-		compatible = "sonos,gpio-mics";
-		micctl-gpio = <&psoc_gpios 0 GPIO_ACTIVE_HIGH>;
-	};
-	micctl@1 {
-		compatible = "sonos,micctl";
-		micctl-device = <&micctl_gpio>;
-	};
 
 	sonos_rollback:sonos-rollback@ff800000 {
 		compatible = "sonos,sonos-rollback";
@@ -574,7 +580,7 @@
 		clocks = <&clkc CLKID_EFUSE>;
 		clock-names = "efuse_clk";
 		status = "okay";
-};
+	};
 
 	cpu_iomap {
 		compatible = "amlogic, iomap";
@@ -596,6 +602,9 @@
 		io_hiu_base {
 			reg = <0x0 0xff63c000 0x0 0x2000>;
 		};
+	};
+	auge_sound {
+		/delete-node/ avout_mute-gpios;
 	};
 };
 
@@ -879,13 +888,6 @@
 		psoc-flash-verify-disabled;
 		status = "okay";
 
-		psoc_gpios: gpiochip4 {
-			compatible = "sonos,psoc-gpio";
-			gpio-controller;
-			num-gpios = <1>;
-			#gpio-cells = <4>;
-			status = "okay";
-		};
 
 		psoc-images {
 			image@0 {
