@@ -16,81 +16,7 @@
 	#address-cells = <2>;
 	#size-cells = <2>;
 
-        sonos-product-id = <0x05>;
-
-        dolby_fw {
-                compatible = "amlogic, dolby_fw";
-                mem_size = <0x100000>;
-                status = "disabled";
-        };
-
-        sonos-platform {
-                /* Sonos platform specific values for shared driver source & binaries */
-                sonos-ampctl {
-                        /* Alpine has one amp fault.  It has three control lines.
-                         */
-                        status = "okay";
-                        hw-inits-index = <1>;
-                        hw-exits-index = <1>;
-                        using-i2c-amp;
-                        ignore-startup-faults;
-                        allow-auto-recovery;
-
-                        sonos-ampfaults {
-                                num-faults = <0x01>;
-                                status = "okay";
-
-                                ampfault@0 {
-                                        fault-gpio = <&gpio GPIOA_12 GPIO_ACTIVE_LOW>;
-                                        fault-flags = <IRQ_TYPE_EDGE_FALLING>;
-                                        fault-label = "Amp fault";
-                                } ;
-                        } ;
-                } ;
-
-		misc-gpio {
-			pairing-button  = <&gpio GPIOX_13 GPIO_ACTIVE_LOW>;
-			no-irq;
-			wall-mount = <&gpio GPIOZ_15 GPIO_ACTIVE_HIGH>;
-		};
-		gpio-switch {
-			compatible = "sonos,gpio-switch";
-			micmute = <&gpio_ao GPIOAO_9 GPIO_ACTIVE_HIGH>;
-		};
-		simulated-buttons {
-			/* event-sources are offsets from EVTSOURCE_BUTTON_PLAYPAUSE
-			 * some generate an event for more than one source
-			 */
-			pairing {
-				 event-sources = <7>;
-				 no-repeat-sim;
-			};
-		};
-                thermal-mgmt {
-                        CPU {
-                                compatible = "tmp102";
-                                fault-temperature = <95>;
-                                warn-temperature = <91>;
-                        };
-                        SOC {
-                                compatible = "amlogic, s767_temp";
-                                fault-temperature = <105>;
-                                warn-temperature = <105>;
-                        };
-		};
-	} ;
-	ir-rcvr {
-		compatible = "sonos,ir-rcvr";
-		status = "okay";
-	};
-	thermal-zones {
-                cputhermal: cputhermal {
-                        polling-delay-passive = <1000>;
-                        polling-delay = <1000>;
-                        /* sensor ID */
-                        thermal-sensors = <&cputempsensor 0>;
-		};
-	};
+        sonos-product-id = <0x07>;
 
 	aliases {
 		serial0 = &uart_AO;
@@ -112,113 +38,21 @@
 
 	memory@00000000 {
 		device_type = "memory";
-		linux,usable-memory = <0x0 0x000000 0x0 0x80000000>;
+		linux,usable-memory = <0x0 0x000000 0x0 0x40000000>;
 	};
 
-	reserved-memory {
-		#address-cells = <2>;
-		#size-cells = <2>;
-		ranges;
-		/* global autoconfigured region for contiguous allocations */
-		ramoops@0x07400000 {
-			compatible = "ramoops";
-			reg = <0x0 0x07400000 0x0 0x00100000>;
-			record-size = <0x8000>;
-			console-size = <0x10000>;
-			ftrace-size = <0x2000>;
-			pmsg-size = <0x4000>;
-		};
-		secmon_reserved:linux,secmon {
-			compatible = "shared-dma-pool";
-			reusable;
-			size = <0x0 0x400000>;
-			alignment = <0x0 0x400000>;
-			alloc-ranges = <0x0 0x05000000 0x0 0x400000>;
-		};
-		secos_reserved:linux,secos {
-			status = "disabled";
-			compatible = "amlogic, aml_secos_memory";
-			reg = <0x0 0x05300000 0x0 0x2000000>;
-			no-map;
-		};
-		logo_reserved:linux,meson-fb {
-			compatible = "shared-dma-pool";
-			reusable;
-			size = <0x0 0x800000>;
-			alignment = <0x0 0x400000>;
-			alloc-ranges = <0x0 0x7f800000 0x0 0x800000>;
-		};
-		ion_cma_reserved:linux,ion-dev {
-			compatible = "shared-dma-pool";
-			reusable;
-			size = <0x0 0x8000000>;
-			alignment = <0x0 0x400000>;
-		};
-		/*di CMA pool */
-		di_cma_reserved:linux,di_cma {
-			compatible = "shared-dma-pool";
-			reusable;
-			/* buffer_size = 3621952(yuv422 8bit)
-			 *  | 4736064(yuv422 10bit)
-			 *  | 4074560(yuv422 10bit full pack mode)
-			 * 10x3621952=34.6M(0x23) support 8bit
-			 * 10x4736064=45.2M(0x2e) support 12bit
-			 * 10x4074560=40M(0x28) support 10bit
-			 */
-			size = <0x0 0x02800000>;
-			alignment = <0x0 0x400000>;
-		};
-		/*  POST PROCESS MANAGER */
-		ppmgr_reserved:linux,ppmgr {
-			compatible = "shared-dma-pool";
-			size = <0x0 0x0>;
-		};
-
-		codec_mm_cma:linux,codec_mm_cma {
-			compatible = "shared-dma-pool";
-			reusable;
-			/* ion_codec_mm max can alloc size 80M*/
-			size = <0x0 0x13400000>;
-			alignment = <0x0 0x400000>;
-			linux,contiguous-region;
-		};
-		/* codec shared reserved */
-		codec_mm_reserved:linux,codec_mm_reserved {
-			compatible = "amlogic, codec-mm-reserved";
-			size = <0x0 0x0>;
-			alignment = <0x0 0x100000>;
-			//no-map;
-		};
-		/*  vdin1 CMA pool */
-		vdin1_cma_reserved:linux,vdin1_cma {
-			compatible = "shared-dma-pool";
-			reusable;
-			/* up to 1920x1080 yuv422 8bit and 5 buffers
-			 * 1920x1080x2x5 = 20 M
-			 */
-			size = <0x0 0x01400000>;
-			alignment = <0x0 0x400000>;
-		};
-		vm0_cma_reserved:linux,vm0_cma {
-			compatible = "shared-dma-pool";
-			reusable;
-			size = <0x0 0x2000000>;
-			alignment = <0x0 0x400000>;
-		};
-	};
+        reserved-memory {
+                linux,cma {
+                        compatible = "shared-dma-pool";
+                        reusable;
+                        size = <0x0 0x3000000>;
+                        alignment = <0x0 0x400000>;
+                        linux,cma-default;
+                };
+        };
 
 	galcore {
 		status = "okay";
-	};
-	gpioleds {
-		compatible = "gpio-leds";
-		status = "okay";
-
-		sys_led {
-			label="sys_led";
-			gpios=<&gpio_ao GPIOAO_11 GPIO_ACTIVE_HIGH>;
-			default-state ="on";
-		};
 	};
 
 	cvbsout {
@@ -298,9 +132,7 @@
 
 	codec_mm {
 		compatible = "amlogic, codec, mm";
-		memory-region = <&codec_mm_cma &codec_mm_reserved>;
-		dev_name = "codec_mm";
-		status = "okay";
+		status = "disabled";
 	};
 
 	picdec_cma_reserved:linux,picdec {
@@ -320,34 +152,12 @@
 
 	ppmgr {
 		compatible = "amlogic, ppmgr";
-		memory-region = <&ppmgr_reserved>;
-		dev_name = "ppmgr";
-		status = "okay";
+		status = "disabled";
 	};
 
 	deinterlace {
 		compatible = "amlogic, deinterlace";
-		status = "okay";
-		/* 0:use reserved; 1:use cma; 2:use cma as reserved */
-		flag_cma = <1>;
-		//memory-region = <&di_reserved>;
-		memory-region = <&di_cma_reserved>;
-		interrupts = <0 46 1
-				0 40 1>;
-		interrupt-names = "pre_irq", "post_irq";
-		clocks = <&clkc CLKID_VPU_CLKB_TMP_DIV>,
-			<&clkc CLKID_VPU_CLKB_TMP>;
-		clock-names = "vpu_clkb_tmp_composite",
-			"vpu_clkb_composite";
-		clock-range = <334 667>;
-		/* buffer-size = <3621952>;(yuv422 8bit) */
-		buffer-size = <4074560>;/*yuv422 fullpack*/
-		/* reserve-iomap = "true"; */
-		/* if enable nr10bit, set nr10bit-support to 1 */
-		post-wr-support = <1>;
-		nr10bit-support = <1>;
-		nrds-enable = <1>;
-		pps-enable = <1>;
+		status = "disabled";
 	};
 	ionvideo {
 		compatible = "amlogic, ionvideo";
@@ -444,10 +254,7 @@
 	};
 	vm0 {
 		compatible = "amlogic, vm";
-		memory-region = <&vm0_cma_reserved>;
-		dev_name = "vm0";
 		status = "disabled";
-		vm_id = <0>;
 	};
 
         amvdec_656in {
@@ -623,7 +430,7 @@
 		#sound-dai-cells = <0>;
 		compatible = "amlogic, aml_dummy_codec";
 		capture;
-		status = "okay";
+		status = "disabled";
 	};
 
 	audiolocker: locker {
@@ -655,23 +462,6 @@
 					 * SLAVE_XTAL_SHARE(1)
 					 */
 		tuner_xtal_cap = <30>; /* when tuner_xtal_mode = 1, set 25 */
-	};
-
-	// FIXME -- update when Lasso P1A is available
-	micctl_gpio:sonos-gpio-micctl {
-		compatible = "sonos,gpio-mics";
-		micctl-gpio = <&psoc_gpios 0 GPIO_ACTIVE_HIGH>;
-	};
-	micctl@1 {
-		compatible = "sonos,micctl";
-		micctl-device = <&micctl_gpio>;
-	};
-
-	sonos_rollback:sonos-rollback@ff800000 {
-		compatible = "sonos,sonos-rollback";
-		reg = <0x0 0xff800000 0x0 0x4>;
-		offset = <0x00>;
-		shift = <0>;
 	};
 
         efuse: efuse {
@@ -718,299 +508,30 @@
 
 &i2c0 {
 	status = "okay";
-	pinctrl-names="default";
-	pinctrl-0=<&i2c0_sda_c_pins>;
-	clock-frequency = <100000>;
-
-	/* Richtek AMPS
-	 * rt9120s
-	 * Nine amps, amp4 & amp5 use PBTL mode and the rest use BTL mode
-	 */
-	amp1: rt9120s@18 {
-		compatible = "richtek,rt9120s";
-		reg = <0x18>;
-		dev-id = <0x1>;
-		first-amp-devid = <1>;
-		shared-reset;
-		mask-faults;
-		reset-gpio = <&gpio GPIOA_13 GPIO_ACTIVE_LOW>;
-		post-reset-delay = <10>;
-		stage-delay = <20>;
-		post-pause-delay = <100>;
-		number-init-stages = <2>;
-		init-sequence-length1 = <1>;
-		reg-init1 = <0x40 0x80>;
-		init-sequence-length2 = <15>;
-		reg-init2 = < 0x63 0xDE 0x6C 0xC0 0x07 0x36 0x65 0x66 0x06 0x28
-			0x02 0x03 0xA0 0x01 0xA1 0x08 0xA2 0x0C 0x27 0x01B0
-			0x20 0x0180 0x0C 0x38 0x09 0x81 0x6E 0x1D 0x10 0x00>;
-		play-a1-a2 = <0x00 0x04>;
-		status = "okay";
-	};
-
-	amp2: rt9120s@19 {
-		compatible = "richtek,rt9120s";
-		reg = <0x19>;
-		dev-id = <0x2>;
-		first-amp-devid = <1>;
-		shared-reset;
-		reset-gpio = <&gpio GPIOA_13 GPIO_ACTIVE_LOW>;
-		post-reset-delay = <10>;
-		stage-delay = <20>;
-		post-pause-delay = <100>;
-		number-init-stages = <2>;
-		init-sequence-length1 = <1>;
-		reg-init1 = <0x40 0x80>;
-		init-sequence-length2 = <15>;
-		reg-init2 = < 0x63 0xDE 0x6C 0xC0 0x07 0x36 0x65 0x66 0x06 0x28
-			0x02 0x03 0xA0 0x01 0xA1 0x08 0xA2 0x0C 0x27 0x01B0
-			0x20 0x0180 0x0C 0x38 0x09 0x81 0x6E 0x1D 0x10 0x00>;
-		play-a1-a2 = <0x08 0x0C>;
-		status = "okay";
-	};
-
-	amp3: rt9120s@1a {
-		compatible = "richtek,rt9120s";
-		reg = <0x1a>;
-		dev-id = <0x3>;
-		first-amp-devid = <1>;
-		shared-reset;
-		reset-gpio = <&gpio GPIOA_13 GPIO_ACTIVE_LOW>;
-		post-reset-delay = <10>;
-		stage-delay = <20>;
-		post-pause-delay = <100>;
-		number-init-stages = <2>;
-		init-sequence-length1 = <1>;
-		reg-init1 = <0x40 0x80>;
-		init-sequence-length2 = <15>;
-		reg-init2 = < 0x63 0xDE 0x6C 0xC0 0x07 0x36 0x65 0x66 0x06 0x28
-			0x02 0x03 0xA0 0x01 0xA1 0x08 0xA2 0x0C 0x27 0x01B0
-			0x20 0x0180 0x0C 0x38 0x09 0x81 0x6E 0x1D 0x10 0x00>;
-		play-a1-a2 = <0x10 0x14>;
-		status = "okay";
-	};
+	pinctrl-0 = <&i2c0_sda_c_pins>, <&i2c0_sck_c_pins>;
+	pinctrl-names = "default";
+        clock-frequency = <100000>;
 };
 
 &i2c1 {
 	status = "okay";
-	pinctrl-names="default";
-	pinctrl-0=<&i2c1_sda_x_pins>;
+	pinctrl-0 = <&i2c1_sda_x_pins>, <&i2c1_sck_x_pins>;
+	pinctrl-names = "default";
 	clock-frequency = <100000>;
-
-	amp4: rt9120s@1b {
-		compatible = "richtek,rt9120s";
-		reg = <0x1b>;
-		dev-id = <0x4>;
-		first-amp-devid = <1>;
-		shared-reset;
-		parallel-play;
-		reset-gpio = <&gpio GPIOA_13 GPIO_ACTIVE_LOW>;
-		post-reset-delay = <10>;
-		stage-delay = <20>;
-		post-pause-delay = <100>;
-		number-init-stages = <2>;
-		init-sequence-length1 = <1>;
-		reg-init1 = <0x40 0x80>;
-		init-sequence-length2 = <17>;
-		reg-init2 = < 0x63 0xDE 0x6C 0xC0 0x07 0x36 0x65 0x77 0x06 0x28
-			0x02 0x03 0xA0 0x01 0xA1 0x08 0xA2 0x0C 0x15 0x40
-			0x64 0x59 0x27 0x01B0 0x20 0x0180 0x0C 0x38 0x09 0x81
-			0x6E 0x1D 0x10 0x00>;
-		play-a1-a2 = <0x00 0x04>;
-		status = "okay";
-	};
-
-	amp5: rt9120s@18 {
-		compatible = "richtek,rt9120s";
-		reg = <0x18>;
-		dev-id = <0x5>;
-		first-amp-devid = <1>;
-		shared-reset;
-		parallel-play;
-		reset-gpio = <&gpio GPIOA_13 GPIO_ACTIVE_LOW>;
-		post-reset-delay = <10>;
-		stage-delay = <20>;
-		post-pause-delay = <100>;
-		number-init-stages = <2>;
-		init-sequence-length1 = <1>;
-		reg-init1 = <0x40 0x80>;
-		init-sequence-length2 = <17>;
-		reg-init2 = < 0x63 0xDE 0x6C 0xC0 0x07 0x36 0x65 0x77 0x06 0x28
-			0x02 0x03 0xA0 0x01 0xA1 0x08 0xA2 0x0C 0x15 0x40
-			0x64 0x59 0x27 0x01B0 0x20 0x0180 0x0C 0x38 0x09 0x81
-			0x6E 0x1D 0x10 0x00>;
-		play-a1-a2 = <0x00 0x04>;
-		status = "okay";
-	};
-
-	amp6: rt9120s@19 {
-		compatible = "richtek,rt9120s";
-		reg = <0x19>;
-		dev-id = <0x6>;
-		first-amp-devid = <1>;
-		shared-reset;
-		reset-gpio = <&gpio GPIOA_13 GPIO_ACTIVE_LOW>;
-		post-reset-delay = <10>;
-		stage-delay = <20>;
-		post-pause-delay = <100>;
-		number-init-stages = <2>;
-		init-sequence-length1 = <1>;
-		reg-init1 = <0x40 0x80>;
-		init-sequence-length2 = <15>;
-		reg-init2 = < 0x63 0xDE 0x6C 0xC0 0x07 0x36 0x65 0x66 0x06 0x28
-			0x02 0x03 0xA0 0x01 0xA1 0x08 0xA2 0x0C 0x27 0x01B0
-			0x20 0x0180 0x0C 0x38 0x09 0x81 0x6E 0x1D 0x10 0x00>;
-		play-a1-a2 = <0x08 0x0C>;
-		status = "okay";
-	};
 };
 
 &i2c2 {
 	status = "okay";
 	pinctrl-names="default";
-	pinctrl-0=<&i2c2_sda_x_pins>;
+	pinctrl-0=<&i2c2_sda_x_pins>, <&i2c2_sck_x_pins>;
 	clock-frequency = <100000>;
-
-	apple_auth@0 {
-		compatible = "Sonos,apple_auth";
-		reg = <0x10>;
-	};
-
-	cputempsensor: tmp102@48 {
-                compatible = "tmp102";
-                reg = <0x48>;
-                device_type="CPU";
-                #thermal-sensor-cells = <1>;
-        };
-
-	rtc: mcp7940x@6f {
-		compatible = "mcp7940x";
-		reg = <0x6f>;
-		interrupt-parent = <&gpio_intc>;
-		interrupts = <GPIOAO_4 IRQ_TYPE_EDGE_FALLING>;
-	};
-};
-
-&i2c3 {
-	status = "okay";
-	pinctrl-names="default";
-	pinctrl-0=<&i2c3_sda_a_pins>;
-	clock-frequency = <100000>;
-
-	amp7: rt9120s@1a {
-		compatible = "richtek,rt9120s";
-		reg = <0x1a>;
-		dev-id = <0x7>;
-		first-amp-devid = <1>;
-		shared-reset;
-		reset-gpio = <&gpio GPIOA_13 GPIO_ACTIVE_LOW>;
-		post-reset-delay = <10>;
-		stage-delay = <20>;
-		post-pause-delay = <100>;
-		number-init-stages = <2>;
-		init-sequence-length1 = <1>;
-		reg-init1 = <0x40 0x80>;
-		init-sequence-length2 = <15>;
-		reg-init2 = < 0x63 0xDE 0x6C 0xC0 0x07 0x36 0x65 0x66 0x06 0x28
-			0x02 0x03 0xA0 0x01 0xA1 0x08 0xA2 0x0C 0x27 0x01B0
-			0x20 0x0180 0x0C 0x38 0x09 0x81 0x6E 0x1D 0x10 0x00>;
-		play-a1-a2 = <0x00 0x04>;
-		status = "okay";
-	};
-
-	amp8: rt9120s@1b {
-		compatible = "richtek,rt9120s";
-		reg = <0x1b>;
-		dev-id = <0x8>;
-		first-amp-devid = <1>;
-		shared-reset;
-		reset-gpio = <&gpio GPIOA_13 GPIO_ACTIVE_LOW>;
-		post-reset-delay = <10>;
-		stage-delay = <20>;
-		post-pause-delay = <100>;
-		number-init-stages = <2>;
-		init-sequence-length1 = <1>;
-		reg-init1 = <0x40 0x80>;
-		init-sequence-length2 = <15>;
-		reg-init2 = < 0x63 0xDE 0x6C 0xC0 0x07 0x36 0x65 0x66 0x06 0x28
-			0x02 0x03 0xA0 0x01 0xA1 0x08 0xA2 0x0C 0x27 0x01B0
-			0x20 0x0180 0x0C 0x38 0x09 0x81 0x6E 0x1D 0x10 0x00>;
-		play-a1-a2 = <0x08 0x0C>;
-		status = "okay";
-	};
-
-	amp9: rt9120s@18 {
-		compatible = "richtek,rt9120s";
-		reg = <0x18>;
-		dev-id = <0x9>;
-		first-amp-devid = <1>;
-		shared-reset;
-		reset-gpio = <&gpio GPIOA_13 GPIO_ACTIVE_LOW>;
-		post-reset-delay = <10>;
-		stage-delay = <20>;
-		post-pause-delay = <100>;
-		number-init-stages = <2>;
-		init-sequence-length1 = <1>;
-		reg-init1 = <0x40 0x80>;
-		init-sequence-length2 = <15>;
-		reg-init2 = < 0x63 0xDE 0x6C 0xC0 0x07 0x36 0x65 0x66 0x06 0x28
-			0x02 0x03 0xA0 0x01 0xA1 0x08 0xA2 0x0C 0x27 0x01B0
-			0x20 0x0180 0x0C 0x38 0x09 0x81 0x6E 0x1D 0x10 0x00>;
-		play-a1-a2 = <0x10 0x14>;
-		status = "okay";
-	};
 };
 
 &i2c_AO {
 	status = "okay";
-	pinctrl-names="default";
-	pinctrl-0=<&i2c_ao_sck_pins>;
+	pinctrl-0 = <&i2c_ao_sda_pins>, <&i2c_ao_sck_pins>;
+	pinctrl-names = "default";
 	clock-frequency = <100000>;
-
-	is31fl3195@54 {  // LED controller
-           compatible = "lumissil,is31fl3195";
-           reg = <0x54>;
-	};
-
-	sge@0 {  // Sigdetail Gesture Engine
-		compatible = "Sonos,sge-psoc4";
-		pinctrl-names = "mode-uart-hiz", "mode-flow-ctrl";
-		pinctrl-0 = <>;
-		pinctrl-1 = <>;
-		reg = <0x40>;
-		gpio-addr = <0xff800000 0x130 0x34 0x0 0x28 0x34 0x0 0x28>;
-		gpio-params = "base-addr", "len", "io-set", "io-clr", "io-din", "scl-set", "scl-clr", "scl-din";
-		scl-bitmask =  <0x000010>;
-		io-bitmask  =  <0x000040>;
-		xres-gpio = <&gpio_ao GPIOAO_7 GPIO_ACTIVE_HIGH>;
-		io-gpio   = <&gpio_ao GPIOAO_6 GPIO_ACTIVE_HIGH>;
-		scl-gpio  = <&gpio_ao GPIOAO_4 GPIO_ACTIVE_HIGH>;
-		irq-gpio  = <&gpio_ao GPIOAO_8 GPIO_ACTIVE_HIGH>;
-		share-swd-uart = <0>;
-		psoc-rtc = <0>;
-		leanui-layout-proto;
-		psoc-flash-verify-disabled;
-		status = "okay";
-
-		psoc_gpios: gpiochip4 {
-			compatible = "sonos,psoc-gpio";
-			gpio-controller;
-			num-gpios = <1>;
-			#gpio-cells = <4>;
-			status = "okay";
-		};
-
-		psoc-images {
-			image@0 {
-				model-num = <4025>;
-				ident = <0x1a>;
-				flash-rows = <256>;
-				flash-row-size = <128>;
-				flash-protection-size = <32>;
-			};
-		};
-
-	};
 };
 
 &spicc0 {
@@ -1260,8 +781,18 @@
 	};
 }; /* end of audiobus */
 
+
 &earc {
-	status = "okay";
+	status = "disabled";
+};
+
+&apdm {
+	pinctrl-names = "pdm_pins";
+	pinctrl-0 = <&pdm_din0_c_pins
+				&pdm_din1_c_pins
+				&pdm_din2_c_pins
+				&pdm_din3_c_pins
+				&pdm_dclk_c_pins>;
 };
 
 /* Audio Related End */
@@ -1280,7 +811,7 @@
 };
 
 &usb3_phy_v2 {
-	status = "okay";
+	status = "disabled";
 	portnum = <1>;
 	otg = <1>;
 };
@@ -1335,8 +866,7 @@
 
 &pcie {
         compatible = "amlogic, amlogic-pcie-v2";
-        reset-gpio = <&gpio GPIOH_8 GPIO_ACTIVE_HIGH>;
+        reset-gpio = <&gpio GPIOA_5 GPIO_ACTIVE_HIGH>;
         speed-mod = <1>;
-        gpio-type = <1>; /* reset gpio type : OD */
         status = "okay";
 };
