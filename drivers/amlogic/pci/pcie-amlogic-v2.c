@@ -33,6 +33,13 @@ static int link_speed;
 module_param(link_speed, int, 0444);
 MODULE_PARM_DESC(link_speed, "select pcie link speed ");
 int keep_init;
+static struct device *dev_pcie_reserved_mem;
+
+#ifdef CONFIG_SWIOTLB
+#define USE_TEE_WHITELIST 1
+#else
+#define USE_TEE_WHITELIST 0
+#endif
 
 struct amlogic_pcie {
 	struct dw_pcie		*pci;
