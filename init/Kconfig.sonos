@@ -771,3 +771,9 @@ config GALCORE
         default n
         help
           Support for galcore driver for NPU on S767
+
+config SONOS_DISABLE_LICENSE_CHECK
+        bool "Sonos Disable Module License Checking"
+        default n
+        help
+          Disable enforcing MODULE_LICENSE restrictions
