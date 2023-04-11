@@ -26,7 +26,7 @@
 #include <linux/amlogic/tee.h>
 
 static u32 handle;
-static int link_speed = 2;
+static int link_speed;
 module_param(link_speed, int, 0444);
 MODULE_PARM_DESC(link_speed, "select pcie link speed ");
 
