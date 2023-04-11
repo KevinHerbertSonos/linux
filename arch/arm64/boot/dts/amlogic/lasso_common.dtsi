@@ -604,7 +604,12 @@
 		};
 	};
 	auge_sound {
-		/delete-node/ avout_mute-gpios;
+		/delete-property/ avout_mute-gpios;
+		aml-audio-card,dai-link@1 {
+			tdmbcodec: codec {
+				sound-dai = <&dummy_codec &amlogic_codec>;
+			};
+		};
 	};
 };
 
@@ -788,11 +793,9 @@
 };
 
 &i2c3 {
-	status = "okay";
-	pinctrl-names="default";
-	pinctrl-0=<&i2c3_sda_a_pins>;
-	clock-frequency = <100000>;
 
+	/delete-property/ pinctrl-0;
+	/delete-node/ ad82584f1;
 	amp7: rt9120s@1a {
 		compatible = "richtek,rt9120s";
 		reg = <0x1a>;
