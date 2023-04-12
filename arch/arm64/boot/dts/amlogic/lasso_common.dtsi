@@ -914,6 +914,13 @@
 };
 
 &audiobus {
+	tdma:tdm@0 {
+		pinctrl-names = "tdm_pins";
+		pinctrl-0 = <&tdm_a_dout0_pins
+			     &tdm_a_sclk_pins
+			     &tdm_a_fs_pins
+			     &tdm_a_slv_sclk_pins>;
+	};
 
 	tdmlb:tdm@3 {
 		compatible = "amlogic, sm1-snd-tdmlb";
