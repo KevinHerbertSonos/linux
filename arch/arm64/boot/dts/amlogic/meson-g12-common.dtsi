@@ -1990,7 +1990,7 @@
 		};
 		aes_hwkey_gcm: aes_hwkey_gcm{
 				compatible = "amlogic, aes_hwkey_gcm";
-				aes_gcm_huk_smc_id = <0x8200007A>;
+				aes_gcm_huk_smc_id = <0x82000071>;
 				status = "okay";
 		};
 
