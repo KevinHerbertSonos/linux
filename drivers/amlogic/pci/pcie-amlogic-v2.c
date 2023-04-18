@@ -740,7 +740,7 @@ static int amlogic_pcie_probe(struct platform_device *pdev)
 	u32 pwr_ctl = 0;
 	u32 phy_type = 0;
 //TEE memory protect is currently disabled until SWPBL-198250 is complete
-￼#if 0
+#if 0
 	u32 tee_start, tee_end;
 #endif
 	const void *prop;
@@ -880,6 +880,7 @@ static int amlogic_pcie_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 #endif
+
 	if (!amlogic_pcie->phy->phy_base) {
 		phy_base = platform_get_resource_byname(
 			pdev, IORESOURCE_MEM, "phy");
