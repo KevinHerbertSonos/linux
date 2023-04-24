@@ -17,7 +17,17 @@
 #include <net/stp.h>
 #include <net/switchdev.h>
 
+#if defined(CONFIG_SONOS_BRIDGE_PROXY) /* SONOS SWPBL-70338 */
+#include <linux/inetdevice.h>
+#endif
+
 #include "br_private.h"
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+#include "br_forward_sonos.h"
+#include "br_proxy.h"
+#include "br_sonos.h"
+#endif
 
 /*
  * Handle changes in state of network devices enslaved to a bridge.
@@ -35,6 +45,15 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 	bool notified = false;
 	bool changed_addr;
 	int err;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	struct net_bridge_port_list_node *pl = dev->br_port_list;
+
+	if (NULL == pl) {
+		return NOTIFY_DONE;
+	}
+
+	p = pl->port;
+#else
 
 	if (netif_is_bridge_master(dev)) {
 		err = br_vlan_bridge_event(dev, event, ptr);
@@ -53,6 +72,7 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 
 	/* not a port of a bridge */
 	p = br_port_get_rtnl(dev);
+#endif
 	if (!p)
 		return NOTIFY_DONE;
 
@@ -60,7 +80,13 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 
 	switch (event) {
 	case NETDEV_CHANGEMTU:
+#if defined(CONFIG_SONOS)
+		spin_lock_bh(&br->lock);
 		br_mtu_auto_adjust(br);
+		spin_unlock_bh(&br->lock);
+#else
+		br_mtu_auto_adjust(br);
+#endif
 		break;
 
 	case NETDEV_PRE_CHANGEADDR:
@@ -76,39 +102,75 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 
 	case NETDEV_CHANGEADDR:
 		spin_lock_bh(&br->lock);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		br_fdb_changeaddr(pl, dev->dev_addr);
+#else
 		br_fdb_changeaddr(p, dev->dev_addr);
+#endif
 		changed_addr = br_stp_recalculate_bridge_id(br);
 		spin_unlock_bh(&br->lock);
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 		if (changed_addr)
 			call_netdevice_notifiers(NETDEV_CHANGEADDR, br->dev);
-
+#endif
 		break;
 
 	case NETDEV_CHANGE:
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		spin_lock_bh(&br->lock);
+		sonos_netdev_change(br, dev, pl);
+		spin_unlock_bh(&br->lock);
+#else
 		br_port_carrier_check(p, &notified);
+#endif
 		break;
 
 	case NETDEV_FEAT_CHANGE:
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		spin_lock_bh(&br->lock);
+		if (br->dev->flags & IFF_UP) {
+			br_features_recompute(br);
+		}
+		spin_unlock_bh(&br->lock);
+		/* could do recursive feature change notification
+		 * but who would care??
+		 */
+#else
 		netdev_update_features(br->dev);
+#endif
 		break;
 
 	case NETDEV_DOWN:
 		spin_lock_bh(&br->lock);
 		if (br->dev->flags & IFF_UP) {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+			sonos_netdev_down(pl);
+#else
 			br_stp_disable_port(p);
+#endif
 			notified = true;
 		}
 		spin_unlock_bh(&br->lock);
 		break;
 
 	case NETDEV_UP:
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		/* bring up all ports on this interface */
+		spin_lock_bh(&br->lock);
+		if (br->dev->flags & IFF_UP) {
+			sonos_netdev_up(pl);
+			notified = true;
+		}
+		spin_unlock_bh(&br->lock);
+#else
 		if (netif_running(br->dev) && netif_oper_up(dev)) {
 			spin_lock_bh(&br->lock);
 			br_stp_enable_port(p);
 			notified = true;
 			spin_unlock_bh(&br->lock);
 		}
+#endif
 		break;
 
 	case NETDEV_UNREGISTER:
@@ -116,9 +178,11 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 		break;
 
 	case NETDEV_CHANGENAME:
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 		err = br_sysfs_renameif(p);
 		if (err)
 			return notifier_from_errno(err);
+#endif
 		break;
 
 	case NETDEV_PRE_TYPE_CHANGE:
@@ -146,6 +210,7 @@ static struct notifier_block br_device_notifier = {
 	.notifier_call = br_device_event
 };
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 /* called with RTNL or RCU */
 static int br_switchdev_event(struct notifier_block *unused,
 			      unsigned long event, void *ptr)
@@ -201,6 +266,7 @@ out:
 static struct notifier_block br_switchdev_notifier = {
 	.notifier_call = br_switchdev_event,
 };
+#endif
 
 /* called under rtnl_mutex */
 static int br_switchdev_blocking_event(struct notifier_block *nb,
@@ -361,6 +427,26 @@ static void __net_exit br_net_exit_batch_rtnl(struct list_head *net_list,
 {
 	struct net_device *dev;
 	struct net *net;
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	LIST_HEAD(list);
+#endif
+
+	rtnl_lock();
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+restart:
+for_each_netdev(net, dev)
+	if (dev->priv_flags & IFF_EBRIDGE) {
+		br_dev_delete(dev, NULL);
+		goto restart;
+	}
+#else
+	for_each_netdev(net, dev)
+		if (dev->priv_flags & IFF_EBRIDGE)
+			br_dev_delete(dev, &list);
+
+	unregister_netdevice_many(&list);
+#endif
+	rtnl_unlock();
 
 	ASSERT_RTNL();
 	list_for_each_entry(net, net_list, exit_list)
@@ -373,9 +459,11 @@ static struct pernet_operations br_net_ops = {
 	.exit_batch_rtnl = br_net_exit_batch_rtnl,
 };
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 static const struct stp_proto br_stp_proto = {
 	.rcv	= br_stp_rcv,
 };
+#endif
 
 static int __init br_init(void)
 {
@@ -383,11 +471,13 @@ static int __init br_init(void)
 
 	BUILD_BUG_ON(sizeof(struct br_input_skb_cb) > sizeof_field(struct sk_buff, cb));
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	err = stp_proto_register(&br_stp_proto);
 	if (err < 0) {
 		pr_err("bridge: can't register sap for STP\n");
 		return err;
 	}
+#endif
 
 	err = br_fdb_init();
 	if (err)
@@ -405,9 +495,16 @@ static int __init br_init(void)
 	if (err)
 		goto err_out3;
 
+#if defined(CONFIG_SONOS_BRIDGE_PROXY) /* SONOS SWPBL-70338 */
+	err = register_inetaddr_notifier(&br_inetaddr_notifier);
+	if (err)
+		goto err_out_proxy;
+#endif
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	err = register_switchdev_notifier(&br_switchdev_notifier);
 	if (err)
 		goto err_out4;
+#endif
 
 	err = register_switchdev_blocking_notifier(&br_switchdev_blocking_notifier);
 	if (err)
@@ -419,7 +516,9 @@ static int __init br_init(void)
 
 	brioctl_set(br_ioctl_stub);
 
-#if IS_ENABLED(CONFIG_ATM_LANE)
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	br_handle_frame_hook = sonos_br_handle_frame;
+#elif IS_ENABLED(CONFIG_ATM_LANE)
 	br_fdb_test_addr_hook = br_fdb_test_addr;
 #endif
 
@@ -434,8 +533,14 @@ static int __init br_init(void)
 err_out6:
 	unregister_switchdev_blocking_notifier(&br_switchdev_blocking_notifier);
 err_out5:
+#if defined(CONFIG_SONOS_BRIDGE_PROXY) /* SONOS SWPBL-70338 */
+	unregister_inetaddr_notifier(&br_inetaddr_notifier);
+err_out_proxy:
+#endif
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	unregister_switchdev_notifier(&br_switchdev_notifier);
 err_out4:
+#endif
 	unregister_netdevice_notifier(&br_device_notifier);
 err_out3:
 	br_nf_core_fini();
@@ -444,24 +549,34 @@ err_out2:
 err_out1:
 	br_fdb_fini();
 err_out:
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	stp_proto_unregister(&br_stp_proto);
+#endif
 	return err;
 }
 
 static void __exit br_deinit(void)
 {
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	stp_proto_unregister(&br_stp_proto);
+#endif
 	br_netlink_fini();
-	unregister_switchdev_blocking_notifier(&br_switchdev_blocking_notifier);
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	unregister_switchdev_notifier(&br_switchdev_notifier);
+#endif
 	unregister_netdevice_notifier(&br_device_notifier);
+#if defined(CONFIG_SONOS_BRIDGE_PROXY) /* SONOS SWPBL-70338 */
+	unregister_inetaddr_notifier(&br_inetaddr_notifier);
+#endif
 	brioctl_set(NULL);
 	unregister_pernet_subsys(&br_net_ops);
 
 	rcu_barrier(); /* Wait for completion of call_rcu()'s */
 
 	br_nf_core_fini();
-#if IS_ENABLED(CONFIG_ATM_LANE)
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	br_handle_frame_hook = NULL;
+#elif IS_ENABLED(CONFIG_ATM_LANE)
 	br_fdb_test_addr_hook = NULL;
 #endif
 	br_fdb_fini();

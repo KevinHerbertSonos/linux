@@ -5379,6 +5379,78 @@ int (*br_fdb_test_addr_hook)(struct net_device *dev,
 EXPORT_SYMBOL_GPL(br_fdb_test_addr_hook);
 #endif
 
+#ifdef CONFIG_SONOS
+/*
+ * If bridge module is loaded call bridging hook.
+ * returns NULL if packet was consumed.
+ */
+rx_handler_func_t *br_handle_frame_hook = NULL;
+EXPORT_SYMBOL_GPL(br_handle_frame_hook);
+#endif
+
+static inline struct sk_buff *
+sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
+		   struct net_device *orig_dev)
+{
+#ifdef CONFIG_NET_CLS_ACT
+	struct mini_Qdisc *miniq = rcu_dereference_bh(skb->dev->miniq_ingress);
+	struct tcf_result cl_res;
+
+	/* If there's at least one ingress present somewhere (so
+	 * we get here via enabled static key), remaining devices
+	 * that are not configured with an ingress qdisc will bail
+	 * out here.
+	 */
+	if (!miniq)
+		return skb;
+
+	if (*pt_prev) {
+		*ret = deliver_skb(skb, *pt_prev, orig_dev);
+		*pt_prev = NULL;
+	}
+
+	qdisc_skb_cb(skb)->pkt_len = skb->len;
+	skb->tc_at_ingress = 1;
+	mini_qdisc_bstats_cpu_update(miniq, skb);
+
+	switch (tcf_classify(skb, miniq->filter_list, &cl_res, false)) {
+	case TC_ACT_OK:
+	case TC_ACT_RECLASSIFY:
+		skb->tc_index = TC_H_MIN(cl_res.classid);
+		break;
+	case TC_ACT_SHOT:
+		mini_qdisc_qstats_cpu_drop(miniq);
+		kfree_skb(skb);
+		return NULL;
+	case TC_ACT_STOLEN:
+	case TC_ACT_QUEUED:
+	case TC_ACT_TRAP:
+		consume_skb(skb);
+		return NULL;
+	case TC_ACT_REDIRECT:
+		/* skb_mac_header check was done by cls/act_bpf, so
+		 * we can safely push the L2 header back before
+		 * redirecting to another netdev
+		 */
+		__skb_push(skb, skb->mac_len);
+		skb_do_redirect(skb);
+		return NULL;
+	case TC_ACT_CONSUMED:
+		return NULL;
+	default:
+		break;
+	}
+
+	xfrm_dev_backlog(sd);
+}
+
+#if IS_ENABLED(CONFIG_BRIDGE) && IS_ENABLED(CONFIG_ATM_LANE)
+/* This hook is defined here for ATM LANE */
+int (*br_fdb_test_addr_hook)(struct net_device *dev,
+			     unsigned char *addr) __read_mostly;
+EXPORT_SYMBOL_GPL(br_fdb_test_addr_hook);
+#endif
+
 /**
  *	netdev_is_rx_handler_busy - check if receive handler is registered
  *	@dev: device to check
@@ -5586,6 +5658,19 @@ skip_classify:
 		else if (unlikely(!skb))
 			goto out;
 	}
+
+#ifdef CONFIG_SONOS
+	if (br_handle_frame_hook != NULL) {
+		if (pt_prev) {
+			ret = deliver_skb(skb, pt_prev, orig_dev);
+			pt_prev = NULL;
+		}
+		if (br_handle_frame_hook(&skb) == RX_HANDLER_CONSUMED) {
+			ret = NET_RX_SUCCESS;
+			goto out;
+		}
+	}
+#endif
 
 	rx_handler = rcu_dereference(skb->dev->rx_handler);
 	if (rx_handler) {

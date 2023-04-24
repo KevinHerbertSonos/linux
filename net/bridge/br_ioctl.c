@@ -18,6 +18,14 @@
 #include <linux/uaccess.h>
 #include "br_private.h"
 
+#if defined(CONFIG_SONOS)
+#include "br_mcast.h"
+#include "br_sonos.h"
+#include "br_stp_sonos.h"
+#include "br_tunnel.h"
+#include "br_uplink.h"
+#endif
+
 static int get_bridge_ifindices(struct net *net, int *indices, int num)
 {
 	struct net_device *dev;
@@ -44,6 +52,12 @@ static void get_port_ifindices(struct net_bridge *br, int *ifindices, int num)
 		if (p->port_no < num)
 			ifindices[p->port_no] = p->dev->ifindex;
 	}
+#if defined(CONFIG_SONOS)
+	list_for_each_entry(p, &br->leaf_list, list) {
+		if (p->port_no < num)
+			ifindices[p->port_no] = p->dev->ifindex;
+	}
+#endif
 }
 
 /*
@@ -91,7 +105,11 @@ static int add_del_if(struct net_bridge *br, int ifindex, int isadd)
 	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
 		return -EPERM;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	dev = dev_get_by_index(net, ifindex);
+#else
 	dev = __dev_get_by_index(net, ifindex);
+#endif
 	if (dev == NULL)
 		return -EINVAL;
 
@@ -100,6 +118,9 @@ static int add_del_if(struct net_bridge *br, int ifindex, int isadd)
 	else
 		ret = br_del_if(br, dev);
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	dev_put(dev);
+#endif
 	return ret;
 }
 
@@ -170,9 +191,15 @@ int br_dev_siocdevprivate(struct net_device *dev, struct ifreq *rq,
 		b.root_path_cost = br->root_path_cost;
 		b.max_age = jiffies_to_clock_t(br->max_age);
 		b.hello_time = jiffies_to_clock_t(br->hello_time);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		b.forward_delay = jiffies_to_clock_t(br->forward_delay);
+		b.bridge_max_age = jiffies_to_clock_t(br->bridge_max_age);
+		b.bridge_hello_time = jiffies_to_clock_t(br->bridge_hello_time);
+#else
 		b.forward_delay = br->forward_delay;
 		b.bridge_max_age = br->bridge_max_age;
 		b.bridge_hello_time = br->bridge_hello_time;
+#endif
 		b.bridge_forward_delay = jiffies_to_clock_t(br->bridge_forward_delay);
 		b.topology_change = br->topology_change;
 		b.topology_change_detected = br->topology_change_detected;
@@ -249,7 +276,11 @@ int br_dev_siocdevprivate(struct net_device *dev, struct ifreq *rq,
 		struct net_bridge_port *pt;
 
 		rcu_read_lock();
-		if ((pt = br_get_port(br, args[2])) == NULL) {
+		if ((pt = br_get_port(br, args[2])) == NULL
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		    &&(pt = br_get_leaf(br, args[2])) == NULL
+#endif
+		) {
 			rcu_read_unlock();
 			return -EINVAL;
 		}
@@ -268,6 +299,9 @@ int br_dev_siocdevprivate(struct net_device *dev, struct ifreq *rq,
 		p.forward_delay_timer_value = br_timer_value(&pt->forward_delay_timer);
 		p.hold_timer_value = br_timer_value(&pt->hold_timer);
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		sonos_get_port_info(&p, pt);
+#endif
 		rcu_read_unlock();
 
 		if (copy_to_user(argp, &p, sizeof(p)))
@@ -296,6 +330,10 @@ int br_dev_siocdevprivate(struct net_device *dev, struct ifreq *rq,
 		if (!ns_capable(dev_net(dev)->user_ns, CAP_NET_ADMIN))
 			return -EPERM;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		if (args[2] >= (1<<(16-BR_PORT_BITS)))
+			return -ERANGE;
+#endif
 		spin_lock_bh(&br->lock);
 		if ((p = br_get_port(br, args[1])) == NULL)
 			ret = -EINVAL;
@@ -324,6 +362,48 @@ int br_dev_siocdevprivate(struct net_device *dev, struct ifreq *rq,
 
 	default:
 		ret = -EOPNOTSUPP;
+		return get_fdb_entries(br, (void __user *)args[1],
+				       args[2], args[3]);
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	case BRCTL_ADD_P2P_TUNNEL:
+	case BRCTL_SET_P2P_TUNNEL_PATH_COST:
+	case BRCTL_ADD_P2P_TUNNEL_LEAF:
+	case BRCTL_DEL_P2P_TUNNEL:
+	case BRCTL_SET_P2P_TUNNEL_STP_STATE:
+	case BRCTL_SET_P2P_DIRECT_ADDR:
+	case BRCTL_SET_P2P_DIRECT_ENABLED:
+	case BRCTL_ADD_UPLINK:
+		return sonos_brctl_wrapper(br, args);
+
+	case BRCTL_MOD_PORT_ADDR:
+		return sonos_mod_port_addr(br, (void __user *)args[1], (void __user *)args[2]);
+
+	case BRCTL_MOD_PORT_DEV:
+		return sonos_mod_port_dev(br, dev, (void __user *)args[1], args[2]);
+
+	case BRCTL_MCAST_GET_FDB_ENTRIES:
+		return br_mcast_fdb_get_entries(br, (unsigned char *)args[1],
+						args[2], args[3]);
+
+	case BRCTL_GET_P2P_TUNNEL_STATES:
+		return sonos_get_p2p_tunnel_states(br, args[1], (void __user *)args[2], (void __user *)args[3]);
+
+	case BRCTL_GET_ROUTING_CAPABILITIES:
+		return sonos_get_routing_capabilities(br, (void __user *)args[1]);
+
+	case BRCTL_GET_ANY_FORWARDING:
+		return sonos_get_any_forwarding(br, (void __user *)args[1]);
+
+	case BRCTL_SET_STATIC_MAC:
+		return sonos_br_set_static_mac(br, (void __user *)args[1]);
+
+	case BRCTL_SET_UPLINK_MODE:
+		return br_set_uplink_mode(br, (args[1] != 0));
+
+	case BRCTL_GET_STATS:
+		return sonos_get_stats(br, (void __user *)args[1]);
+#endif
 	}
 
 	if (!ret) {

@@ -20,6 +20,12 @@
 #include "br_private_tunnel.h"
 #include "br_private_mcast_eht.h"
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+#include "br_proxy.h"
+#include "br_sonos.h"
+#endif
+
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 static int __get_num_vlan_infos(struct net_bridge_vlan_group *vg,
 				u32 filter_mask)
 {
@@ -167,6 +173,7 @@ static size_t br_get_link_af_size_filtered(const struct net_device *dev,
 
 	return vinfo_sz;
 }
+#endif /* !defined(CONFIG_SONOS) */
 
 static inline size_t br_port_info_size(void)
 {
@@ -224,12 +231,17 @@ static inline size_t br_nlmsg_size(struct net_device *dev, u32 filter_mask)
 		+ nla_total_size(4) /* IFLA_MTU */
 		+ nla_total_size(4) /* IFLA_LINK */
 		+ nla_total_size(1) /* IFLA_OPERSTATE */
+#if defined(CONFIG_SONOS) /* SWPBL-70338 */
+		+ nla_total_size(1); /* IFLA_PROTINFO */
+#else
 		+ nla_total_size(br_port_info_size()) /* IFLA_PROTINFO */
 		+ nla_total_size(br_get_link_af_size_filtered(dev,
 				 filter_mask)) /* IFLA_AF_SPEC */
 		+ nla_total_size(4); /* IFLA_BRPORT_BACKUP_PORT */
+#endif
 }
 
+#if !defined(CONFIG_SONOS) /* SWPBL-70338 */
 static int br_port_fill_attrs(struct sk_buff *skb,
 			      const struct net_bridge_port *p)
 {
@@ -444,6 +456,7 @@ static int br_fill_ifvlaninfo(struct sk_buff *skb,
 nla_put_failure:
 	return -EMSGSIZE;
 }
+#endif /* !defined(CONFIG_SONOS) */
 
 /*
  * Create one netlink message for one interface
@@ -491,6 +504,16 @@ static int br_fill_ifinfo(struct sk_buff *skb,
 	    (dev->ifindex != dev_get_iflink(dev) &&
 	     nla_put_u32(skb, IFLA_LINK, dev_get_iflink(dev))))
 		goto nla_put_failure;
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	if (event == RTM_NEWLINK && port) {
+		if (nla_put_u8(skb, IFLA_PROTINFO, port->state)) {
+			goto nla_put_failure;
+		}
+	}
+
+	goto done;
+#else
 
 	if (event == RTM_NEWLINK && port) {
 		struct nlattr *nest;
@@ -604,6 +627,7 @@ static int br_fill_ifinfo(struct sk_buff *skb,
 
 		nla_nest_end(skb, mst_nest);
 	}
+#endif
 
 done:
 	if (af) {
@@ -621,8 +645,18 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-void br_info_notify(int event, const struct net_bridge *br,
-		    const struct net_bridge_port *port, u32 filter)
+
+#if defined(CONFIG_SONOS) /* Needed by br_proxy.c */
+int br_sonos_fill_ifinfo(struct sk_buff *skb, struct net_bridge_port *port,
+			 u32 pid, u32 seq, int event, unsigned int flags)
+{
+	return br_fill_ifinfo(skb, port, pid, seq, event, flags, 0, port->dev);
+}
+#endif
+
+/* Notify listeners of a change in bridge or port information */
+void br_ifinfo_notify(int event, const struct net_bridge *br,
+		      const struct net_bridge_port *port)
 {
 	struct net_device *dev;
 	struct sk_buff *skb;
@@ -642,7 +676,11 @@ void br_info_notify(int event, const struct net_bridge *br,
 	}
 
 	net = dev_net(dev);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	br_debug(port->br, "bridge notify event=%d\n", event);
+#else
 	br_debug(br, "port %u(%s) event %d\n", port_no, dev->name, event);
+#endif
 
 	skb = nlmsg_new(br_nlmsg_size(dev, filter), GFP_ATOMIC);
 	if (skb == NULL)
@@ -670,6 +708,7 @@ void br_ifinfo_notify(int event, const struct net_bridge *br,
 	br_info_notify(event, br, port, filter);
 }
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 /*
  * Dump information about all ports, in response to GETLINK
  */
@@ -1915,9 +1954,17 @@ struct rtnl_link_ops br_link_ops __read_mostly = {
 	.get_slave_size		= br_port_get_slave_size,
 	.fill_slave_info	= br_port_fill_slave_info,
 };
+#endif /* !defined(CONFIG_SONOS) */
 
 int __init br_netlink_init(void)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	rtnl_register_module(THIS_MODULE, PF_BRIDGE, RTM_GETLINK, NULL, br_dump_ifinfo, 0);
+	/* Only the first call to __rtnl_register can fail */
+	rtnl_register_module(THIS_MODULE, PF_BRIDGE, RTM_SETLINK, br_rtm_setlink, NULL, 0);
+
+	return 0;
+#else
 	int err;
 
 	err = br_vlan_rtnl_init();
@@ -1936,11 +1983,18 @@ out_af:
 	rtnl_af_unregister(&br_af_ops);
 out:
 	return err;
+#endif
 }
 
 void br_netlink_fini(void)
 {
 	br_vlan_rtnl_uninit();
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	rtnl_unregister_all(PF_BRIDGE);
+#else
+	br_mdb_uninit();
+
 	rtnl_af_unregister(&br_af_ops);
 	rtnl_link_unregister(&br_link_ops);
+#endif
 }

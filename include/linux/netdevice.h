@@ -217,7 +217,7 @@ struct net_device_stats {
 	NET_DEV_STAT(rx_compressed);
 	NET_DEV_STAT(tx_compressed);
 };
-<<<<<<< HEAD
+
 #undef NET_DEV_STAT
 
 /* per-cpu stats, allocated on demand.
@@ -229,9 +229,7 @@ struct net_device_core_stats {
 	unsigned long	rx_nohandler;
 	unsigned long	rx_otherhost_dropped;
 } __aligned(4 * sizeof(unsigned long));
-=======
 #endif /* __SONOS_LINUX__ */
->>>>>>> b62b02abad3a8... sonos port eth statistics
 
 #include <linux/cache.h>
 #include <linux/skbuff.h>
@@ -2410,7 +2408,12 @@ struct net_device {
 
 	u8			priv[] ____cacheline_aligned
 				       __counted_by(priv_len);
+	unsigned		wol_enabled:1;
+#if defined(CONFIG_SONOS) || defined(__SONOS_LINUX__)
+       struct net_bridge_port_list_node *br_port_list;
+#endif
 } ____cacheline_aligned;
+
 #define to_net_dev(d) container_of(d, struct net_device, dev)
 
 /*
