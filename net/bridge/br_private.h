@@ -24,12 +24,26 @@
 
 #define BR_HOLD_TIME (1*HZ)
 
+/*
+ * SONOS: Make BR_PORT_BITS match other products (8 instead of 10).  We don't
+ *        need more than this, and it makes it easier to play "what's
+ *        different" when debugging Casbah bridge code
+ */
+#if defined(CONFIG_SONOS)
+#define BR_PORT_BITS   8
+#else /* !defined(CONFIG_SONOS) */
 #define BR_PORT_BITS	10
+#endif
+
 #define BR_MAX_PORTS	(1<<BR_PORT_BITS)
 
 #define BR_MULTICAST_DEFAULT_HASH_MAX 4096
 
+#if defined(CONFIG_SONOS)
+#define BR_VERSION     "6.9"
+#else /* !defined(CONFIG_SONOS) */
 #define BR_VERSION	"2.3"
+#endif
 
 /* Control of forwarding link local multicast */
 #define BR_GROUPFWD_DEFAULT	0
@@ -45,8 +59,27 @@ enum {
 /* The Nearest Customer Bridge Group Address, 01-80-C2-00-00-[00,0B,0C,0D,0F] */
 #define BR_GROUPFWD_8021AD	0xB801u
 
+#if defined(CONFIG_SONOS)
+
+#define RX_STATS_CHECK_INTERVAL 10
+/*
+ * Frames per second to detect MC/BC stream.
+ * This number is chosen because voice stream like VOIP may be sent by 33.3
+ * or 50 frames per second, and it should be a safe threshold to detect video
+ * stream.
+ */
+#define BCMC_REPORT_FPS_THRESHOLD 64
+#define BCMC_REPORT_TOTAL_PACKETS (BCMC_REPORT_FPS_THRESHOLD * RX_STATS_CHECK_INTERVAL)
+
+#define BR_BCMC_HIST_SIZE         10
+#define MCAST_TYPE               1
+#define BCAST_TYPE               2
+
+#define BR_MAX_MCAST_GROUPS 16
+#else /* !defined(CONFIG_SONOS) */
 /* Path to usermode spanning tree program */
 #define BR_STP_PROG	"/sbin/bridge-stp"
+#endif
 
 typedef struct bridge_id bridge_id;
 typedef struct mac_addr mac_addr;
@@ -195,6 +228,13 @@ struct net_bridge_fdb_entry {
 	unsigned long			used;
 
 	struct rcu_head			rcu;
+
+#if defined(CONFIG_SONOS)
+	struct net_bridge_port		*dst_direct;
+	int				priority;
+	atomic_t			use_count;
+	unsigned long			ageing_timer;
+#endif
 };
 
 #define MDB_PG_FLAGS_PERMANENT	BIT(0)
@@ -223,10 +263,55 @@ struct net_bridge_mdb_entry {
 	struct hlist_node		mdb_node;
 };
 
+#if defined(CONFIG_SONOS)
+/* This is the list of members of the multicast group associated with a
+   particular port on the bridge. */
+struct net_bridge_mcast_rx_mac {
+	unsigned char			addr[6];
+	unsigned long			ageing_timer;
+	uint32_t			ip;
+	struct net_bridge_port		*direct_dst;
+	struct net_bridge_mcast_rx_mac	*next;
+};
+
+/* This is the list of ports where members of the multicast group have been
+   observed.  An entry with dst == 0 indicates the local bridge interface is
+   a member of the multicast group. */
+struct net_bridge_mcast_rx_port {
+	struct net_bridge_mcast_rx_port	*next;
+	struct net_bridge_port		*dst;
+	struct net_bridge_mcast_rx_mac	*rx_mac_list;
+};
+
+/* This tracks each multicast group.
+ */
+struct net_bridge_mcast_entry {
+	struct net_bridge_mcast_entry	*next_hash;
+	struct net_bridge_mcast_entry	*prev_hash;
+	atomic_t			use_count;
+	unsigned char			addr[6];
+	struct net_bridge_mcast_rx_port	*rx_port_list;
+};
+#endif /* CONFIG_SONOS */
+
 struct net_bridge_port {
 	struct net_bridge		*br;
 	struct net_device		*dev;
 	struct list_head		list;
+
+#if defined(CONFIG_SONOS)
+/* Point-to-Point packet tunnelling */
+	unsigned int			is_p2p:1;
+	unsigned int			is_leaf:1;
+	unsigned int			is_unencap:1;
+	unsigned int			is_unicast:1;
+	unsigned int			is_uplink:1;
+#ifdef CONFIG_SONOS_BRIDGE_PROXY
+	unsigned int			is_satellite:1;
+	u32				sat_ip;
+#endif
+	unsigned char                   p2p_dest_addr[6];
+#endif /* CONFIG_SONOS */
 
 	unsigned long			flags;
 #ifdef CONFIG_BRIDGE_VLAN_FILTERING
@@ -236,8 +321,14 @@ struct net_bridge_port {
 
 	/* STP */
 	u8				priority;
+#if defined(CONFIG_SONOS)
+	u16				state;
+	u32				port_no;
+	u16				remote_state;
+#else /* !defined(CONFIG_SONOS) */
 	u8				state;
 	u16				port_no;
+#endif
 	unsigned char			topology_change_ack;
 	unsigned char			config_pending;
 	port_id				port_id;
@@ -246,7 +337,16 @@ struct net_bridge_port {
 	bridge_id			designated_bridge;
 	u32				path_cost;
 	u32				designated_cost;
+#if defined(CONFIG_SONOS)
+	/* direct routing */
+	u8				direct_enabled;
+	unsigned char			direct_addr[6];
+	unsigned long			direct_last_stp_time;
+	/* Station mode direct routing priority */
+	u8				sonos_direct_skb_priority;
+#else /* !defined(CONFIG_SONOS) */
 	unsigned long			designated_age;
+#endif
 
 	struct timer_list		forward_delay_timer;
 	struct timer_list		hold_timer;
@@ -279,6 +379,23 @@ struct net_bridge_port {
 	u16				group_fwd_mask;
 	u16				backup_redirected_cnt;
 };
+
+/* SONOS: Every port is on two lists.
+ *
+ *        The first is maintained using br_port_list, which is a struct
+ *        net_bridge_port_list_node *, in struct net_device.
+ *        This list contains all ports on the bridge, including leaf ports.
+ *
+ *        The second list is either port_list or leaf_list in struct
+ *        net_bridge.  These contain the only the leaf ports and only the
+ *        non-leaf ports, respectively.
+ */
+#if defined(CONFIG_SONOS)
+struct net_bridge_port_list_node {
+	struct net_bridge_port			*port;
+	struct net_bridge_port_list_node	*next;
+};
+#endif
 
 #define kobj_to_brport(obj)	container_of(obj, struct net_bridge_port, kobj)
 
@@ -321,11 +438,45 @@ enum net_bridge_opts {
 	BROPT_VLAN_BRIDGE_BINDING,
 };
 
+#if defined(CONFIG_SONOS)
+struct net_bridge_bcmc_hit {
+	unsigned char   src[ETH_ALEN];
+	unsigned char   dest[ETH_ALEN];
+	unsigned long   timestamp;
+	unsigned long   packet_count;
+	u8              packet_type;
+};
+
+struct net_bridge_stats {
+	unsigned long   rx_mc_count;
+	unsigned long   rx_mc_count_peak;
+	unsigned long   rx_mc_peak_ts;
+	unsigned long   rx_mc_hit;
+	unsigned char   rx_mc_hit_src[ETH_ALEN];
+	unsigned char   rx_mc_hit_dest[ETH_ALEN];
+	unsigned long   rx_bc_count;
+	unsigned long   rx_bc_count_peak;
+	unsigned long   rx_bc_peak_ts;
+	unsigned long   rx_bc_hit;
+	unsigned char   rx_bc_hit_src[ETH_ALEN];
+	unsigned char   rx_bc_hit_dest[ETH_ALEN];
+	unsigned long   rx_start_time;
+
+	unsigned int    bcmc_index;
+	struct net_bridge_bcmc_hit bcmc_history[BR_BCMC_HIST_SIZE];
+};
+#endif /* CONFIG_SONOS */
+
 struct net_bridge {
 	spinlock_t			lock;
 	spinlock_t			hash_lock;
 	struct list_head		port_list;
 	struct net_device		*dev;
+#if defined(CONFIG_SONOS)
+	struct list_head		leaf_list;
+	struct net_device_stats		statistics;
+	struct list_head		age_list;
+#endif
 	struct pcpu_sw_netstats		__percpu *stats;
 	unsigned long			options;
 	/* These fields are accessed on each packet */
@@ -360,6 +511,9 @@ struct net_bridge {
 	unsigned long			bridge_forward_delay;
 	unsigned long			bridge_ageing_time;
 	u32				root_path_cost;
+#if defined(CONFIG_SONOS)
+	unsigned long			mcast_ageing_time;
+#endif
 
 	u8				group_addr[ETH_ALEN];
 
@@ -417,6 +571,30 @@ struct net_bridge {
 	int offload_fwd_mark;
 #endif
 	struct hlist_head		fdb_list;
+
+#if defined(CONFIG_SONOS)
+	/* SONOS: Multicast group management */
+	unsigned			num_mcast_groups;
+	unsigned char			mcast_groups[BR_MAX_MCAST_GROUPS][6];
+	int				mcast_advertise_time;
+	spinlock_t			mcast_lock;
+	struct timer_list		mcast_timer;
+	struct net_bridge_mcast_entry	*mcast_hash[BR_HASH_SIZE];
+
+	/* SONOS: Fixed MAC address */
+	unsigned char			use_static_mac;
+	unsigned char			static_mac[6];
+
+	/* SONOS: Uplink port */
+	unsigned char			uplink_mode;
+#ifdef CONFIG_SONOS_BRIDGE_PROXY
+	unsigned char			proxy_mode;
+	u32				current_ipv4_addr;
+	struct timer_list		dupip_timer;
+	unsigned long			dupip_start;
+#endif
+	struct net_bridge_stats		br_stats;
+#endif /* CONFIG_SONOS */
 };
 
 struct br_input_skb_cb {
@@ -463,6 +641,25 @@ struct br_input_skb_cb {
 
 #define br_debug(br, format, args...)			\
 	pr_debug("%s: " format,  (br)->dev->name, ##args)
+
+#if defined(CONFIG_SONOS)
+extern struct notifier_block br_inetaddr_notifier;
+
+extern const unsigned char bridge_ula[6];
+#define br_group_address bridge_ula
+
+struct br_cb {
+	unsigned char direct:1;
+#ifdef CONFIG_SONOS_BRIDGE_PROXY
+	unsigned char should_proxy_up:1;
+	struct net_bridge_port *source_port;
+#endif
+};
+
+#define BR_SKB_CB(skb)    ((struct br_cb *)(&skb->cb[0]))
+
+#endif /* CONFIG_SONOS */
+
 
 /* called under bridge lock */
 static inline int br_is_root_bridge(const struct net_bridge *br)
@@ -546,15 +743,28 @@ static inline void br_netpoll_disable(struct net_bridge_port *p)
 /* br_fdb.c */
 int br_fdb_init(void);
 void br_fdb_fini(void);
+#if defined(CONFIG_SONOS)
+void br_fdb_rcu_free(struct rcu_head *head);
+#endif
 int br_fdb_hash_init(struct net_bridge *br);
 void br_fdb_hash_fini(struct net_bridge *br);
 void br_fdb_flush(struct net_bridge *br);
+#if defined(CONFIG_SONOS)
+void br_sonos_fdb_delete(struct net_bridge *br, struct net_bridge_fdb_entry *f);
+#endif
 void br_fdb_find_delete_local(struct net_bridge *br,
 			      const struct net_bridge_port *p,
 			      const unsigned char *addr, u16 vid);
+#if defined(CONFIG_SONOS)
+void br_fdb_changeaddr(struct net_bridge_port_list_node *pl, const unsigned char *newaddr);
+struct net_bridge_fdb_entry *__br_fdb_get(struct net_bridge *br,
+					  const unsigned char *addr, __u16 vid);
+void br_fdb_cleanup(unsigned long data);
+#else
 void br_fdb_changeaddr(struct net_bridge_port *p, const unsigned char *newaddr);
 void br_fdb_change_mac_address(struct net_bridge *br, const u8 *newaddr);
 void br_fdb_cleanup(struct work_struct *work);
+#endif
 void br_fdb_delete_by_port(struct net_bridge *br,
 			   const struct net_bridge_port *p, u16 vid, int do_all);
 struct net_bridge_fdb_entry *br_fdb_find_rcu(struct net_bridge *br,
@@ -563,11 +773,42 @@ struct net_bridge_fdb_entry *br_fdb_find_rcu(struct net_bridge *br,
 int br_fdb_test_addr(struct net_device *dev, unsigned char *addr);
 int br_fdb_fillbuf(struct net_bridge *br, void *buf, unsigned long count,
 		   unsigned long off);
+#if defined(CONFIG_SONOS)
+int br_sonos_fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
+			const unsigned char *addr);
+#endif
 int br_fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
 		  const unsigned char *addr, u16 vid);
+#if defined(CONFIG_SONOS)
+struct net_bridge_fdb_entry *br_fdb_update(struct net_bridge *br,
+					   struct net_bridge_port *source,
+					   const unsigned char *addr, u16 vid,
+					   bool added_by_user);
+#else
 void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 		   const unsigned char *addr, u16 vid, bool added_by_user);
+#endif
 
+#if defined(CONFIG_SONOS)
+static inline int br_fdb_delete(struct ndmsg *ndm, struct nlattr *tb[],
+				struct net_device *dev, const unsigned char *addr,
+				u16 vid)
+{
+	return 0;
+}
+static inline int br_fdb_add(struct ndmsg *nlh, struct nlattr *tb[],
+			     struct net_device *dev, const unsigned char *addr,
+			     u16 vid, u16 nlh_flags, struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+static inline int br_fdb_dump(struct sk_buff *skb, struct netlink_callback *cb,
+			      struct net_device *dev, struct net_device *fdev,
+			      int *idx)
+{
+	return 0;
+}
+#else /* !defined(CONFIG_SONOS) */
 int br_fdb_delete(struct ndmsg *ndm, struct nlattr *tb[],
 		  struct net_device *dev, const unsigned char *addr, u16 vid);
 int br_fdb_add(struct ndmsg *nlh, struct nlattr *tb[], struct net_device *dev,
@@ -575,21 +816,38 @@ int br_fdb_add(struct ndmsg *nlh, struct nlattr *tb[], struct net_device *dev,
 	       struct netlink_ext_ack *extack);
 int br_fdb_dump(struct sk_buff *skb, struct netlink_callback *cb,
 		struct net_device *dev, struct net_device *fdev, int *idx);
+#endif
 int br_fdb_get(struct sk_buff *skb, struct nlattr *tb[], struct net_device *dev,
 	       const unsigned char *addr, u16 vid, u32 portid, u32 seq,
 	       struct netlink_ext_ack *extack);
 int br_fdb_sync_static(struct net_bridge *br, struct net_bridge_port *p);
 void br_fdb_unsync_static(struct net_bridge *br, struct net_bridge_port *p);
+#if !defined(CONFIG_SONOS)
 int br_fdb_external_learn_add(struct net_bridge *br, struct net_bridge_port *p,
 			      const unsigned char *addr, u16 vid,
 			      bool swdev_notify);
 int br_fdb_external_learn_del(struct net_bridge *br, struct net_bridge_port *p,
 			      const unsigned char *addr, u16 vid,
 			      bool swdev_notify);
+#endif
 void br_fdb_offloaded_set(struct net_bridge *br, struct net_bridge_port *p,
 			  const unsigned char *addr, u16 vid, bool offloaded);
 
 /* br_forward.c */
+#if defined(CONFIG_SONOS)
+void br_deliver(const struct net_bridge_port *from,
+		const struct net_bridge_port *to,
+		struct sk_buff *skb);
+void br_forward(const struct net_bridge_port *from,
+		const struct net_bridge_port *to,
+		struct sk_buff *skb);
+void br_flood_deliver(struct net_bridge *br,
+		      struct net_bridge_port *from,
+		      struct sk_buff *skb, int clone);
+void br_flood_forward(struct net_bridge *br,
+		      struct net_bridge_port *from,
+		      struct sk_buff *skb, int clone);
+#else
 enum br_pkt_type {
 	BR_PKT_UNICAST,
 	BR_PKT_MULTICAST,
@@ -601,6 +859,7 @@ void br_forward(const struct net_bridge_port *to, struct sk_buff *skb,
 int br_forward_finish(struct net *net, struct sock *sk, struct sk_buff *skb);
 void br_flood(struct net_bridge *br, struct sk_buff *skb,
 	      enum br_pkt_type pkt_type, bool local_rcv, bool local_orig);
+#endif
 
 /* return true if both source port and dest port are isolated */
 static inline bool br_skb_isolated(const struct net_bridge_port *to,
@@ -613,18 +872,36 @@ static inline bool br_skb_isolated(const struct net_bridge_port *to,
 /* br_if.c */
 void br_port_carrier_check(struct net_bridge_port *p, bool *notified);
 int br_add_bridge(struct net *net, const char *name);
+#if defined(CONFIG_SONOS)
+struct net_bridge_port *br_sonos_new_nbp(struct net_bridge *br,
+					 struct net_device *dev);
+#endif
 int br_del_bridge(struct net *net, const char *name);
 int br_add_if(struct net_bridge *br, struct net_device *dev,
 	      struct netlink_ext_ack *extack);
 int br_del_if(struct net_bridge *br, struct net_device *dev);
 void br_mtu_auto_adjust(struct net_bridge *br);
+#if defined(CONFIG_SONOS)
+void br_features_recompute(struct net_bridge *br);
+#else
 netdev_features_t br_features_recompute(struct net_bridge *br,
 					netdev_features_t features);
+#endif
 void br_port_flags_change(struct net_bridge_port *port, unsigned long mask);
 void br_manage_promisc(struct net_bridge *br);
 int nbp_backup_change(struct net_bridge_port *p, struct net_device *backup_dev);
+#if defined(CONFIG_SONOS)
+void br_sonos_destroy_nbp(struct net_bridge_port *p);
+void br_sonos_del_nbp(struct net_bridge_port *p);
+#endif
 
 /* br_input.c */
+#if defined(CONFIG_SONOS)
+void br_pass_frame_up(struct net_bridge *br, struct sk_buff *skb);
+int br_handle_frame_finish(struct net_bridge_port *p, struct sk_buff *skb);
+struct sk_buff *br_handle_frame(struct net_bridge_port_list_node *pl,
+				struct sk_buff *skb);
+#else
 int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb);
 rx_handler_result_t br_handle_frame(struct sk_buff **pskb);
 
@@ -648,6 +925,7 @@ br_port_get_check_rtnl(const struct net_device *dev)
 {
 	return br_rx_handler_check_rtnl(dev) ? br_port_get_rtnl_rcu(dev) : NULL;
 }
+#endif
 
 /* br_ioctl.c */
 int br_dev_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
@@ -1124,6 +1402,9 @@ static inline void br_nf_core_fini(void) {}
 /* br_stp.c */
 void br_set_state(struct net_bridge_port *p, unsigned int state);
 struct net_bridge_port *br_get_port(struct net_bridge *br, u16 port_no);
+#if defined(CONFIG_SONOS)
+struct net_bridge_port *br_get_leaf(struct net_bridge *br, u16 port_no);
+#endif
 void br_init_port(struct net_bridge_port *p);
 void br_become_designated_port(struct net_bridge_port *p);
 
@@ -1149,9 +1430,13 @@ int br_stp_set_path_cost(struct net_bridge_port *p, unsigned long path_cost);
 ssize_t br_show_bridge_id(char *buf, const struct bridge_id *id);
 
 /* br_stp_bpdu.c */
+#if defined(CONFIG_SONOS)
+int br_sonos_get_ticks(const unsigned char *src);
+#else
 struct stp_proto;
 void br_stp_rcv(const struct stp_proto *proto, struct sk_buff *skb,
 		struct net_device *dev);
+#endif
 
 /* br_stp_timer.c */
 void br_stp_timer_init(struct net_bridge *br);
@@ -1169,11 +1454,34 @@ int br_netlink_init(void);
 void br_netlink_fini(void);
 void br_ifinfo_notify(int event, const struct net_bridge *br,
 		      const struct net_bridge_port *port);
+#if defined(CONFIG_SONOS)
+int br_sonos_fill_ifinfo(struct sk_buff *skb, struct net_bridge_port *port,
+			 u32 pid, u32 seq, int event, unsigned int flags);
+int br_mtu_min(const struct net_bridge *br);
+
+static inline int br_setlink(struct net_device *dev, struct nlmsghdr *nlmsg,
+			     u16 flags, struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+static inline int br_dellink(struct net_device *dev, struct nlmsghdr *nlmsg,
+			     u16 flags)
+{
+	return 0;
+}
+static inline int br_getlink(struct sk_buff *skb, u32 pid, u32 seq,
+			     struct net_device *dev, u32 filter_mask,
+			     int nlflags)
+{
+	return 0;
+}
+#else
 int br_setlink(struct net_device *dev, struct nlmsghdr *nlmsg, u16 flags,
 	       struct netlink_ext_ack *extack);
 int br_dellink(struct net_device *dev, struct nlmsghdr *nlmsg, u16 flags);
 int br_getlink(struct sk_buff *skb, u32 pid, u32 seq, struct net_device *dev,
 	       u32 filter_mask, int nlflags);
+#endif
 
 #ifdef CONFIG_SYSFS
 /* br_sysfs_if.c */

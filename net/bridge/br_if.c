@@ -26,6 +26,11 @@
 
 #include "br_private.h"
 
+#if defined(CONFIG_SONOS)
+#include "br_mcast.h"
+#include "br_sonos.h"
+#endif
+
 /*
  * Determine initial path cost based on speed.
  * using recommendations from 802.1d standard
@@ -34,6 +39,9 @@
  */
 static int port_cost(struct net_device *dev)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	return sonos_initial_port_cost(dev);
+#else
 	struct ethtool_link_ksettings ecmd;
 
 	if (!__ethtool_get_link_ksettings(dev, &ecmd)) {
@@ -57,6 +65,7 @@ static int port_cost(struct net_device *dev)
 		return 2500;
 
 	return 100;	/* assume old 10Mbps */
+#endif
 }
 
 
@@ -200,6 +209,7 @@ int nbp_backup_change(struct net_bridge_port *p,
 	return 0;
 }
 
+#if !defined(CONFIG_SONOS)
 static void nbp_backup_clear(struct net_bridge_port *p)
 {
 	nbp_backup_change(p, NULL);
@@ -217,6 +227,7 @@ static void nbp_backup_clear(struct net_bridge_port *p)
 
 	WARN_ON(rcu_access_pointer(p->backup_port) || p->backup_redirected_cnt);
 }
+#endif
 
 static void nbp_update_port_count(struct net_bridge *br)
 {
@@ -233,6 +244,7 @@ static void nbp_update_port_count(struct net_bridge *br)
 	}
 }
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 static void nbp_delete_promisc(struct net_bridge_port *p)
 {
 	/* If port is currently promiscuous, unset promiscuity.
@@ -245,6 +257,7 @@ static void nbp_delete_promisc(struct net_bridge_port *p)
 	else
 		br_fdb_unsync_static(p->br, p);
 }
+#endif
 
 static void release_nbp(struct kobject *kobj)
 {
@@ -276,8 +289,28 @@ static void destroy_nbp(struct net_bridge_port *p)
 	p->dev = NULL;
 	dev_put(dev);
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	/* SONOS: We currently only add a kobject for non-p2p ports, so just
+	 *        free the net_bridge_port if the port is p2p.
+	 *
+	 *        Yes, we eventually need to fix the bridge so that all objects
+	 *        are managed the same way.
+	 */
+	if (p->is_p2p) {
+		kfree(p);
+		return;
+	}
+#endif
+
 	kobject_put(&p->kobj);
 }
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+void br_sonos_destroy_nbp(struct net_bridge_port *p)
+{
+	destroy_nbp(p);
+}
+#endif
 
 static void destroy_nbp_rcu(struct rcu_head *head)
 {
@@ -286,6 +319,7 @@ static void destroy_nbp_rcu(struct rcu_head *head)
 	destroy_nbp(p);
 }
 
+#if !defined(CONFIG_SONOS)
 static unsigned get_max_headroom(struct net_bridge *br)
 {
 	unsigned max_headroom = 0;
@@ -310,6 +344,7 @@ static void update_headroom(struct net_bridge *br, int new_hr)
 
 	br->dev->needed_headroom = new_hr;
 }
+#endif
 
 /* Delete port(interface) from bridge is done in two steps.
  * via RCU. First step, marks device as down. That deletes
@@ -324,8 +359,20 @@ static void del_nbp(struct net_bridge_port *p)
 {
 	struct net_bridge *br = p->br;
 	struct net_device *dev = p->dev;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	struct net_bridge_port_list_node *pl;
+#endif
 
 	sysfs_remove_link(br->ifobj, p->dev->name);
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	/* If we're not already on a bridge, punt */
+	pl = dev->br_port_list;
+	if (pl == NULL)
+		return;
+
+	sonos_del_nbp(p, br, dev, pl);
+#else
 
 	nbp_delete_promisc(p);
 
@@ -359,14 +406,25 @@ static void del_nbp(struct net_bridge_port *p)
 	kobject_del(&p->kobj);
 
 	br_netpoll_disable(p);
+#endif
 
 	call_rcu(&p->rcu, destroy_nbp_rcu);
 }
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+void br_sonos_del_nbp(struct net_bridge_port *p)
+{
+	del_nbp(p);
+}
+#endif
 
 /* Delete bridge device */
 void br_dev_delete(struct net_device *dev, struct list_head *head)
 {
 	struct net_bridge *br = netdev_priv(dev);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	sonos_del_br(br);
+#else
 	struct net_bridge_port *p, *n;
 
 	list_for_each_entry_safe(p, n, &br->port_list, list) {
@@ -381,6 +439,7 @@ void br_dev_delete(struct net_device *dev, struct list_head *head)
 
 	br_sysfs_delbr(br->dev);
 	unregister_netdevice_queue(br->dev, head);
+#endif
 }
 
 /* find an available port number */
@@ -410,6 +469,9 @@ static struct net_bridge_port *new_nbp(struct net_bridge *br,
 {
 	struct net_bridge_port *p;
 	int index, err;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	struct net_bridge_port_list_node *pl;
+#endif
 
 	index = find_portno(br);
 	if (index < 0)
@@ -425,6 +487,13 @@ static struct net_bridge_port *new_nbp(struct net_bridge *br,
 	p->path_cost = port_cost(dev);
 	p->priority = 0x8000 >> BR_PORT_BITS;
 	p->port_no = index;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	pl = sonos_alloc_port_list(p);
+	if (pl == NULL) {
+		return NULL;
+	}
+	dev->br_port_list = pl;
+#endif
 	p->flags = BR_LEARNING | BR_FLOOD | BR_MCAST_FLOOD | BR_BCAST_FLOOD;
 	br_init_port(p);
 	br_set_state(p, BR_STATE_DISABLED);
@@ -436,8 +505,23 @@ static struct net_bridge_port *new_nbp(struct net_bridge *br,
 		p = ERR_PTR(err);
 	}
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	if (kobject_init_and_add(&p->kobj, &brport_ktype, &(dev->dev.kobj),
+				 SYSFS_BRIDGE_PORT_ATTR)) {
+		printk("bridge: failed to add kernel obj\n");
+	}
+#endif
+
 	return p;
 }
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+struct net_bridge_port *br_sonos_new_nbp(struct net_bridge *br,
+					 struct net_device *dev)
+{
+	return new_nbp(br, dev);
+}
+#endif
 
 int br_add_bridge(struct net *net, const char *name)
 {
@@ -450,12 +534,16 @@ int br_add_bridge(struct net *net, const char *name)
 	if (!dev)
 		return -ENOMEM;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	res = sonos_add_bridge(net, name, dev);
+#else
 	dev_net_set(dev, net);
 	dev->rtnl_link_ops = &br_link_ops;
 
 	res = register_netdev(dev);
 	if (res)
 		free_netdev(dev);
+#endif
 	return res;
 }
 
@@ -487,7 +575,11 @@ int br_del_bridge(struct net *net, const char *name)
 }
 
 /* MTU of the bridge pseudo-device: ETH_DATA_LEN or the minimum of the ports */
+#if defined(CONFIG_SONOS)
+int br_mtu_min(const struct net_bridge *br)
+#else
 static int br_mtu_min(const struct net_bridge *br)
+#endif
 {
 	const struct net_bridge_port *p;
 	int ret_mtu = 0;
@@ -514,6 +606,7 @@ void br_mtu_auto_adjust(struct net_bridge *br)
 	br_opt_toggle(br, BROPT_MTU_SET_BY_USER, false);
 }
 
+#if !defined(CONFIG_SONOS)
 static void br_set_gso_limits(struct net_bridge *br)
 {
 	unsigned int gso_max_size = GSO_MAX_SIZE;
@@ -527,10 +620,17 @@ static void br_set_gso_limits(struct net_bridge *br)
 	br->dev->gso_max_size = gso_max_size;
 	br->dev->gso_max_segs = gso_max_segs;
 }
+#endif
 
 /*
  * Recomputes features using slave's features
  */
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+void br_features_recompute(struct net_bridge *br)
+{
+	sonos_br_features_recompute(br);
+}
+#else
 netdev_features_t br_features_recompute(struct net_bridge *br,
 	netdev_features_t features)
 {
@@ -551,11 +651,15 @@ netdev_features_t br_features_recompute(struct net_bridge *br,
 
 	return features;
 }
+#endif
 
 /* called with RTNL */
 int br_add_if(struct net_bridge *br, struct net_device *dev,
 	      struct netlink_ext_ack *extack)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	return sonos_br_add_if(br, dev);
+#else
 	struct net_bridge_port *p;
 	int err = 0;
 	unsigned br_hr, dev_hr;
@@ -719,11 +823,16 @@ err2:
 err1:
 	dev_put(dev);
 	return err;
+#endif
 }
 
 /* called with RTNL */
 int br_del_if(struct net_bridge *br, struct net_device *dev)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	return sonos_br_del_if(br, dev);
+#else
+
 	struct net_bridge_port *p;
 	bool changed_addr;
 
@@ -750,6 +859,7 @@ int br_del_if(struct net_bridge *br, struct net_device *dev)
 	netdev_update_features(br->dev);
 
 	return 0;
+#endif
 }
 
 void br_port_flags_change(struct net_bridge_port *p, unsigned long mask)

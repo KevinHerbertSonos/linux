@@ -2113,6 +2113,9 @@ struct net_device {
 	struct lock_class_key	addr_list_lock_key;
 	bool			proto_down;
 	unsigned		wol_enabled:1;
+#if defined(CONFIG_SONOS) || defined(__SONOS_LINUX__)
+       struct net_bridge_port_list_node *br_port_list;
+#endif
 
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
