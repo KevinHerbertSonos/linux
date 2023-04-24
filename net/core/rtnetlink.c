@@ -4390,6 +4390,7 @@ nla_put_failure:
 }
 EXPORT_SYMBOL_GPL(ndo_dflt_bridge_getlink);
 
+#if !defined(CONFIG_SONOS)
 static int valid_bridge_getlink_req(const struct nlmsghdr *nlh,
 				    bool strict_check, u32 *filter_mask,
 				    struct netlink_ext_ack *extack)
@@ -4503,6 +4504,7 @@ out_err:
 
 	return err;
 }
+#endif
 
 static inline size_t bridge_nlmsg_size(void)
 {
@@ -4555,6 +4557,7 @@ errout:
 	return err;
 }
 
+#if !defined(CONFIG_SONOS)
 static int rtnl_bridge_setlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 			       struct netlink_ext_ack *extack)
 {
@@ -4631,6 +4634,7 @@ static int rtnl_bridge_setlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 out:
 	return err;
 }
+#endif
 
 static int rtnl_bridge_dellink(struct sk_buff *skb, struct nlmsghdr *nlh,
 			       struct netlink_ext_ack *extack)
@@ -5374,9 +5378,13 @@ void __init rtnetlink_init(void)
 	rtnl_register(PF_BRIDGE, RTM_DELNEIGH, rtnl_fdb_del, NULL, 0);
 	rtnl_register(PF_BRIDGE, RTM_GETNEIGH, rtnl_fdb_get, rtnl_fdb_dump, 0);
 
+#if !defined(CONFIG_SONOS)
 	rtnl_register(PF_BRIDGE, RTM_GETLINK, NULL, rtnl_bridge_getlink, 0);
+#endif
 	rtnl_register(PF_BRIDGE, RTM_DELLINK, rtnl_bridge_dellink, NULL, 0);
+#if !defined(CONFIG_SONOS)
 	rtnl_register(PF_BRIDGE, RTM_SETLINK, rtnl_bridge_setlink, NULL, 0);
+#endif
 
 	rtnl_register(PF_UNSPEC, RTM_GETSTATS, rtnl_stats_get, rtnl_stats_dump,
 		      0);

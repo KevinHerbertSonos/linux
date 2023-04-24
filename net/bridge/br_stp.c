@@ -13,10 +13,18 @@
 #include "br_private.h"
 #include "br_private_stp.h"
 
+#if defined(CONFIG_SONOS)
+#include "br_stp_sonos.h"
+#endif
+
 /* since time values in bpdu are in jiffies and then scaled (1/256)
  * before sending, make sure that is at least one STP tick.
  */
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+#define MESSAGE_AGE_INCR       ((HZ < 256) ? 1 : (HZ/256))
+#else
 #define MESSAGE_AGE_INCR	((HZ / 256) + 1)
+#endif
 
 static const char *const br_port_state_names[] = {
 	[BR_STATE_DISABLED] = "disabled",
@@ -28,6 +36,7 @@ static const char *const br_port_state_names[] = {
 
 void br_set_state(struct net_bridge_port *p, unsigned int state)
 {
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	struct switchdev_attr attr = {
 		.orig_dev = p->dev,
 		.id = SWITCHDEV_ATTR_ID_PORT_STP_STATE,
@@ -35,8 +44,10 @@ void br_set_state(struct net_bridge_port *p, unsigned int state)
 		.u.stp_state = state,
 	};
 	int err;
+#endif
 
 	p->state = state;
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	err = switchdev_port_attr_set(p->dev, &attr);
 	if (err && err != -EOPNOTSUPP)
 		br_warn(p->br, "error setting offload STP state on port %u(%s)\n",
@@ -45,6 +56,11 @@ void br_set_state(struct net_bridge_port *p, unsigned int state)
 		br_info(p->br, "port %u(%s) entered %s state\n",
 				(unsigned int) p->port_no, p->dev->name,
 				br_port_state_names[p->state]);
+#else
+	br_info(p->br, "port %u(%s) entering %s state\n",
+			(unsigned int) p->port_no, p->dev->name,
+			br_port_state_names[p->state]);
+#endif
 }
 
 /* called under bridge lock */
@@ -59,6 +75,21 @@ struct net_bridge_port *br_get_port(struct net_bridge *br, u16 port_no)
 
 	return NULL;
 }
+
+#if defined(CONFIG_SONOS)
+/* called under bridge lock */
+struct net_bridge_port *br_get_leaf(struct net_bridge *br, u16 port_no)
+{
+	struct net_bridge_port *p;
+
+	list_for_each_entry_rcu(p, &br->leaf_list, list) {
+		if (p->port_no == port_no)
+			return p;
+	}
+
+	return NULL;
+}
+#endif
 
 /* called under bridge lock */
 static int br_should_become_root_port(const struct net_bridge_port *p,
@@ -111,6 +142,7 @@ static int br_should_become_root_port(const struct net_bridge_port *p,
 	return 0;
 }
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 static void br_root_port_block(const struct net_bridge *br,
 			       struct net_bridge_port *p)
 {
@@ -124,6 +156,7 @@ static void br_root_port_block(const struct net_bridge *br,
 	if (br->forward_delay > 0)
 		mod_timer(&p->forward_delay_timer, jiffies + br->forward_delay);
 }
+#endif
 
 /* called under bridge lock */
 static void br_root_selection(struct net_bridge *br)
@@ -135,9 +168,13 @@ static void br_root_selection(struct net_bridge *br)
 		if (!br_should_become_root_port(p, root_port))
 			continue;
 
+#if !defined(CONFIG_SONOS)
+		/* SONOS SWPBL-70338: Use selected root
+		 * port, even if its BR_ROOT_BLOCK flag is set. */
 		if (p->flags & BR_ROOT_BLOCK)
 			br_root_port_block(br, p);
 		else
+#endif
 			root_port = p->port_no;
 	}
 
@@ -180,6 +217,11 @@ void br_transmit_config(struct net_bridge_port *p)
 	}
 
 	br = p->br;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	if (br->stp_enabled == BR_NO_STP)  {
+		return;
+	}
+#endif
 
 	bpdu.topology_change = br->topology_change;
 	bpdu.topology_change_ack = p->topology_change_ack;
@@ -192,8 +234,12 @@ void br_transmit_config(struct net_bridge_port *p)
 	else {
 		struct net_bridge_port *root
 			= br_get_port(br, br->root_port);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		sonos_update_message_age(br, root, &bpdu, MESSAGE_AGE_INCR);
+#else
 		bpdu.message_age = (jiffies - root->designated_age)
 			+ MESSAGE_AGE_INCR;
+#endif
 	}
 	bpdu.max_age = br->max_age;
 	bpdu.hello_time = br->hello_time;
@@ -217,10 +263,17 @@ static void br_record_config_information(struct net_bridge_port *p,
 	p->designated_cost = bpdu->root_path_cost;
 	p->designated_bridge = bpdu->bridge_id;
 	p->designated_port = bpdu->port_id;
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	p->designated_age = jiffies - bpdu->message_age;
+#endif
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	mod_timer(&p->message_age_timer, jiffies
+		  + (p->br->max_age - bpdu->message_age));
+#else
 	mod_timer(&p->message_age_timer, jiffies
 		  + (bpdu->max_age - bpdu->message_age));
+#endif
 }
 
 /* called under bridge lock */
@@ -333,8 +386,10 @@ void br_topology_change_detection(struct net_bridge *br)
 {
 	int isroot = br_is_root_bridge(br);
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	if (br->stp_enabled != BR_KERNEL_STP)
 		return;
+#endif
 
 	br_info(br, "topology change detected, %s\n",
 		isroot ? "propagating" : "sending tcn bpdu");
@@ -372,6 +427,10 @@ static void br_reply(struct net_bridge_port *p)
 /* called under bridge lock */
 void br_configuration_update(struct net_bridge *br)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	if (br->stp_enabled == BR_NO_STP)
+		return;
+#endif
 	br_root_selection(br);
 	br_designated_port_selection(br);
 }
@@ -399,7 +458,9 @@ static void br_make_blocking(struct net_bridge_port *p)
 			br_topology_change_detection(p->br);
 
 		br_set_state(p, BR_STATE_BLOCKING);
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 		br_ifinfo_notify(RTM_NEWLINK, NULL, p);
+#endif
 
 		del_timer(&p->forward_delay_timer);
 	}
@@ -413,7 +474,12 @@ static void br_make_forwarding(struct net_bridge_port *p)
 	if (p->state != BR_STATE_BLOCKING)
 		return;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	if (br->forward_delay == 0) {
+#else
 	if (br->stp_enabled == BR_NO_STP || br->forward_delay == 0) {
+#endif
+
 		br_set_state(p, BR_STATE_FORWARDING);
 		br_topology_change_detection(br);
 		del_timer(&p->forward_delay_timer);
@@ -422,7 +488,9 @@ static void br_make_forwarding(struct net_bridge_port *p)
 	else
 		br_set_state(p, BR_STATE_LEARNING);
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	br_ifinfo_notify(RTM_NEWLINK, NULL, p);
+#endif
 
 	if (br->forward_delay != 0)
 		mod_timer(&p->forward_delay_timer, jiffies + br->forward_delay);
@@ -432,14 +500,24 @@ static void br_make_forwarding(struct net_bridge_port *p)
 void br_port_state_selection(struct net_bridge *br)
 {
 	struct net_bridge_port *p;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	/* Don't change port states if userspace is handling STP */
+	if (br->stp_enabled == BR_NO_STP)
+		return;
+#else
 	unsigned int liveports = 0;
+#endif
 
 	list_for_each_entry(p, &br->port_list, list) {
 		if (p->state == BR_STATE_DISABLED)
 			continue;
 
 		/* Don't change port states if userspace is handling STP */
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		if (1) {
+#else
 		if (br->stp_enabled != BR_USER_STP) {
+#endif
 			if (p->port_no == br->root_port) {
 				p->config_pending = 0;
 				p->topology_change_ack = 0;
@@ -460,14 +538,18 @@ void br_port_state_selection(struct net_bridge *br)
 		 * blocking state because the timers will expire and stop by
 		 * themselves without sending more queries.
 		 */
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 		if (p->state == BR_STATE_FORWARDING)
 			++liveports;
+#endif
 	}
 
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	if (liveports == 0)
 		netif_carrier_off(br->dev);
 	else
 		netif_carrier_on(br->dev);
+#endif
 }
 
 /* called under bridge lock */
@@ -504,7 +586,13 @@ void br_received_config_bpdu(struct net_bridge_port *p,
 		}
 
 		if (p->port_no == br->root_port) {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+			unsigned long old_max_age = br->max_age;
+#endif
 			br_record_config_timeout_values(br, bpdu);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+			sonos_check_max_age_changed(br, p, bpdu, old_max_age);
+#endif
 			br_config_bpdu_generation(br);
 			if (bpdu->topology_change_ack)
 				br_topology_change_acknowledged(br);
@@ -518,8 +606,13 @@ void br_received_config_bpdu(struct net_bridge_port *p,
 void br_received_tcn_bpdu(struct net_bridge_port *p)
 {
 	if (br_is_designated_port(p)) {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+		br_info(p->br, "received tcn bpdu on port %u(%s)\n",
+			(unsigned int) p->port_no, p->dev->name);
+#else
 		br_info(p->br, "port %u(%s) received tcn bpdu\n",
 			(unsigned int) p->port_no, p->dev->name);
+#endif
 
 		br_topology_change_detection(p->br);
 		br_topology_change_acknowledge(p);
@@ -587,12 +680,13 @@ int __set_ageing_time(struct net_device *dev, unsigned long t)
 int br_set_ageing_time(struct net_bridge *br, clock_t ageing_time)
 {
 	unsigned long t = clock_t_to_jiffies(ageing_time);
+#if !defined(CONFIG_SONOS)
 	int err;
 
 	err = __set_ageing_time(br->dev, t);
 	if (err)
 		return err;
-
+#endif
 	spin_lock_bh(&br->lock);
 	br->bridge_ageing_time = t;
 	br->ageing_time = t;
@@ -607,7 +701,9 @@ int br_set_ageing_time(struct net_bridge *br, clock_t ageing_time)
 void __br_set_topology_change(struct net_bridge *br, unsigned char val)
 {
 	unsigned long t;
+#if !defined(CONFIG_SONOS)
 	int err;
+#endif
 
 	if (br->stp_enabled == BR_KERNEL_STP && br->topology_change != val) {
 		/* On topology change, set the bridge ageing time to twice the
@@ -622,11 +718,13 @@ void __br_set_topology_change(struct net_bridge *br, unsigned char val)
 			br_debug(br, "restoring ageing time to %lu\n", t);
 		}
 
+#if !defined(CONFIG_SONOS)
 		err = __set_ageing_time(br->dev, t);
 		if (err)
 			br_warn(br, "error offloading ageing time\n");
 		else
 			br->ageing_time = t;
+#endif
 	}
 
 	br->topology_change = val;
