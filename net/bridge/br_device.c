@@ -18,6 +18,14 @@
 #include <linux/uaccess.h>
 #include "br_private.h"
 
+#if defined(CONFIG_SONOS)
+#include "br_direct.h"
+#include "br_forward_sonos.h"
+#include "br_mcast.h"
+#include "br_uplink.h"
+#include "br_sonos.h"
+#endif
+
 #define COMMON_FEATURES (NETIF_F_SG | NETIF_F_FRAGLIST | NETIF_F_HIGHDMA | \
 			 NETIF_F_GSO_MASK | NETIF_F_HW_CSUM)
 
@@ -34,6 +42,14 @@ netdev_tx_t br_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 	const struct nf_br_ops *nf_ops;
 	const unsigned char *dest;
 	struct ethhdr *eth;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	(void)dst;
+	(void)mdst;
+	(void)brstats;
+	(void)nf_ops;
+        dest = skb->data;
+        return sonos_br_dev_xmit(br, skb, dest);
+#else
 	u16 vid = 0;
 
 	rcu_read_lock();
@@ -104,6 +120,7 @@ netdev_tx_t br_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 out:
 	rcu_read_unlock();
 	return NETDEV_TX_OK;
+#endif
 }
 
 static int br_dev_init(struct net_device *dev)
@@ -111,6 +128,13 @@ static int br_dev_init(struct net_device *dev)
 	struct net_bridge *br = netdev_priv(dev);
 	int err;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	err = br_vlan_init(br);
+	if (err) {
+		return err;
+	}
+	err = br_fdb_hash_init(br);
+#else
 	br->stats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
 	if (!br->stats)
 		return -ENOMEM;
@@ -143,6 +167,7 @@ static int br_dev_init(struct net_device *dev)
 		br_mdb_hash_fini(br);
 		br_fdb_hash_fini(br);
 	}
+#endif
 
 	return err;
 }
@@ -163,7 +188,11 @@ static int br_dev_open(struct net_device *dev)
 {
 	struct net_bridge *br = netdev_priv(dev);
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	br_features_recompute(br);
+#else
 	netdev_update_features(dev);
+#endif
 	netif_start_queue(dev);
 	br_stp_enable_bridge(br);
 	br_multicast_open(br);
@@ -173,6 +202,9 @@ static int br_dev_open(struct net_device *dev)
 
 static void br_dev_set_multicast_list(struct net_device *dev)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	sonos_set_multicast_list(dev);
+#endif
 }
 
 static void br_dev_change_rx_flags(struct net_device *dev, int change)
@@ -197,6 +229,10 @@ static void br_get_stats64(struct net_device *dev,
 			   struct rtnl_link_stats64 *stats)
 {
 	struct net_bridge *br = netdev_priv(dev);
+
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	sonos_br_get_stats64(br, stats);
+#else
 	struct pcpu_sw_netstats tmp, sum = { 0 };
 	unsigned int cpu;
 
@@ -218,6 +254,7 @@ static void br_get_stats64(struct net_device *dev,
 	stats->tx_packets = sum.tx_packets;
 	stats->rx_bytes   = sum.rx_bytes;
 	stats->rx_packets = sum.rx_packets;
+#endif
 }
 
 static int br_change_mtu(struct net_device *dev, int new_mtu)
@@ -239,6 +276,9 @@ static int br_change_mtu(struct net_device *dev, int new_mtu)
 /* Allow setting mac address to any valid ethernet address. */
 static int br_set_mac_address(struct net_device *dev, void *p)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	printk("br: set_mac_address");
+#else
 	struct net_bridge *br = netdev_priv(dev);
 	struct sockaddr *addr = p;
 
@@ -252,6 +292,7 @@ static int br_set_mac_address(struct net_device *dev, void *p)
 	}
 	spin_unlock_bh(&br->lock);
 
+#endif
 	return 0;
 }
 
@@ -266,9 +307,13 @@ static void br_getinfo(struct net_device *dev, struct ethtool_drvinfo *info)
 static netdev_features_t br_fix_features(struct net_device *dev,
 	netdev_features_t features)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	return 0;
+#else
 	struct net_bridge *br = netdev_priv(dev);
 
 	return br_features_recompute(br, features);
+#endif
 }
 
 #ifdef CONFIG_NET_POLL_CONTROLLER
@@ -352,16 +397,24 @@ static int br_add_slave(struct net_device *dev, struct net_device *slave_dev,
 			struct netlink_ext_ack *extack)
 
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	return 0;
+#else
 	struct net_bridge *br = netdev_priv(dev);
 
 	return br_add_if(br, slave_dev, extack);
+#endif
 }
 
 static int br_del_slave(struct net_device *dev, struct net_device *slave_dev)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	return 0;
+#else
 	struct net_bridge *br = netdev_priv(dev);
 
 	return br_del_if(br, slave_dev);
+#endif
 }
 
 static const struct ethtool_ops br_ethtool_ops = {
@@ -392,7 +445,9 @@ static const struct net_device_ops br_netdev_ops = {
 	.ndo_fdb_add		 = br_fdb_add,
 	.ndo_fdb_del		 = br_fdb_delete,
 	.ndo_fdb_dump		 = br_fdb_dump,
+#if !defined(CONFIG_SONOS)
 	.ndo_fdb_get		 = br_fdb_get,
+#endif
 	.ndo_bridge_getlink	 = br_getlink,
 	.ndo_bridge_setlink	 = br_setlink,
 	.ndo_bridge_dellink	 = br_dellink,
@@ -405,9 +460,13 @@ static struct device_type br_type = {
 
 void br_dev_setup(struct net_device *dev)
 {
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	memset(dev->dev_addr, 0, ETH_ALEN);
+#else
 	struct net_bridge *br = netdev_priv(dev);
 
 	eth_hw_addr_random(dev);
+#endif
 	ether_setup(dev);
 
 	dev->netdev_ops = &br_netdev_ops;
@@ -416,6 +475,10 @@ void br_dev_setup(struct net_device *dev)
 	SET_NETDEV_DEVTYPE(dev, &br_type);
 	dev->priv_flags = IFF_EBRIDGE | IFF_NO_QUEUE;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	dev->features = NETIF_F_SG | NETIF_F_FRAGLIST | NETIF_F_HIGHDMA |
+			NETIF_F_LLTX | NETIF_F_NETNS_LOCAL;
+#else
 	dev->features = COMMON_FEATURES | NETIF_F_LLTX | NETIF_F_NETNS_LOCAL |
 			NETIF_F_HW_VLAN_CTAG_TX | NETIF_F_HW_VLAN_STAG_TX;
 	dev->hw_features = COMMON_FEATURES | NETIF_F_HW_VLAN_CTAG_TX |
@@ -448,4 +511,5 @@ void br_dev_setup(struct net_device *dev)
 	br_stp_timer_init(br);
 	br_multicast_init(br);
 	INIT_DELAYED_WORK(&br->gc_work, br_fdb_cleanup);
+#endif
 }
