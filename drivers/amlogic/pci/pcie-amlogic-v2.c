@@ -34,7 +34,6 @@ module_param(link_speed, int, 0444);
 MODULE_PARM_DESC(link_speed, "select pcie link speed ");
 
 int keep_init;
-static struct device *dev_pcie_reserved_mem;
 
 #ifdef CONFIG_SWIOTLB
 #define USE_TEE_WHITELIST 1
@@ -1244,7 +1243,6 @@ static int amlogic_pcie_resume_noirq(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct amlogic_pcie *amlogic_pcie = platform_get_drvdata(pdev);
-	struct pcie_port *pp = &amlogic_pcie->pci->pp;
 	unsigned long rate = 100000000;
 	int ret = 0;
 	u32 val;
