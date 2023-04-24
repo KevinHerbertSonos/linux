@@ -4577,6 +4577,15 @@ int (*br_fdb_test_addr_hook)(struct net_device *dev,
 EXPORT_SYMBOL_GPL(br_fdb_test_addr_hook);
 #endif
 
+#ifdef CONFIG_SONOS
+/*
+ * If bridge module is loaded call bridging hook.
+ * returns NULL if packet was consumed.
+ */
+rx_handler_func_t *br_handle_frame_hook = NULL;
+EXPORT_SYMBOL_GPL(br_handle_frame_hook);
+#endif
+
 static inline struct sk_buff *
 sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		   struct net_device *orig_dev)
@@ -4836,6 +4845,19 @@ skip_classify:
 		else if (unlikely(!skb))
 			goto out;
 	}
+
+#ifdef CONFIG_SONOS
+	if (br_handle_frame_hook != NULL) {
+		if (pt_prev) {
+			ret = deliver_skb(skb, pt_prev, orig_dev);
+			pt_prev = NULL;
+		}
+		if (br_handle_frame_hook(&skb) == RX_HANDLER_CONSUMED) {
+			ret = NET_RX_SUCCESS;
+			goto out;
+		}
+	}
+#endif
 
 	rx_handler = rcu_dereference(skb->dev->rx_handler);
 	if (rx_handler) {

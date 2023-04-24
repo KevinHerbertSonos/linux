@@ -277,15 +277,25 @@ static ssize_t group_addr_store(struct device *d,
 {
 	struct net_bridge *br = to_bridge(d);
 	u8 new_addr[6];
+	int i;
 
 	if (!ns_capable(dev_net(br->dev)->user_ns, CAP_NET_ADMIN))
 		return -EPERM;
 
 	if (!mac_pton(buf, new_addr))
 		return -EINVAL;
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	/* Must be 01:80:c2:00:00:0X */
+	for (i = 0; i < 5; i++)
+		if (new_addr[i] != br_group_address[i])
+			return -EINVAL;
 
+	if (new_addr[5] & ~0xf)
+		return -EINVAL;
+#else
 	if (!is_link_local_ether_addr(new_addr))
 		return -EINVAL;
+#endif
 
 	if (new_addr[5] == 1 ||		/* 802.3x Pause address */
 	    new_addr[5] == 2 ||		/* 802.3ad Slow protocols */

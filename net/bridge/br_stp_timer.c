@@ -13,6 +13,13 @@
 #include "br_private.h"
 #include "br_private_stp.h"
 
+#if defined(CONFIG_SONOS)
+#include "br_mcast.h"
+#include "br_proxy.h"
+#include "br_sonos.h"
+#include "br_stp_sonos.h"
+#endif
+
 /* called under bridge lock */
 static int br_is_designated_for_some_port(const struct net_bridge *br)
 {
@@ -53,9 +60,15 @@ static void br_message_age_timer_expired(struct timer_list *t)
 	if (p->state == BR_STATE_DISABLED)
 		return;
 
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	br_info(br, "neighbor %.2x%.2x.%pM lost on port %u(%s)\n",
+		id->prio[0], id->prio[1], &id->addr,
+		(unsigned int) p->port_no, p->dev->name);
+#else
 	br_info(br, "port %u(%s) neighbor %.2x%.2x.%pM lost\n",
 		(unsigned int) p->port_no, p->dev->name,
 		id->prio[0], id->prio[1], &id->addr);
+#endif
 
 	/*
 	 * According to the spec, the message age timer cannot be
@@ -92,11 +105,15 @@ static void br_forward_delay_timer_expired(struct timer_list *t)
 		br_set_state(p, BR_STATE_FORWARDING);
 		if (br_is_designated_for_some_port(br))
 			br_topology_change_detection(br);
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 		netif_carrier_on(br->dev);
+#endif
 	}
+#if !defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
 	rcu_read_lock();
 	br_ifinfo_notify(RTM_NEWLINK, NULL, p);
 	rcu_read_unlock();
+#endif
 	spin_unlock(&br->lock);
 }
 
@@ -106,7 +123,11 @@ static void br_tcn_timer_expired(struct timer_list *t)
 
 	br_debug(br, "tcn timer expired\n");
 	spin_lock(&br->lock);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	if (br->dev->flags & IFF_UP) {
+#else
 	if (!br_is_root_bridge(br) && (br->dev->flags & IFF_UP)) {
+#endif
 		br_transmit_tcn(br);
 
 		mod_timer(&br->tcn_timer, jiffies + br->bridge_hello_time);
@@ -144,6 +165,9 @@ void br_stp_timer_init(struct net_bridge *br)
 	timer_setup(&br->tcn_timer, br_tcn_timer_expired, 0);
 	timer_setup(&br->topology_change_timer,
 		    br_topology_change_timer_expired, 0);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
+	sonos_stp_timer_init(br);
+#endif
 }
 
 void br_stp_port_timer_init(struct net_bridge_port *p)

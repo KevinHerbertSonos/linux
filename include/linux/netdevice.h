@@ -2080,6 +2080,19 @@ struct net_device {
 	struct lock_class_key	addr_list_lock_key;
 	bool			proto_down;
 	unsigned		wol_enabled:1;
+#if defined(CONFIG_SONOS) || defined(__SONOS_LINUX__)
+       struct net_bridge_port_list_node *br_port_list;
+#endif
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
+	ANDROID_KABI_RESERVE(3);
+	ANDROID_KABI_RESERVE(4);
+	ANDROID_KABI_RESERVE(5);
+	ANDROID_KABI_RESERVE(6);
+	ANDROID_KABI_RESERVE(7);
+	ANDROID_KABI_RESERVE(8);
+
 };
 #define to_net_dev(d) container_of(d, struct net_device, dev)
 
