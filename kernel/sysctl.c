@@ -107,8 +107,16 @@ EXPORT_SYMBOL_GPL(sysctl_long_vals);
 
 /* Constants used for minimum and maximum */
 
-#ifdef CONFIG_PERF_EVENTS
-static const int six_hundred_forty_kb = 640 * 1024;
+static int __maybe_unused neg_one = -1;
+static int __maybe_unused two = 2;
+static int __maybe_unused four = 4;
+static unsigned long zero_ul;
+static unsigned long one_ul = 1;
+static unsigned long long_max = LONG_MAX;
+static int one_hundred = 100;
+static int one_thousand = 1000;
+#ifdef CONFIG_PRINTK
+static int ten_thousand = 10000;
 #ifdef CONFIG_SONOS
 extern struct manufacturing_data_page sys_mdp;
 int proc_dointvec_sonos_ep(struct ctl_table *table, int write,
@@ -116,6 +124,9 @@ int proc_dointvec_sonos_ep(struct ctl_table *table, int write,
 int proc_dointvec_sonos_lo(struct ctl_table *table, int write,
 		     void __user *buffer, size_t *lenp, loff_t *ppos);
 #endif	// CONFIG_SONOS
+#endif
+#ifdef CONFIG_PERF_EVENTS
+static int six_hundred_forty_kb = 640 * 1024;
 #endif
 
 
