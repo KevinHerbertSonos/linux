@@ -1321,7 +1321,7 @@ static const struct meson_sar_adc_data meson_sar_adc_c2_data __initconst = {
 	.name = "meson-c2-saradc",
 };
 
-static const struct of_device_id meson_sar_adc_of_match[] __initconst = {
+static const struct of_device_id meson_sar_adc_of_match[] = {
 #ifndef CONFIG_AMLOGIC_REMOVE_OLD
 	{
 		.compatible = "amlogic,meson8-saradc",
@@ -1367,7 +1367,7 @@ MODULE_DEVICE_TABLE(of, meson_sar_adc_of_match);
 
 struct iio_dev *indio_dev;
 
-static int __init meson_sar_adc_probe(struct platform_device *pdev)
+static int meson_sar_adc_probe(struct platform_device *pdev)
 {
 	const struct meson_sar_adc_data *match_data;
 	struct meson_sar_adc_priv *priv;
