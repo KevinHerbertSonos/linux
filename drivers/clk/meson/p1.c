@@ -1162,7 +1162,7 @@ static const struct cpu_dyn_table p1_cpu_dyn_table[] = {
 	CPU_LOW_PARAMS(1000000000, 1, 0, 0),
 };
 
-static const struct clk_parent_data p1_dyn_clk_sel[] __initconst = {
+static const struct clk_parent_data p1_dyn_clk_sel[] = {
 	{ .fw_name = "xtal", },
 	{ .hw = &p1_fclk_div2.hw },
 	{ .hw = &p1_fclk_div3.hw },
@@ -6980,7 +6980,7 @@ static int p1_clkc_init(void)
 }
 arch_initcall_sync(p1_clkc_init);
 #else
-int __init meson_p1_clkc_init(void)
+int meson_p1_clkc_init(void)
 {
 	return platform_driver_register(&p1_driver);
 }
