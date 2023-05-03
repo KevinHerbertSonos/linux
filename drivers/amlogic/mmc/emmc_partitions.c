@@ -1204,6 +1204,7 @@ __setup("androidboot.slot_suffix=", active_slot_num);
  *	__ATTR(cdirq_cnt, S_IRUGO, get_cdirq_cnt, NULL);
  */
 
+#ifndef CONFIG_SONOS
 int add_fake_boot_partition(struct gendisk *disk, char *name, int idx)
 {
 	u64 boot_size = (u64)get_capacity(disk) - 1;
@@ -1267,6 +1268,27 @@ int add_fake_boot_partition(struct gendisk *disk, char *name, int idx)
 
 	return 0;
 }
+#else
+/* Use the original version of Amlogic code, before the change
+   "nocs: R ab update compatible in nocs or normal."
+   The S767 arch does not have the FEAT_DISABLE_EMMC_USER efuse.
+*/
+int add_fake_boot_partition(struct gendisk *disk, char *name, int idx)
+{
+	u64 boot_size = (u64)get_capacity(disk) - 1;
+	char fake_name[80];
+	int offset = 1;
+	struct hd_struct *ret = NULL;
+
+	idx ^= 1;
+	sprintf(fake_name, name, idx);
+	ret = add_emmc_each_part(disk, 1, offset, boot_size, 0, fake_name);
+	if (IS_ERR(ret))
+		pr_info("%s added failed\n", fake_name);
+
+	return 0;
+}
+#endif
 
 int aml_emmc_partition_ops(struct mmc_card *card, struct gendisk *disk)
 {
