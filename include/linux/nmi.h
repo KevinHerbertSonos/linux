@@ -90,7 +90,13 @@ static inline void hardlockup_detector_disable(void) {}
 #endif
 
 #if defined(CONFIG_HARDLOCKUP_DETECTOR_PERF)
-void watchdog_hardlockup_check(unsigned int cpu, struct pt_regs *regs);
+extern void hardlockup_detector_perf_stop(void);
+extern void hardlockup_detector_perf_restart(void);
+extern void hardlockup_detector_perf_cleanup(void);
+#else
+static inline void hardlockup_detector_perf_stop(void) { }
+static inline void hardlockup_detector_perf_restart(void) { }
+static inline void hardlockup_detector_perf_cleanup(void) { }
 #endif
 
 #if defined(CONFIG_HAVE_NMI_WATCHDOG) || defined(CONFIG_HARDLOCKUP_DETECTOR)

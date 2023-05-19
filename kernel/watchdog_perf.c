@@ -20,27 +20,11 @@
 #include <asm/irq_regs.h>
 #include <linux/perf_event.h>
 
-static DEFINE_PER_CPU(bool, watchdog_nmi_touch);
 static DEFINE_PER_CPU(struct perf_event *, watchdog_ev);
 static DEFINE_PER_CPU(struct perf_event *, dead_event);
 static struct cpumask dead_events_mask;
 
-#ifndef CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU
 static atomic_t watchdog_cpus = ATOMIC_INIT(0);
-
-#ifndef CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU
-notrace void arch_touch_nmi_watchdog(void)
-{
-	/*
-	 * Using __raw here because some code paths have
-	 * preemption enabled.  If preemption is enabled
-	 * then interrupts should be enabled too, in which
-	 * case we shouldn't have to worry about the watchdog
-	 * going off.
-	 */
-	raw_cpu_write(watchdog_nmi_touch, true);
-}
-EXPORT_SYMBOL(arch_touch_nmi_watchdog);
 
 #ifdef CONFIG_HARDLOCKUP_CHECK_TIMESTAMP
 static DEFINE_PER_CPU(ktime_t, last_timestamp);
@@ -117,57 +101,10 @@ static void watchdog_overflow_callback(struct perf_event *event,
 	if (!watchdog_check_timestamp())
 		return;
 
-	if (__this_cpu_read(watchdog_nmi_touch) == true) {
-		__this_cpu_write(watchdog_nmi_touch, false);
-		return;
-	}
-
 	watchdog_hardlockup_check(smp_processor_id(), regs);
 
 }
 
-#ifdef CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU
-static unsigned int watchdog_next_cpu(unsigned int cpu)
-{
-	cpumask_t cpus = watchdog_cpus;
-	unsigned int next_cpu;
-
-	next_cpu = cpumask_next(cpu, &cpus);
-	if (next_cpu >= nr_cpu_ids)
-		next_cpu = cpumask_first(&cpus);
-
-	if (next_cpu == cpu)
-		return nr_cpu_ids;
-
-	return next_cpu;
-}
-
-static int is_hardlockup_other_cpu(unsigned int cpu)
-{
-	unsigned long hrint = per_cpu(hrtimer_interrupts, cpu);
-
-#ifdef CONFIG_AMLOGIC_MODIFY
-	unsigned long lock_cnt = per_cpu(hrtimer_interrupts_lock_cnt, cpu);
-
-	if (hrint ==  per_cpu(hrtimer_interrupts_saved, cpu)) {
-		per_cpu(hrtimer_interrupts_lock_cnt, cpu) = ++lock_cnt;
-		if (lock_cnt > watchdog_thresh)
-			return 1;
-	} else {
-		per_cpu(hrtimer_interrupts_lock_cnt, cpu) = 0;
-	}
-#else
-	if (per_cpu(hrtimer_interrupts_saved, cpu) == hrint)
-		return 1;
-#endif
-
-	per_cpu(hrtimer_interrupts_saved, cpu) = hrint;
-	return 0;
-}
-
-
-#ifdef CONFIG_HAVE_NMI_WATCHDOG
->>>>>>> 4091cd12c6c41... watchdog/hardlockup: move perf hardlockup checking/panic to common watchdog.c
 static int hardlockup_detector_event_create(void)
 {
 	unsigned int cpu;
