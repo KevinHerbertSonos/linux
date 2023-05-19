@@ -121,7 +121,8 @@ static void watchdog_overflow_callback(struct perf_event *event,
 		__this_cpu_write(watchdog_nmi_touch, false);
 		return;
 	}
-	watchdog_hardlockup_check(regs);
+
+	watchdog_hardlockup_check(smp_processor_id(), regs);
 
 }
 
