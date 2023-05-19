@@ -20,13 +20,12 @@
 #include <asm/irq_regs.h>
 #include <linux/perf_event.h>
 
-static DEFINE_PER_CPU(bool, hard_watchdog_warn);
 static DEFINE_PER_CPU(bool, watchdog_nmi_touch);
 static DEFINE_PER_CPU(struct perf_event *, watchdog_ev);
 static DEFINE_PER_CPU(struct perf_event *, dead_event);
 static struct cpumask dead_events_mask;
 
-static unsigned long hardlockup_allcpu_dumped;
+#ifndef CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU
 static atomic_t watchdog_cpus = ATOMIC_INIT(0);
 
 #ifndef CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU
@@ -122,48 +121,52 @@ static void watchdog_overflow_callback(struct perf_event *event,
 		__this_cpu_write(watchdog_nmi_touch, false);
 		return;
 	}
+	watchdog_hardlockup_check(regs);
 
-	/* check for a hardlockup
-	 * This is done by making sure our timer interrupt
-	 * is incrementing.  The timer interrupt should have
-	 * fired multiple times before we overflow'd.  If it hasn't
-	 * then this is a good indication the cpu is stuck
-	 */
-	if (is_hardlockup()) {
-		int this_cpu = smp_processor_id();
-
-		/* only print hardlockups once */
-		if (__this_cpu_read(hard_watchdog_warn) == true)
-			return;
-
-		pr_emerg("Watchdog detected hard LOCKUP on cpu %d\n",
-			 this_cpu);
-		print_modules();
-		print_irqtrace_events(current);
-		if (regs)
-			show_regs(regs);
-		else
-			dump_stack();
-
-		/*
-		 * Perform all-CPU dump only once to avoid multiple hardlockups
-		 * generating interleaving traces
-		 */
-		if (sysctl_hardlockup_all_cpu_backtrace &&
-				!test_and_set_bit(0, &hardlockup_allcpu_dumped))
-			trigger_allbutself_cpu_backtrace();
-
-		if (hardlockup_panic)
-			nmi_panic(regs, "Hard LOCKUP");
-
-		__this_cpu_write(hard_watchdog_warn, true);
-		return;
-	}
-
-	__this_cpu_write(hard_watchdog_warn, false);
-	return;
 }
 
+#ifdef CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU
+static unsigned int watchdog_next_cpu(unsigned int cpu)
+{
+	cpumask_t cpus = watchdog_cpus;
+	unsigned int next_cpu;
+
+	next_cpu = cpumask_next(cpu, &cpus);
+	if (next_cpu >= nr_cpu_ids)
+		next_cpu = cpumask_first(&cpus);
+
+	if (next_cpu == cpu)
+		return nr_cpu_ids;
+
+	return next_cpu;
+}
+
+static int is_hardlockup_other_cpu(unsigned int cpu)
+{
+	unsigned long hrint = per_cpu(hrtimer_interrupts, cpu);
+
+#ifdef CONFIG_AMLOGIC_MODIFY
+	unsigned long lock_cnt = per_cpu(hrtimer_interrupts_lock_cnt, cpu);
+
+	if (hrint ==  per_cpu(hrtimer_interrupts_saved, cpu)) {
+		per_cpu(hrtimer_interrupts_lock_cnt, cpu) = ++lock_cnt;
+		if (lock_cnt > watchdog_thresh)
+			return 1;
+	} else {
+		per_cpu(hrtimer_interrupts_lock_cnt, cpu) = 0;
+	}
+#else
+	if (per_cpu(hrtimer_interrupts_saved, cpu) == hrint)
+		return 1;
+#endif
+
+	per_cpu(hrtimer_interrupts_saved, cpu) = hrint;
+	return 0;
+}
+
+
+#ifdef CONFIG_HAVE_NMI_WATCHDOG
+>>>>>>> 4091cd12c6c41... watchdog/hardlockup: move perf hardlockup checking/panic to common watchdog.c
 static int hardlockup_detector_event_create(void)
 {
 	unsigned int cpu;
