@@ -82,13 +82,21 @@ __setup("nmi_watchdog=", hardlockup_panic_setup);
 
 #endif /* CONFIG_HARDLOCKUP_DETECTOR */
 
-#if defined(CONFIG_HARDLOCKUP_DETECTOR_PERF)
+#if defined(CONFIG_HARDLOCKUP_DETECTOR_COUNTS_HRTIMER)
 
 static DEFINE_PER_CPU(atomic_t, hrtimer_interrupts);
 static DEFINE_PER_CPU(int, hrtimer_interrupts_saved);
 static DEFINE_PER_CPU(bool, watchdog_hardlockup_warned);
 static DEFINE_PER_CPU(bool, watchdog_hardlockup_touched);
 static unsigned long watchdog_hardlockup_all_cpu_dumped;
+
+void watchdog_hardlockup_touch_cpu(unsigned int cpu)
+{
+	per_cpu(watchdog_hardlockup_touched, cpu) = true;
+
+	/* Match with smp_rmb() in watchdog_hardlockup_check() */
+	smp_wmb();
+}
 
 static bool is_hardlockup(unsigned int cpu)
 {
@@ -107,13 +115,16 @@ static bool is_hardlockup(unsigned int cpu)
 	return false;
 }
 
-static void watchdog_hardlockup_kick(void)
+static unsigned long watchdog_hardlockup_kick(void)
 {
-	atomic_inc(raw_cpu_ptr(&hrtimer_interrupts));
+	return atomic_inc_return(raw_cpu_ptr(&hrtimer_interrupts));
 }
 
 void watchdog_hardlockup_check(unsigned int cpu, struct pt_regs *regs)
 {
+	/* Match with smp_wmb() in watchdog_hardlockup_touch_cpu() */
+	smp_rmb();
+
 	if (per_cpu(watchdog_hardlockup_touched, cpu)) {
 		per_cpu(watchdog_hardlockup_touched, cpu) = false;
 		return;
@@ -189,7 +200,7 @@ void __weak watchdog_hardlockup_disable(unsigned int cpu)
 }
 
 /* Return 0, if a NMI watchdog is available. Error code otherwise */
-int __weak __init watchdog_hardlockup_probe(void)
+int __weak __init watchdog_hardlockupy_probe(void)
 {
 	return hardlockup_detector_perf_init();
 }
@@ -441,12 +452,15 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 	struct pt_regs *regs = get_irq_regs();
 	int duration;
 	int softlockup_all_cpu_backtrace = sysctl_softlockup_all_cpu_backtrace;
+	unsigned long hrtimer_interrupts;
 
 	if (!watchdog_enabled)
 		return HRTIMER_NORESTART;
 
-	/* kick the hardlockup detector */
-	watchdog_hardlockup_count();
+	hrtimer_interrupts = watchdog_hardlockup_kick();
+
+	/* test for hardlockups */
+	watchdog_buddy_check_hardlockup(hrtimer_interrupts);
 
 	/* kick the softlockup detector */
 	if (completion_done(this_cpu_ptr(&softlockup_completion))) {

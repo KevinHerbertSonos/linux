@@ -103,11 +103,12 @@ static inline void hardlockup_detector_perf_cleanup(void) { }
 # define NMI_WATCHDOG_SYSCTL_PERM	0444
 #endif
 
-#if defined(CONFIG_HARDLOCKUP_DETECTOR) || \
-    (defined(CONFIG_HAVE_NMI_WATCHDOG) && !defined(CONFIG_HAVE_HARDLOCKUP_DETECTOR_ARCH))
+#if defined(CONFIG_HARDLOCKUP_DETECTOR_COUNTS_HRTIMER)
 extern void arch_touch_nmi_watchdog(void);
+extern void watchdog_hardlockup_touch_cpu(unsigned int cpu);
 #else
 static inline void arch_touch_nmi_watchdog(void) {}
+static inline void watchdog_hardlockup_touch_cpu(unsigned int cpu) {}
 #endif
 
 #if defined(CONFIG_HARDLOOKUP_DETECTOR_PERF)
@@ -135,6 +136,12 @@ void watchdog_hardlockup_start(void);
 int watchdog_hardlockup_probe(void);
 void watchdog_hardlockup_enable(unsigned int cpu);
 void watchdog_hardlockup_disable(unsigned int cpu);
+
+#ifdef CONFIG_HARDLOCKUP_DETECTOR_BUDDY
+void watchdog_buddy_check_hardlockup(unsigned long hrtimer_interrupts);
+#else
+static inline void watchdog_buddy_check_hardlockup(unsigned long hrtimer_interrups) {}
+#endif
 
 /**
  * touch_nmi_watchdog - manually reset the hardlockup watchdog timeout.
