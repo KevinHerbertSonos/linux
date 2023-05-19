@@ -30,17 +30,17 @@
 static DEFINE_MUTEX(watchdog_mutex);
 
 #if defined(CONFIG_HARDLOCKUP_DETECTOR) || defined(CONFIG_HAVE_NMI_WATCHDOG)
-# define NMI_WATCHDOG_DEFAULT	1
+# define WATCHDOG_HARDLOCKUP_DEFAULT	1
 #else
-# define NMI_WATCHDOG_DEFAULT	0
+# define WATCHDOG_HARDLOCKUP_DEFAULT	0
 #endif
 
 unsigned long __read_mostly watchdog_enabled;
 int __read_mostly watchdog_user_enabled = 1;
-int __read_mostly nmi_watchdog_user_enabled = NMI_WATCHDOG_DEFAULT;
-int __read_mostly soft_watchdog_user_enabled = 1;
+static int __read_mostly watchdog_hardlockup_user_enabled = WATCHDOG_HARDLOCKUP_DEFAULT;
+static int __read_mostly watchdog_softlookup_user_enabled = 1;
 int __read_mostly watchdog_thresh = 10;
-static int __read_mostly nmi_watchdog_available;
+static int __read_mostly watchdog_hardlockup_available;
 
 static struct cpumask watchdog_allowed_mask __read_mostly;
 
@@ -63,7 +63,7 @@ unsigned int __read_mostly hardlockup_panic =
  */
 void __init hardlockup_detector_disable(void)
 {
-	nmi_watchdog_user_enabled = 0;
+	watchdog_hardlockup_user_enabled = 0;
 }
 
 static int __init hardlockup_panic_setup(char *str)
@@ -73,9 +73,9 @@ static int __init hardlockup_panic_setup(char *str)
 	else if (!strncmp(str, "nopanic", 7))
 		hardlockup_panic = 0;
 	else if (!strncmp(str, "0", 1))
-		nmi_watchdog_user_enabled = 0;
+		watchdog_hardlockup_user_enabled = 0;
 	else if (!strncmp(str, "1", 1))
-		nmi_watchdog_user_enabled = 1;
+		watchdog_hardlockup_user_enabled = 1;
 	return 1;
 }
 __setup("nmi_watchdog=", hardlockup_panic_setup);
@@ -89,19 +89,6 @@ static DEFINE_PER_CPU(int, hrtimer_interrupts_saved);
 static DEFINE_PER_CPU(bool, watchdog_hardlockup_warned);
 static DEFINE_PER_CPU(bool, watchdog_hardlockup_touched);
 static unsigned long watchdog_hardlockup_all_cpu_dumped;
-
-notrace void arch_touch_nmi_watchdog(void)
-{
-	/*
-	 * Using __raw here because some code paths have
-	 * preemption enabled.  If preemption is enabled
-	 * then interrupts should be enabled too, in which
-	 * case we shouldn't have to worry about the watchdog
-	 * going off.
-	 */
-	raw_cpu_write(watchdog_hardlockup_touched, true);
-}
-EXPORT_SYMBOL(arch_touch_nmi_watchdog);
 
 static bool is_hardlockup(unsigned int cpu)
 {
@@ -187,40 +174,40 @@ static inline void watchdog_hardlockup_kick(void) { }
  * These functions can be overridden if an architecture implements its
  * own hardlockup detector.
  *
- * watchdog_nmi_enable/disable can be implemented to start and stop when
+ * watchdog_hardlockup_enable/disable can be implemented to start and stop when
  * softlockup watchdog threads start and stop. The arch must select the
  * SOFTLOCKUP_DETECTOR Kconfig.
  */
-void __weak watchdog_nmi_enable(unsigned int cpu)
+void __weak watchdog_hardlockup_enable(unsigned int cpu)
 {
 	hardlockup_detector_perf_enable();
 }
 
-void __weak watchdog_nmi_disable(unsigned int cpu)
+void __weak watchdog_hardlockup_disable(unsigned int cpu)
 {
 	hardlockup_detector_perf_disable();
 }
 
 /* Return 0, if a NMI watchdog is available. Error code otherwise */
-int __weak __init watchdog_nmi_probe(void)
+int __weak __init watchdog_hardlockup_probe(void)
 {
 	return hardlockup_detector_perf_init();
 }
 
 /**
- * watchdog_nmi_stop - Stop the watchdog for reconfiguration
+ * watchdog_hardlockup_stop - Stop the watchdog for reconfiguration
  *
  * The reconfiguration steps are:
- * watchdog_nmi_stop();
+ * watchdog_hardlockup_stop();
  * update_variables();
- * watchdog_nmi_start();
+ * watchdog_hardlockup_start();
  */
-void __weak watchdog_nmi_stop(void) { }
+void __weak watchdog_hardlockup_stop(void) { }
 
 /**
- * watchdog_nmi_start - Start the watchdog after reconfiguration
+ * watchdog_hardlockup_start - Start the watchdog after reconfiguration
  *
- * Counterpart to watchdog_nmi_stop().
+ * Counterpart to watchdog_hardlockup_stop().
  *
  * The following variables have been updated in update_variables() and
  * contain the currently valid configuration:
@@ -228,23 +215,23 @@ void __weak watchdog_nmi_stop(void) { }
  * - watchdog_thresh
  * - watchdog_cpumask
  */
-void __weak watchdog_nmi_start(void) { }
+void __weak watchdog_hardlockup_start(void) { }
 
 /**
  * lockup_detector_update_enable - Update the sysctl enable bit
  *
- * Caller needs to make sure that the NMI/perf watchdogs are off, so this
- * can't race with watchdog_nmi_disable().
+ * Caller needs to make sure that the hard watchdogs are off, so this
+ * can't race with watchdog_hardlockup_disable().
  */
 static void lockup_detector_update_enable(void)
 {
 	watchdog_enabled = 0;
 	if (!watchdog_user_enabled)
 		return;
-	if (nmi_watchdog_available && nmi_watchdog_user_enabled)
-		watchdog_enabled |= NMI_WATCHDOG_ENABLED;
-	if (soft_watchdog_user_enabled)
-		watchdog_enabled |= SOFT_WATCHDOG_ENABLED;
+	if (watchdog_hardlockup_available && watchdog_hardlockup_user_enabled)
+		watchdog_enabled |= WATCHDOG_HARDLOCKUP_ENABLED;
+	if (watchdog_softlockup_user_enabled)
+		watchdog_enabled |= WATCHDOG_SOFTOCKUP_ENABLED;
 }
 
 #ifdef CONFIG_SOFTLOCKUP_DETECTOR
@@ -283,7 +270,7 @@ __setup("nowatchdog", nowatchdog_setup);
 
 static int __init nosoftlockup_setup(char *str)
 {
-	soft_watchdog_user_enabled = 0;
+	watchdog_softlockup_user_enabled = 0;
 	return 1;
 }
 __setup("nosoftlockup", nosoftlockup_setup);
@@ -401,7 +388,7 @@ static int is_softlockup(unsigned long touch_ts)
 {
 	unsigned long now = get_timestamp();
 
-	if ((watchdog_enabled & SOFT_WATCHDOG_ENABLED) && watchdog_thresh){
+	if ((watchdog_enabled & WATCHDOG_SOFTLOCKUP_ENABLED) && watchdog_thresh){
 		/* Warn about unreasonable delays. */
 		if (time_after(now, touch_ts + get_softlockup_thresh()))
 			return now - touch_ts;
@@ -576,7 +563,7 @@ static void watchdog_enable(unsigned int cpu)
 	complete(done);
 
 	/*
-	 * Start the timer first to prevent the NMI watchdog triggering
+	 * Start the timer first to prevent the hardlockup watchdog triggering
 	 * before the timer has a chance to fire.
 	 */
 	hrtimer_init(hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_HARD);
@@ -587,8 +574,8 @@ static void watchdog_enable(unsigned int cpu)
 	/* Initialize timestamp */
 	__touch_watchdog();
 	/* Enable the perf event */
-	if (watchdog_enabled & NMI_WATCHDOG_ENABLED)
-		watchdog_nmi_enable(cpu);
+	if (watchdog_enabled & WATCHDOG_HARDLOCKUP_ENABLED)
+		watchdog_hardlockup_enable(cpu);
 }
 
 static void watchdog_disable(unsigned int cpu)
@@ -598,11 +585,11 @@ static void watchdog_disable(unsigned int cpu)
 	WARN_ON_ONCE(cpu != smp_processor_id());
 
 	/*
-	 * Disable the perf event first. That prevents that a large delay
-	 * between disabling the timer and disabling the perf event causes
-	 * the perf NMI to detect a false positive.
+	 * Disable the hardlockup detector first. That prevents that a large
+	 * delay between disabling the timer and disabling the hardlockup
+	 * detector causes a false positive.
 	 */
-	watchdog_nmi_disable(cpu);
+	watchdog_hardlockup_disable(cpu);
 	hrtimer_cancel(hrtimer);
 	wait_for_completion(this_cpu_ptr(&softlockup_completion));
 }
@@ -658,7 +645,7 @@ int lockup_detector_offline_cpu(unsigned int cpu)
 static void lockup_detector_reconfigure(void)
 {
 	cpus_read_lock();
-	watchdog_nmi_stop();
+	watchdog_hardlockup_stop();
 
 	softlockup_stop_all();
 	set_sample_period();
@@ -666,7 +653,7 @@ static void lockup_detector_reconfigure(void)
 	if (watchdog_enabled && watchdog_thresh)
 		softlockup_start_all();
 
-	watchdog_nmi_start();
+	watchdog_hardlockup_start();
 	cpus_read_unlock();
 	/*
 	 * Must be called outside the cpus locked section to prevent
@@ -704,9 +691,9 @@ static __init void lockup_detector_setup(void)
 static void lockup_detector_reconfigure(void)
 {
 	cpus_read_lock();
-	watchdog_nmi_stop();
+	watchdog_hardlockup_stop();
 	lockup_detector_update_enable();
-	watchdog_nmi_start();
+	watchdog_hardlockup_start();
 	cpus_read_unlock();
 }
 static inline void lockup_detector_setup(void)
@@ -872,7 +859,7 @@ void __init lockup_detector_init(void)
 	cpumask_copy(&watchdog_cpumask,
 		     housekeeping_cpumask(HK_FLAG_TIMER));
 
-	if (!watchdog_nmi_probe())
+	if (!watchdog_hardlockup_probe())
 		nmi_watchdog_available = true;
 	lockup_detector_setup();
 }
