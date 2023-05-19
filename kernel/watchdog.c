@@ -100,10 +100,9 @@ __setup("hardlockup_all_cpu_backtrace=", hardlockup_all_cpu_backtrace_setup);
  * softlockup watchdog threads start and stop. The arch must select the
  * SOFTLOCKUP_DETECTOR Kconfig.
  */
-int __weak watchdog_nmi_enable(unsigned int cpu)
+void __weak watchdog_nmi_enable(unsigned int cpu)
 {
 	hardlockup_detector_perf_enable();
-	return 0;
 }
 
 void __weak watchdog_nmi_disable(unsigned int cpu)
