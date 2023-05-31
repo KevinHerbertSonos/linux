@@ -995,7 +995,7 @@ static ssize_t port_num_show(struct class *cla,
 static ssize_t dump_reg_show(struct class *cla,
 			     struct class_attribute *attr, char *b)
 {
-	return dump_cecrx_reg(b);
+	return dump_cec_reg(b);
 }
 
 static ssize_t arc_port_show(struct class *cla,
@@ -1374,7 +1374,7 @@ static ssize_t dbg_store(struct class *cla, struct class_attribute *attr,
 	} else if (token && strncmp(token, "dump", 4) == 0) {
 		token = kmalloc(2048, GFP_KERNEL);
 		if (token) {
-			dump_cecrx_reg(token);
+			dump_cec_reg(token);
 			CEC_ERR("%s\n", token);
 			kfree(token);
 		}
@@ -2244,6 +2244,7 @@ static int aml_aocec_probe(struct platform_device *pdev)
 	struct vsdb_phyaddr *tx_phy_addr = get_hdmitx_phy_addr();
 	unsigned int is_ee_cec;
 
+
 	if (!node || !node->name) {
 		pr_err("%s no devtree node\n", __func__);
 		return -ENOMEM;
@@ -3044,7 +3045,6 @@ static void aml_aocec_shutdown(struct platform_device *pdev)
 	cec_dev->cec_info.power_status = CEC_PW_STANDBY;
 	cec_dev->cec_suspend = CEC_PW_STANDBY;
 }
-
 static struct platform_driver aml_aocec_driver = {
 	.driver = {
 		.name  = "ao_cec_drv",

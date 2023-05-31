@@ -5,8 +5,11 @@
  */
 
 #include "meson-g12-common.dtsi"
+#include "mesonsm1_drm.dtsi"
 #include <dt-bindings/power/meson-sm1-power.h>
 #include <dt-bindings/clock/amlogic,sm1-audio-clk.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/gpio/meson-g12a-gpio.h>
 
 / {
 	compatible = "amlogic,sm1";
@@ -512,6 +515,9 @@
 		pinctrl-names="default", "hdmitx_i2c";
 		pinctrl-0=<&hdmitx_hpd_pins &hdmitx_ddc_pins>;
 		pinctrl-1=<&hdmitx_hpd_gpio &i2c3_sda_h_pins>;
+		hdmitx-gpios-hpd = <&gpio GPIOH_2 0>;
+		hdmitx-gpios-scl = <&gpio GPIOH_1 0>;
+		hdmitx-gpios-sda = <&gpio GPIOH_0 0>;
 		clocks = <&clkc CLKID_VCLK2_ENCI
 			&clkc CLKID_VCLK2_VENCI0
 			&clkc CLKID_VCLK2_VENCI1
@@ -796,7 +802,7 @@
 		port_num = <1>;
 		output = <1>;
 		cec_sel = <1>;/*1:use one ip, 2:use 2 ip*/
-		ee_cec;
+		ee_cec = <1>;
 		arc_port_mask = <0x1>;
 		interrupts = <GIC_SPI 203 IRQ_TYPE_EDGE_RISING
 				GIC_SPI 199 IRQ_TYPE_EDGE_RISING>;	/*b,a*/
@@ -809,6 +815,7 @@
 		       0x0 0xFF800000 0x0 0x400
 		       0x0 0xFF634400 0x0 0x26>;
 		reg-names = "ao_exit","ao","periphs";
+		hdmi-phandle = <&drm_amhdmitx>;
 	};
 
 	vdac: vdac {
