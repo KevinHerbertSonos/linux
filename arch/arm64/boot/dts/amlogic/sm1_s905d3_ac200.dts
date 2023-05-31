@@ -343,9 +343,9 @@
 		aml-audio-card,dai-link@6 {
 			mclk-fs = <256>;
 			continuous-clock;
-			suffix-name = "alsaPORT-loopback";
+			suffix-name = "alsaPORT-earc";
 			cpu {
-				sound-dai = <&loopbacka>;
+				sound-dai = <&earc>;
 				system-clock-frequency = <12288000>;
 			};
 			codec {
@@ -790,6 +790,10 @@
 
 		status = "okay";
 	};
+};
+
+&earc {
+	status = "okay";
 };
 
 &vddcpu {

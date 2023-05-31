@@ -156,8 +156,10 @@ EXPORT_SYMBOL(hdmitx_ext_get_audio_status);
 int register_earcrx_callback(pf_callback callback)
 {
 #if defined(CONFIG_AMLOGIC_HDMITX)
-	if (get_hdmitx20_init() == 1)
+//	if (get_hdmitx20_init() == 1) {
+	if (1) {
 		hdmitx_earc_hpdst(callback);
+	}
 #endif
 #if defined(CONFIG_AMLOGIC_HDMITX21)
 	/* ARC IN audio capture not working due to init
