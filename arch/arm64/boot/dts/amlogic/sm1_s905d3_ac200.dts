@@ -938,10 +938,16 @@
 	vmmc-supply = <&vddao_3v3>;
 	vqmmc-supply = <&vddio_ao1v8>;
 
-	brcmf: wifi@1 {
-		reg = <1>;
-		compatible = "brcm,bcm4329-fmac";
+	sdio {
+            pinname = "sdio";
+            ocr_avail = <0x200080>; /**VDD voltage 3.3 ~ 3.4 */
+            max_req_size = <0x20000>; /**128KB*/
+            card_type = <3>;
 	};
+	//brcmf: wifi@1 {
+		//reg = <1>;
+		//compatible = "brcm,bcm4329-fmac";
+	//};
 };
 
 /* SD card */
