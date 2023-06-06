@@ -94,6 +94,13 @@
 			micctl-device = <&micctl_gpio>;
 		};
 	} ;
+
+	meson-ir {
+		status = "okay";
+		protocol = <REMOTE_TYPE_RAW_NEC>;
+		pinctrl-names = "default";
+	};
+
 	ir-rcvr {
 		compatible = "sonos,ir-rcvr";
 		status = "okay";
@@ -122,7 +129,6 @@
 		i2c4 = &i2c_AO;
 		spicc0 = &spicc0;
 		spicc1 = &spicc1;
-		//remote = &remote;
 	};
 
 	memory@00000000 {
