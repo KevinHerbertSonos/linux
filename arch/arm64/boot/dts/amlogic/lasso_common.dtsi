@@ -61,6 +61,10 @@
 			/* event-sources are offsets from EVTSOURCE_BUTTON_PLAYPAUSE
 			 * some generate an event for more than one source
 			 */
+			power {
+				 event-sources = <5>;
+				 no-repeat-sim;
+			};
 			pairing {
 				 event-sources = <7>;
 				 no-repeat-sim;
@@ -297,7 +301,7 @@
 		status = "okay";
 		interrupt_pin = <&gpio       GPIOX_6       GPIO_ACTIVE_HIGH>;
 		irq_trigger_type = "GPIO_IRQ_LOW";
-		power_on_pin = <&gpio       GPIOX_9       GPIO_ACTIVE_HIGH>;
+		power_on_pin = <&gpio       GPIOX_7       GPIO_ACTIVE_HIGH>;
 		dhd_static_buf;	//if use bcm wifi, config dhd_static_buf
 		pinctrl-names = "default";
 		pinctrl-0 = <&pwm_e_pins>;
@@ -874,7 +878,17 @@
 
 	is31fl3195@54 {  // LED controller
            compatible = "lumissil,is31fl3195";
+           status = "okay";
            reg = <0x54>;
+	};
+
+	bma420@0 {  // accelerometer
+           compatible = "sonos,bma420";
+           status = "okay";
+           reg = <0x18>;
+           motion-detection-mode;
+           music-impacts-z-axis;
+           reinit-on-resume;
 	};
 
 	sge@0 {  // Sigdetail Gesture Engine
