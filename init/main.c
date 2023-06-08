@@ -1131,13 +1131,13 @@ static int get_verified_serial(uint8_t *serial, size_t serialLen)
 	 */
 	if (serialLen != 6 ||
 	    sys_mdp.mdp_magic != MDP_MAGIC ||
-			sys_mdp.mdp_version < MDP_VERSION_AUTH_FLAGS ||
+			MDP_GET_EFFECTIVE_MDP1_VERSION(&sys_mdp) < MDP_VERSION_AUTH_FLAGS ||
 			!(sys_mdp.mdp_pages_present & MDP_PAGE3_PRESENT) ||
 			sys_mdp3.mdp3_magic != MDP_MAGIC3 ||
 			sys_mdp3.mdp3_version < MDP3_VERSION_SECURE_BOOT) {
 		printk(KERN_ERR "bad MDP in get_verified_serial: %x %x %x %x %x\n",
 		       sys_mdp.mdp_magic,
-		       sys_mdp.mdp_version,
+		       MDP_GET_EFFECTIVE_MDP1_VERSION(&sys_mdp),
 		       sys_mdp.mdp_pages_present,
 		       sys_mdp3.mdp3_magic,
 		       sys_mdp3.mdp3_version);
