@@ -570,6 +570,7 @@ static  int  set_disp_mode(const char *mode)
 	return ret;
 }
 
+#ifdef CONFIG_AMLOGIC_VOUT_SERVE
 static void hdmitx_pre_display_init(struct hdmitx_dev *hdev)
 {
 	u8 update_flags = 0;
@@ -633,6 +634,8 @@ static void hdmitx_pre_display_init(struct hdmitx_dev *hdev)
 
 	/* clear vsif/avi */
 }
+#endif
+
 static void hdmi_physical_size_update(struct hdmitx_dev *hdev)
 {
 	u32 width, height;
@@ -794,6 +797,7 @@ static void hdmitx_start_hdcp_handler(struct work_struct *work)
 	is_passthrough_switch = 0;
 }
 
+#ifdef CONFIG_AMLOGIC_VOUT_SERVE
 static int check_vic_4x3_and_16x9(struct hdmitx_dev *hdev, enum hdmi_vic vic)
 {
 	if (vic == HDMI_3_720x480p60_16x9 ||
@@ -815,7 +819,6 @@ static int check_vic_4x3_and_16x9(struct hdmitx_dev *hdev, enum hdmi_vic vic)
 	return vic;
 }
 
-#ifdef CONFIG_AMLOGIC_VOUT_SERVE
 static int set_disp_mode_auto(void)
 {
 	int ret =  -1;
