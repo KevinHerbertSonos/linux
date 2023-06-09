@@ -381,7 +381,9 @@ static size_t fb_rmem_afbc_size[OSD_COUNT][OSD_MAX_BUF_NUM];
 int ion_fd[OSD_COUNT][OSD_MAX_BUF_NUM];
 
 static int osd_cursor(struct fb_info *fbi, struct fb_cursor *var);
+#ifdef CONFIG_AMLOGIC_ION
 static void *map_virt_from_phys(phys_addr_t phys, unsigned long total_size);
+#endif
 static void config_osd_table(u32 display_device_cnt);
 
 phys_addr_t get_fb_rmem_paddr(int index)
@@ -750,6 +752,7 @@ osd_setcmap(struct fb_cmap *cmap, struct fb_info *info)
 	return 0;
 }
 
+#ifdef CONFIG_ION
 static void get_dma_buffer_id(struct fb_info *info,
 			      struct fb_dmabuf_export *dmaexp)
 {
@@ -765,6 +768,7 @@ static void get_dma_buffer_id(struct fb_info *info,
 		pr_info("Notice: not support now\n");
 	dmaexp->flags = O_CLOEXEC;
 }
+#endif
 
 static int sync_render_add(struct fb_sync_request_s *sync_request,
 			   struct fb_info *info)
@@ -834,7 +838,9 @@ static int osd_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
 	int out_fen_fd;
 	int xoffset, yoffset;
 	struct fb_sync_request_s *sync_request;
+#ifdef CONFIG_ION
 	struct fb_dmabuf_export *dmaexp;
+#endif
 #ifdef CONFIG_AMLOGIC_MEDIA_FB_OSD2_CURSOR
 	struct fb_cursor *cursor;
 #endif
@@ -1224,7 +1230,6 @@ void aml_unmap_phyaddr(u8 *vaddr)
 static int malloc_osd_memory(struct fb_info *info)
 {
 	int j = 0;
-	int ret = 0;
 	u32 fb_index;
 	int logo_index = -1;
 	struct osd_fb_dev_s *fbdev;
@@ -1236,6 +1241,7 @@ static int malloc_osd_memory(struct fb_info *info)
 	unsigned long fb_memsize_total  = 0;
 
 #ifdef CONFIG_AMLOGIC_ION
+	int ret = 0;
 	struct dma_buf *dmabuf = NULL;
 	size_t len;
 #endif
@@ -1664,6 +1670,7 @@ static int osd_mmap(struct fb_info *info, struct vm_area_struct *vma)
 	return vm_iomap_memory(vma, start, len);
 }
 
+#ifdef CONFIG_AMLOGIC_ION
 static void *map_virt_from_phys(phys_addr_t phys, unsigned long total_size)
 {
 	u32 offset, npages;
@@ -1696,6 +1703,7 @@ static void *map_virt_from_phys(phys_addr_t phys, unsigned long total_size)
 	vfree(pages);
 	return vaddr;
 }
+#endif
 
 static int is_new_page(unsigned long addr, unsigned long pos)
 {
