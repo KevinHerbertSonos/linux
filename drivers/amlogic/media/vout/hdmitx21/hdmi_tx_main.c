@@ -70,7 +70,9 @@ unsigned int rx_hdcp2_ver;
 #define TEE_HDCP_IOC_START _IOW('P', 0, int)
 
 static struct class *hdmitx_class;
+#ifdef CONFIG_AMLOGIC_VOUT_SERVE
 static int set_disp_mode_auto(void);
+#endif
 static void hdmitx_get_edid(struct hdmitx_dev *hdev);
 static void hdmitx_set_drm_pkt(struct master_display_info_s *data);
 static void hdmitx_set_vsif_pkt(enum eotf_type type, enum mode_type
@@ -813,6 +815,7 @@ static int check_vic_4x3_and_16x9(struct hdmitx_dev *hdev, enum hdmi_vic vic)
 	return vic;
 }
 
+#ifdef CONFIG_AMLOGIC_VOUT_SERVE
 static int set_disp_mode_auto(void)
 {
 	int ret =  -1;
@@ -985,6 +988,7 @@ static int set_disp_mode_auto(void)
 	mutex_unlock(&hdev->hdmimode_mutex);
 	return ret;
 }
+#endif
 
 /*disp_mode attr*/
 static ssize_t disp_mode_show(struct device *dev,
@@ -7752,8 +7756,10 @@ static struct meson_hdmitx_dev drm_hdmitx_instance = {
 	.get_tx_hdcp_cap = drm_hdmitx_get_tx_hdcp_cap,
 	.get_rx_hdcp_cap = drm_hdmitx_get_rx_hdcp_cap,
 	.register_hdcp_notify = drm_hdmitx_register_hdcp_notify,
+#ifdef CONFIG_AMLOGIC_VOUT_SERVE
 	.get_vrr_cap = drm_hdmitx_get_vrr_cap,
 	.get_vrr_mode_group = drm_hdmitx_get_vrr_mode_group,
+#endif
 	.get_hdcp_ctl_lvl = get_hdmitx_hdcp_ctl_lvl_to_drm,
 };
 
