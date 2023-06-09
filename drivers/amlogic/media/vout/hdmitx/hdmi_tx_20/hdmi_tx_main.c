@@ -49,6 +49,7 @@
 #include <linux/amlogic/media/vout/hdmi_tx/hdmi_config.h>
 #include <linux/amlogic/media/vout/hdmi_tx_ext.h>
 #include <linux/amlogic/media/registers/cpu_version.h>
+#include <linux/amlogic/media/vpu/vpu.h>
 #include "hw/tvenc_conf.h"
 #include "hw/common.h"
 #include "hw/hw_clk.h"
@@ -69,7 +70,9 @@
 #define HDMI_TX_PWR_CTRL_NUM	6
 
 static struct class *hdmitx_class;
+#ifdef CONFIG_AMLOGIC_VOUT_SERVE
 static int set_disp_mode_auto(void);
+#endif
 static void hdmitx_get_edid(struct hdmitx_dev *hdev);
 static void hdmitx_set_drm_pkt(struct master_display_info_s *data);
 static void hdmitx_set_vsif_pkt(enum eotf_type type, enum mode_type
@@ -577,6 +580,7 @@ static  int  set_disp_mode(const char *mode)
 	return ret;
 }
 
+#ifdef CONFIG_AMLOGIC_VOUT_SERVE
 static void hdmitx_pre_display_init(void)
 {
 	hdmitx_device.cur_VIC = HDMI_UNKNOWN;
@@ -591,6 +595,7 @@ static void hdmitx_pre_display_init(void)
 	hdmitx_device.hwop.cntlconfig(&hdmitx_device,
 		CONF_CLR_VSDB_PACKET, 0);
 }
+#endif
 
 static void hdmi_physical_size_update(struct hdmitx_dev *hdev)
 {
@@ -670,6 +675,7 @@ static void edidinfo_detach_to_vinfo(struct hdmitx_dev *hdev)
 	hdmitx_vdev.dv_info = &dv_dummy;
 }
 
+#ifdef CONFIG_AMLOGIC_VOUT_SERVE
 static int set_disp_mode_auto(void)
 {
 	int ret =  -1;
@@ -825,6 +831,7 @@ static int set_disp_mode_auto(void)
 	mutex_unlock(&hdmimode_mutex);
 	return ret;
 }
+#endif
 
 /*disp_mode attr*/
 static ssize_t disp_mode_show(struct device *dev,

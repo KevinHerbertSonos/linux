@@ -241,6 +241,7 @@ unsigned int get_vdin_buffer_num(void);
 #else
 unsigned int get_vdin_buffer_num(void)
 {
+	return 0;
 }
 #endif
 void rx_get_audio_status(struct rx_audio_stat_s *aud_sts);
