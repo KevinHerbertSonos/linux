@@ -689,14 +689,9 @@ static inline void hdmirx_wr_dwc(u16 addr, u16 data)
 {
 }
 
-unsigned int rd_reg_hhi(u32 offset)
-{
-	return 0;
-}
+unsigned int rd_reg_hhi_bits(unsigned int offset, unsigned int mask);
 
-void wr_reg_hhi(unsigned int offset, unsigned int val)
-{
-}
+void wr_reg_hhi(unsigned int offset, unsigned int val);
 
 #endif
 void cecb_irq_handle(void);

@@ -1329,6 +1329,7 @@ void cec_irq_enable(bool enable)
 	}
 }
 
+#ifdef CONFIG_AMLOGIC_MEDIA_TVIN_HDMI
 void cec_enable_arc_pin(bool enable)
 {
 	unsigned int data;
@@ -1366,6 +1367,7 @@ void cec_enable_arc_pin(bool enable)
 	}
 }
 EXPORT_SYMBOL(cec_enable_arc_pin);
+#endif
 
 static int get_line(void)
 {
