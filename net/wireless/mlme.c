@@ -101,8 +101,8 @@ static void cfg80211_process_disassoc(struct wireless_dev *wdev,
 
 	nl80211_send_disassoc(rdev, wdev->netdev, buf, len, GFP_KERNEL);
 
-	if (WARN_ON(!wdev->current_bss ||
-		    !ether_addr_equal(wdev->current_bss->pub.bssid, bssid)))
+	if (!wdev->current_bss ||
+	    !ether_addr_equal(wdev->current_bss->pub.bssid, bssid))
 		return;
 
 	__cfg80211_disconnected(wdev->netdev, NULL, 0, reason_code, from_ap);
