@@ -60,6 +60,9 @@ MODULE_AMLOG(AMLOG_DEFAULT_LEVEL, 0, LOG_DEFAULT_LEVEL_DESC,
 #define PCR_RECOVER_PCR_ADJ 15
 
 #define TSYNC_INIT_STATE (0X01)
+
+#define local_fiq_enable()	asm("msr	daifclr, #1" : : : "memory")
+#define local_fiq_disable()	asm("msr	daifset, #1" : : : "memory")
 unsigned int tsync_flag;
 
 enum {

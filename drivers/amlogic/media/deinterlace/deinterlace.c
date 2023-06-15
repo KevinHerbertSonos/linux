@@ -45,6 +45,7 @@
 #include <linux/dma-contiguous.h>
 #include <linux/ctype.h>
 #include <linux/string.h>
+#include <linux/compat.h>
 #include <linux/amlogic/iomap.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 /* media module used media/registers/cpu_version.h since kernel 5.4 */
