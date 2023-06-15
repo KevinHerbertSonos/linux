@@ -296,6 +296,19 @@ config SONOS_PWM_MM_LED
         help
           Support for Sonos Microphone Mute PWM LED driver
 
+config SONOS_PWM_AUX_LED
+        tristate "Sonos PWM AUX LED"
+        default n
+        help
+          Support for Sonos PWM AUX LED driver
+
+config SONOS_PWM_MICRO
+        tristate "Sonos PWM Micro"
+        select SONOS_PWM_AUX_LED
+        default n
+        help
+          Support for Sonos PWM Micro driver
+
 config SONOS_ICE40_LED
         tristate "Sonos iCE40 LED"
         select SONOS_LEDCTL
