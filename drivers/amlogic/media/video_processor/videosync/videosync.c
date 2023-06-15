@@ -24,6 +24,7 @@
 #include <linux/platform_device.h>
 #include <linux/uaccess.h>
 #include <linux/sched/clock.h>
+#include <linux/compat.h>
 #ifdef CONFIG_AMLOGIC_MEDIA_FRAME_SYNC
 #include <linux/amlogic/media/frame_sync/timestamp.h>
 #include <linux/amlogic/media/frame_sync/tsync.h>
