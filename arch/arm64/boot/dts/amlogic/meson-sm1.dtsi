@@ -5,7 +5,6 @@
  */
 
 #include "meson-g12-common.dtsi"
-#include "mesonsm1_drm.dtsi"
 #include <dt-bindings/power/meson-sm1-power.h>
 #include <dt-bindings/clock/amlogic,sm1-audio-clk.h>
 #include <dt-bindings/gpio/gpio.h>
@@ -825,7 +824,7 @@
 		       0x0 0xFF800000 0x0 0x400
 		       0x0 0xFF634400 0x0 0x26>;
 		reg-names = "ao_exit","ao","periphs";
-		hdmi-phandle = <&drm_amhdmitx>;
+		hdmi-phandle = <&amhdmitx>;
 	};
 
 	vdac: vdac {
