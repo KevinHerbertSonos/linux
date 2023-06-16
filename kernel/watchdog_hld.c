@@ -29,6 +29,7 @@ static struct cpumask dead_events_mask;
 static unsigned long hardlockup_allcpu_dumped;
 static atomic_t watchdog_cpus = ATOMIC_INIT(0);
 
+#ifndef CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU
 notrace void arch_touch_nmi_watchdog(void)
 {
 	/*
