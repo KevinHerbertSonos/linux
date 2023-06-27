@@ -411,6 +411,13 @@ config SONOS_RT9120S
         help
           Support for Sonos RT9120S driver
 
+config SONOS_MAX98365
+        tristate "Sonos MAX98365"
+        select SONOS_I2C_AMPCTL
+        default n
+        help
+          Support for Sonos MAX98365 driver
+
 config SONOS_MICCTL
        tristate "Sonos mic control driver"
        default n
