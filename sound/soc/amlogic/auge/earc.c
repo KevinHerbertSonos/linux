@@ -1912,6 +1912,7 @@ static int earcrx_get_iec958(struct snd_kcontrol *kcontrol,
 	struct earc *p_earc = dev_get_drvdata(component->dev);
 	unsigned long flags;
 	int cs = 0;
+	static int last_cs = -1;
 
 	if (!p_earc || IS_ERR(p_earc->rx_dmac_map))
 		return 0;
@@ -1921,37 +1922,7 @@ static int earcrx_get_iec958(struct snd_kcontrol *kcontrol,
 		cs = earcrx_get_cs_iec958(p_earc->rx_dmac_map);
 	spin_unlock_irqrestore(&p_earc->rx_lock, flags);
 
-	ucontrol->value.iec958.status[0] = (cs >> 0) & 0xff;
-	ucontrol->value.iec958.status[1] = (cs >> 8) & 0xff;
-	ucontrol->value.iec958.status[2] = (cs >> 16) & 0xff;
-	ucontrol->value.iec958.status[3] = (cs >> 24) & 0xff;
-
-	dev_info(p_earc->dev,
-		"x get[AES0=%#x AES1=%#x AES2=%#x AES3=%#x]\n",
-		ucontrol->value.iec958.status[0],
-		ucontrol->value.iec958.status[1],
-		ucontrol->value.iec958.status[2],
-		ucontrol->value.iec958.status[3]
-	);
-
-	return 0;
-}
-
-static int earctx_get_iec958(struct snd_kcontrol *kcontrol,
-			     struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
-	struct earc *p_earc = dev_get_drvdata(component->dev);
-	int cs;
-	unsigned long flags;
-
-	if (!p_earc || IS_ERR(p_earc->tx_dmac_map))
-		return 0;
-
-	spin_lock_irqsave(&p_earc->tx_lock, flags);
-	if (p_earc->tx_dmac_clk_on) {
-		cs = earctx_get_cs_iec958(p_earc->tx_dmac_map);
-
+	if(cs != last_cs) {
 		ucontrol->value.iec958.status[0] = (cs >> 0) & 0xff;
 		ucontrol->value.iec958.status[1] = (cs >> 8) & 0xff;
 		ucontrol->value.iec958.status[2] = (cs >> 16) & 0xff;
@@ -1964,6 +1935,43 @@ static int earctx_get_iec958(struct snd_kcontrol *kcontrol,
 			ucontrol->value.iec958.status[2],
 			ucontrol->value.iec958.status[3]
 		);
+		last_cs = cs;
+	}
+
+	return 0;
+}
+
+static int earctx_get_iec958(struct snd_kcontrol *kcontrol,
+			     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct earc *p_earc = dev_get_drvdata(component->dev);
+	unsigned long flags;
+	int cs = 0;
+	static int last_cs = -1;
+
+	if (!p_earc || IS_ERR(p_earc->tx_dmac_map))
+		return 0;
+
+	spin_lock_irqsave(&p_earc->tx_lock, flags);
+	if (p_earc->tx_dmac_clk_on) {
+		cs = earctx_get_cs_iec958(p_earc->tx_dmac_map);
+	}
+
+        if(cs != last_cs) {
+                ucontrol->value.iec958.status[0] = (cs >> 0) & 0xff;
+                ucontrol->value.iec958.status[1] = (cs >> 8) & 0xff;
+                ucontrol->value.iec958.status[2] = (cs >> 16) & 0xff;
+                ucontrol->value.iec958.status[3] = (cs >> 24) & 0xff;
+
+                dev_info(p_earc->dev,
+                        "x get[AES0=%#x AES1=%#x AES2=%#x AES3=%#x]\n",
+                        ucontrol->value.iec958.status[0],
+                        ucontrol->value.iec958.status[1],
+                        ucontrol->value.iec958.status[2],
+                        ucontrol->value.iec958.status[3]
+                );
+                last_cs = cs;
 	}
 	spin_unlock_irqrestore(&p_earc->tx_lock, flags);
 	return 0;
