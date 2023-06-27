@@ -2839,6 +2839,7 @@
 
 		mali: gpu@ffe40000 {
 			compatible = "amlogic,meson-g12a-mali", "arm,mali-bifrost";
+			status = "disabled";
 			reg = <0x0 0xffe40000 0x0 0x40000>;
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI 160 IRQ_TYPE_LEVEL_HIGH>,
