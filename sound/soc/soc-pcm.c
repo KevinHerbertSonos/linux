@@ -832,8 +832,8 @@ static int soc_pcm_prepare(struct snd_pcm_substream *substream)
 
 	ret = snd_soc_dai_prepare(cpu_dai, substream);
 	if (ret < 0) {
-		dev_err(cpu_dai->dev,
-			"ASoC: cpu DAI prepare error: %d\n", ret);
+//		dev_err(cpu_dai->dev,
+//			"ASoC: cpu DAI prepare error: %d\n", ret);
 		goto out;
 	}
 
