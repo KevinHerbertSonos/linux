@@ -983,6 +983,8 @@ static int __soc_pcm_prepare(struct snd_soc_pcm_runtime *rtd,
 
 	ret = snd_soc_pcm_dai_prepare(substream);
 	if (ret < 0)
+//		dev_err(cpu_dai->dev,
+//			"ASoC: cpu DAI prepare error: %d\n", ret);
 		goto out;
 
 	/* cancel any delayed stream shutdown that is pending */
