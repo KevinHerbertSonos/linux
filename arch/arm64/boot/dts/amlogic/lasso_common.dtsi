@@ -154,19 +154,6 @@
 		gpio_hostwake = <&gpio       GPIOX_19       GPIO_ACTIVE_HIGH>;
 	};
 
-	wifi{
-		compatible = "amlogic, aml_wifi";
-		dev_name = "aml_wifi";
-		status = "disabled";
-		interrupt_pin = <&gpio       GPIOX_6       GPIO_ACTIVE_HIGH>;
-		irq_trigger_type = "GPIO_IRQ_LOW";
-		power_on_pin = <&gpio       GPIOX_7       GPIO_ACTIVE_HIGH>;
-		dhd_static_buf;	//if use bcm wifi, config dhd_static_buf
-		pinctrl-names = "default";
-		pinctrl-0 = <&pwm_e_pins>;
-		pwm_config = <&wifi_pwm_conf>;
-	};
-
 	amvdec_656in {
 		status = "disabled";
 
@@ -807,6 +794,10 @@
 
 &sd_emmc_b {
         status = "disabled";
+};
+
+&aml_wifi {
+	status = "disabled";
 };
 
 &pcie {

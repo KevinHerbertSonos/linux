@@ -1284,6 +1284,18 @@ static int meson_mmc_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_free_irq;
 
+	if (!host->blk_test) {
+		ret = -ENOMEM;
+		goto err_bounce_buf;
+	}
+	dev_notice(host->dev, "host probe success!\n");
+
+	if (aml_card_type_sdio(host)) {/* if sdio_wifi */
+		dev_notice(host->dev, "sdio_reinit() start\n");
+		sdio_reinit();
+		dev_notice(host->dev, "sdio_reinit() done\n");
+	}
+
 	return 0;
 
 err_free_irq:
