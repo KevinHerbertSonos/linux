@@ -38,6 +38,8 @@
 #include "sharebuffer.h"
 #include "spdif_hw.h"
 #include "../common/audio_uevent.h"
+#include "card.h"
+
 #if (defined CONFIG_AMLOGIC_MEDIA_TVIN_HDMI ||\
 		defined CONFIG_AMLOGIC_MEDIA_TVIN_HDMI_MODULE)
 #include <linux/amlogic/media/frame_provider/tvin/tvin.h>
@@ -73,6 +75,15 @@ static int IEC958_info(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_info *
 	.put = xhandler_put,     \
 }
 
+#define SND_IEC958_MIXER(xname, xhandler_get, xhandler_put) \
+{                                          \
+	.iface = SNDRV_CTL_ELEM_IFACE_MIXER,   \
+	.name = xname,           \
+	.info = IEC958_info,      \
+	.get = xhandler_get,     \
+	.put = xhandler_put,     \
+}
+
 enum work_event {
 	EVENT_NONE,
 	EVENT_RX_ANA_AUTO_CAL = 0x1 << 0,
@@ -93,6 +104,8 @@ struct earc_chipinfo {
 struct earc {
 	struct aml_audio_controller *actrl;
 	struct device *dev;
+
+	struct snd_card *snd_card;
 
 	struct clk *clk_rx_cmdc;
 	struct clk *clk_rx_dmac;
@@ -188,6 +201,20 @@ struct earc {
 };
 
 static struct earc *s_earc;
+
+static struct earc *get_earc(void)
+{
+	struct earc *p_earc;
+
+	p_earc = s_earc;
+
+	if (!p_earc) {
+		pr_debug("Not init earc\n");
+		return NULL;
+	}
+
+	return p_earc;
+}
 
 bool is_earc_spdif(void)
 {
@@ -327,9 +354,25 @@ static irqreturn_t earc_ddr_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+struct snd_kcontrol *snd_ctl_find_name(struct snd_card *card, char *name)
+{
+	struct snd_kcontrol *kctl;
+
+	if (snd_BUG_ON(!card || !name))
+		return NULL;
+	list_for_each_entry(kctl, &card->controls, list) {
+		if (strncmp(kctl->id.name, name, sizeof(kctl->id.name)))
+			continue;
+		return kctl;
+	}
+	return NULL;
+}
+
 static void earcrx_update_attend_event(struct earc *p_earc,
 				       bool is_earc, bool state)
 {
+	struct snd_kcontrol *kcont;
+
 	if (state) {
 		if (is_earc) {
 			extcon_set_state_sync(p_earc->rx_edev,
@@ -348,6 +391,10 @@ static void earcrx_update_attend_event(struct earc *p_earc,
 		extcon_set_state_sync(p_earc->rx_edev,
 			EXTCON_EARCRX_ATNDTYP_EARC, state);
 	}
+	dev_info(p_earc->dev, "HDMITX notify ALSA of rx event\n");
+	kcont = snd_ctl_find_name(p_earc->snd_card, "eARC_RX attended type");
+	snd_ctl_notify(p_earc->snd_card, SNDRV_CTL_EVENT_MASK_VALUE,
+		&kcont->id);
 }
 
 static void earcrx_pll_reset(struct earc *p_earc)
@@ -533,6 +580,7 @@ static void earctx_update_attend_event(struct earc *p_earc,
 				       bool is_earc, bool state)
 {
 	unsigned long flags;
+	struct snd_kcontrol *kcont;
 
 	if (state) {
 		if (is_earc) {
@@ -564,6 +612,10 @@ static void earctx_update_attend_event(struct earc *p_earc,
 			audio_send_uevent(p_earc->dev, EARCTX_ATNDTYP_EVENT, ATNDTYP_DISCNCT);
 		}
 	}
+	dev_info(p_earc->dev, "HDMITX notify ALSA of tx event\n");
+	kcont = snd_ctl_find_name(p_earc->snd_card, "eARC_RX attended type");
+	snd_ctl_notify(p_earc->snd_card, SNDRV_CTL_EVENT_MASK_VALUE,
+		&kcont->id);
 }
 
 static irqreturn_t earc_tx_isr(int irq, void *data)
@@ -666,6 +718,7 @@ static int earc_open(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct device *dev = rtd->cpu_dai->dev;
 	struct earc *p_earc;
+
 	int ret = 0;
 
 	p_earc = (struct earc *)dev_get_drvdata(dev);
@@ -2245,7 +2298,29 @@ static const struct snd_kcontrol_new earc_controls[] = {
 	SND_IEC958(SNDRV_CTL_NAME_IEC958("", PLAYBACK, DEFAULT),
 		   earctx_get_iec958,
 		   earctx_set_iec958),
+
+	SND_IEC958_MIXER(SNDRV_CTL_NAME_IEC958("", CAPTURE, DEFAULT),
+		   earcrx_get_iec958,
+		   NULL),
+
+	SND_IEC958_MIXER(SNDRV_CTL_NAME_IEC958("", PLAYBACK, DEFAULT),
+		   earctx_get_iec958,
+		   earctx_set_iec958),
 };
+
+int card_add_earc_kcontrols(struct snd_soc_card *card)
+{
+	struct earc *p_earc = get_earc();
+
+	if (!p_earc) {
+		pr_warn_once("eARC controls no device\n");
+		return -ENODEV;
+	}
+
+	p_earc->snd_card = card->snd_card;
+
+	return 0;
+}
 
 static const struct snd_soc_component_driver earc_component = {
 	.controls       = earc_controls,
@@ -2448,6 +2523,7 @@ void earc_resume(void)
 void earc_hdmitx_hpdst(bool st)
 {
 	struct earc *p_earc = s_earc;
+	struct snd_kcontrol *kcont;
 
 	if (!p_earc)
 		return;
@@ -2476,6 +2552,11 @@ void earc_hdmitx_hpdst(bool st)
 	earcrx_cmdc_arc_connect(p_earc->rx_cmdc_map, st);
 
 	earcrx_cmdc_hpd_detect(p_earc->rx_cmdc_map, st);
+
+	dev_info(p_earc->dev, "HDMITX notify ALSA of cable event\n");
+	kcont = snd_ctl_find_name(p_earc->snd_card, "eARC_RX attended type");
+	snd_ctl_notify(p_earc->snd_card, SNDRV_CTL_EVENT_MASK_VALUE,
+		&kcont->id);
 }
 
 static int earcrx_cmdc_setup(struct earc *p_earc)

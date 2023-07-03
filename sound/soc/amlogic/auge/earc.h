@@ -18,6 +18,6 @@ enum attend_type aml_get_earctx_connected_device_type(void);
 bool aml_get_earctx_reset_hpd(void);
 void aml_earctx_enable_d2a(int enable);
 void aml_earctx_dmac_mute(int enable);
-
+int card_add_earc_kcontrols(struct snd_soc_card *card);
 #endif
 

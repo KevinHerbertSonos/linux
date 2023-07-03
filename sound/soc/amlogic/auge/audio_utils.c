@@ -15,6 +15,7 @@
 #include "card.h"
 #include "tdm_hw.h"
 #include "acc.h"
+#include "earc.h"
 
 #include <linux/amlogic/iomap.h>
 #include <linux/amlogic/media/sound/auge_utils.h>
@@ -554,6 +555,10 @@ int snd_card_add_kcontrols(struct snd_soc_card *card)
 	ret = card_add_vad_kcontrols(card);
 	if (ret < 0)
 		pr_warn_once("Failed to add VAD controls\n");
+
+	ret = card_add_earc_kcontrols(card);
+	if (ret < 0)
+		pr_warn_once("Failed to add eARC controls\n");
 
 	return snd_soc_add_card_controls(card,
 					 snd_auge_controls,
