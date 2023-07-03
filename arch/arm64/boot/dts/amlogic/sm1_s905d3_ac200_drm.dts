@@ -353,6 +353,18 @@
 				sound-dai = <&dummy_codec>;
 			};
 		};
+		aml-audio-card,dai-link@7 {
+			mclk-fs = <256>;
+			continuous-clock;
+			suffix-name = "alsaPORT-loopback";
+			cpu {
+				sound-dai = <&loopbacka>;
+				system-clock-frequency = <12288000>;
+			};
+			codec {
+				sound-dai = <&dummy_codec>;
+			};
+		};
 	};
 
 	dolby_fw: dolby_fw {
@@ -677,8 +689,8 @@
 		#sound-dai-cells = <0>;
 
 		clocks = <&clkaudio CLKID_AUDIO_GATE_PDM
-			&clkc CLKID_HIFI_PLL
-			&clkc CLKID_HIFI_PLL
+			&clkc CLKID_FCLK_DIV3
+			&clkc CLKID_MPLL3
 			&clkaudio CLKID_AUDIO_PDMIN0
 			&clkaudio CLKID_AUDIO_PDMIN1>;
 		clock-names = "gate",
@@ -742,8 +754,8 @@
 		#sound-dai-cells = <0>;
 
 		clocks = <&clkaudio CLKID_AUDIO_GATE_PDM
-			&clkc CLKID_HIFI_PLL
-			&clkc CLKID_HIFI_PLL
+			&clkc CLKID_FCLK_DIV3
+			&clkc CLKID_MPLL3
 			&clkaudio CLKID_AUDIO_PDMIN0
 			&clkaudio CLKID_AUDIO_PDMIN1
 			&clkc CLKID_MPLL0
