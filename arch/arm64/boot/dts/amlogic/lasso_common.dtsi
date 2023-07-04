@@ -71,10 +71,10 @@
 		};
 		thermal-mgmt {
 			CPU {
-				fault-temperature = <95>;
-				warn-temperature = <91>;
 				compatible = "sonos,temp-ncu15";
 				adc-channel = <1>;
+				fault-temperature = <100>;
+				warn-temperature = <95>;
 				temperature-map {
 					num-ranges = <10>;
 					// max mV for range, a in range, b in range
@@ -92,9 +92,28 @@
 							4096	1386	4118700 >;
 				};
 			};
+			AMP {
+				compatible = "sonos,temp-ncu15";
+				adc-channel = <2>;
+				fault-temperature = <100>;
+				warn-temperature = <90>;
+				temperature-map {
+					num-ranges = <10>;
+					map-values = <  1000	375	398060
+							1500	249	273050
+							2000	254	279520
+							2400	271	313370
+							2750	305	395220
+							3000	358	540770
+							3250	448	811180
+							3500	605	1323700
+							3700	1095	3039800
+							4096	1386	4118700 >;
+				};
+			};
 			SOC {
 				compatible = "amlogic, s767_temp";
-				fault-temperature = <105>;
+				fault-temperature = <107>;
 				warn-temperature = <105>;
 			};
 		};
@@ -136,14 +155,6 @@
 	ir-rcvr {
 		compatible = "sonos,ir-rcvr";
 		status = "okay";
-	};
-	thermal-zones {
-		cputhermal: cputhermal {
-			polling-delay-passive = <1000>;
-			polling-delay = <1000>;
-			/* sensor ID */
-			thermal-sensors = <&cputempsensor 0>;
-		};
 	};
 
 	aliases {
@@ -550,16 +561,16 @@
 		reg = <0x10>;
 	};
 
-	cputempsensor: tmp102@48 {
-		compatible = "tmp102";
-		reg = <0x48>;
-		device_type="CPU";
-		#thermal-sensor-cells = <1>;
-    };
-
-	rtc: mcp7940x@6f {
+	mcp7940x@6f {
 		compatible = "mcp7940x";
 		reg = <0x6f>;
+		interrupt-parent = <&gpio_intc>;
+		interrupts = <GPIOAO_4 IRQ_TYPE_EDGE_FALLING>;
+	};
+
+	ds1337@68 {
+		compatible = "ds1337";
+		reg = <0x68>;
 		interrupt-parent = <&gpio_intc>;
 		interrupts = <GPIOAO_4 IRQ_TYPE_EDGE_FALLING>;
 	};
@@ -675,6 +686,7 @@
 		share-swd-uart = <0>;
 		psoc-rtc = <0>;
 		leanui-layout-proto;
+		captouch-lasso-settings;
 		psoc-flash-verify-disabled;
 		status = "okay";
 
