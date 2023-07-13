@@ -351,13 +351,13 @@
 		aml-audio-card,dai-link@6 {
 			mclk-fs = <256>;
 			continuous-clock;
-			suffix-name = "alsaPORT-earc";
+			suffix-name = "alsaPORT-earc-sonos";
 			cpu {
 				sound-dai = <&earc>;
 				system-clock-frequency = <12288000>;
 			};
 			codec {
-				sound-dai = <&dummy_codec>;
+				sound-dai = <&earc_codec>;
 			};
 		};
 	};
@@ -377,6 +377,13 @@
 
 &soc {
 	/delete-node/ t9015;
+	audio_earc: bus@ff663000 {
+		earc: earc@0 {
+			status = "okay";
+			interrupts = <GIC_SPI 87 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "earc_rx";
+		};
+	};
 };
 
 &pwm_AO_cd {
@@ -760,11 +767,12 @@
 
 		status = "okay";
 	};
+	earc {
+		interrupts = <GIC_SPI 87 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "earc_rx";
+		status = "disabled";
+	};
 }; /* end of audiobus */
-
-&earc {
-	status = "okay";
-};
 
 /* Audio Related End */
 
