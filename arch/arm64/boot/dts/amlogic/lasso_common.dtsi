@@ -69,11 +69,28 @@
 				no-repeat-sim;
 			};
 		};
-        thermal-mgmt {
+		thermal-mgmt {
 			CPU {
-				compatible = "tmp102";
 				fault-temperature = <95>;
 				warn-temperature = <91>;
+				compatible = "sonos,temp-ncu15";
+				adc-channel = <1>;
+				temperature-map {
+					num-ranges = <10>;
+					// max mV for range, a in range, b in range
+					//   (linear ax +- b)
+					//
+					map-values = <  1000	375	398060
+							1500	249	273050
+							2000	254	279520
+							2400	271	313370
+							2750	305	395220
+							3000	358	540770
+							3250	448	811180
+							3500	605	1323700
+							3700	1095	3039800
+							4096	1386	4118700 >;
+				};
 			};
 			SOC {
 				compatible = "amlogic, s767_temp";
