@@ -9,7 +9,7 @@
 #ifndef SONOS_SIGNATURE_VERIFY_LINUX_H
 #define SONOS_SIGNATURE_VERIFY_LINUX_H
 
-#include "sonos_signature.h"
+#include "sonos/signature/types.h"
 
 int sonosRawVerify(SonosSigningKey_t key,
 		   SonosSignatureAlg_t signAlg,
