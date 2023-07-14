@@ -9,7 +9,7 @@
 #ifndef SONOS_SIGNATURE_COMMON_LINUX_H
 #define SONOS_SIGNATURE_COMMON_LINUX_H
 
-#include "sonos_signature.h"
+#include "sonos/signature/types.h"
 
 int sonosHash(SonosDigestAlg_t alg, const void *buf, size_t bufLen,
               uint8_t *digest, size_t *pDigestLen);
