@@ -945,7 +945,8 @@ static int earc_dai_prepare(struct snd_pcm_substream *substream,
 		if (type == ATNDTYP_DISCNCT) {
 //			dev_err(p_earc->dev,
 //				"Neither eARC_RX or ARC_RX is attended!\n");
-			return -ENOTCONN;
+//			return -ENOTCONN;
+			type = ATNDTYP_ARC;
 		}
 
 		dev_info(p_earc->dev,
