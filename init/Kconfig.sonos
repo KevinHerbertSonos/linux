@@ -390,6 +390,14 @@ config SONOS_TAS58XX
         help
           Support for Sonos TAS58XX driver
 
+config SONOS_AMPMCU
+        bool "Sonos AMPMCU"
+        depends on SONOS
+        depends on SONOS_I2C_AMPCTL
+        default n
+        help
+          Support for Sonos Amp MCU driver
+
 config SONOS_MA2304
         tristate "Sonos MA2304"
         select SONOS_I2C_AMPCTL
@@ -778,6 +786,13 @@ config SONOS_MMCTEST_OFFSET
         help
           Sonos MMC test skip real data
 
+config SONOS_STM32
+	tristate "Sonos stm32 image loader"
+	depends on SONOS
+	default n
+	help
+	  Sonos stm32 image loader.
+
 config SONOS_IR_MT8518S
         tristate "support MTK IR receiver"
         help
@@ -797,3 +812,11 @@ config SONOS_DISABLE_LICENSE_CHECK
         default n
         help
           Disable enforcing MODULE_LICENSE restrictions
+
+config SONOS_QCA_DDFA
+	tristate "Sonos QCA DDFA image loader"
+	depends on SONOS
+	default n
+	help
+	  Sonos QCA DDFA image loader.
+
