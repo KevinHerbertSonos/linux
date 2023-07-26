@@ -837,6 +837,7 @@ int cec_transmit_msg_fh(struct cec_adapter *adap, struct cec_msg *msg,
 			return -EINVAL;
 		}
 		if (msg->len > 1 && adap->is_configured &&
+			(cec_msg_initiator(msg) != CEC_LOG_ADDR_UNREGISTERED) &&
 		    !cec_has_log_addr(adap, cec_msg_initiator(msg))) {
 			dprintk(1, "%s: initiator has unknown logical address %d\n",
 				__func__, cec_msg_initiator(msg));
