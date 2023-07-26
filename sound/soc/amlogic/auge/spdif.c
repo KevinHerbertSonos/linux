@@ -86,7 +86,12 @@ struct aml_spdif {
 	struct spdif_chipinfo *chipinfo;
 	unsigned int clk_cont; /* CONTINUOUS CLOCK */
 
-	int last_sample_rate_mode;
+	/* last sample rate mode */
+	int last_sr_mode;
+	/* need to check spdif in channel swap */
+	bool check_swap;
+	snd_pcm_uframes_t last_pos;
+	struct snd_pcm_substream *substream;
 	/* last value for pc, pd */
 	int pc_last;
 	int pd_last;
@@ -155,7 +160,18 @@ int sample_mode[] = {
 	96000,
 	176400,
 	192000,
+	0,
 };
+
+static int spdifin_get_rate_by_mode(int mode)
+{
+	if (mode < 0 || mode > ARRAY_SIZE(sample_mode)) {
+		/* default invalid sample rate */
+		return 0x0;
+	}
+
+	return sample_mode[mode];
+}
 
 static void spdif_sharebuffer_prepare(struct snd_pcm_substream *substream,
 	struct aml_spdif *p_spdif)
@@ -431,10 +447,7 @@ static int spdifin_samplerate_get(struct snd_kcontrol *kcontrol,
 {
 	int val = spdifin_get_sample_rate();
 
-	if (val >= 0x7)
-		ucontrol->value.integer.value[0] = 0;
-	else
-		ucontrol->value.integer.value[0] += sample_mode[val];
+	ucontrol->value.integer.value[0] = spdifin_get_rate_by_mode(val);
 
 	return 0;
 }
@@ -595,6 +608,35 @@ static void aml_spdif_platform_shutdown(struct platform_device *pdev)
 		regulator_disable(p_spdif->regulator_vcc3v3);
 
 	pr_debug("%s is mute\n", __func__);
+}
+
+static void spdifin_trigger_sr_event(struct aml_spdif *p_spdif,
+	bool state)
+{
+	extcon_set_state(p_spdif->edev,
+		EXTCON_SPDIFIN_SAMPLERATE, state);
+}
+
+static void clr_dma_buffer(char *buff, int offset, int bytes, int size)
+{
+	pr_debug("\t%s, offset:%d, bytes:%d, size:%d\n",
+		__func__, offset, bytes, size);
+
+	if (!bytes)
+		return;
+
+	if (offset + bytes <= size) {
+		memset(buff + offset,
+			0x0,
+			bytes);
+	} else {
+		memset(buff + offset,
+			0x0,
+			size - offset);
+		memset(buff,
+			0x0,
+			bytes - (size - offset));
+	}
 }
 
 static int spdif_format_get_enum(struct snd_kcontrol *kcontrol,
@@ -916,6 +958,7 @@ static const struct snd_kcontrol_new snd_spdif_b_controls[] = {
 static void spdifin_status_event(struct aml_spdif *p_spdif)
 {
 	int intrpt_status;
+	bool is_sr_irq = false;
 
 	if (!p_spdif)
 		return;
@@ -924,7 +967,21 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 	intrpt_status = aml_spdifin_status_check(p_spdif->actrl);
 
 	/* clear irq bits immediately */
-	aml_spdifin_clr_irq(p_spdif->actrl,
+	pr_debug("%s(), irq src:%#x, sample rate mode:%#x, width min:%#x, max:%#x\n",
+		__func__,
+		intrpt_status & 0xff,
+		(intrpt_status >> 28) & 0x7,
+		(intrpt_status >> 18) & 0x3ff,
+		(intrpt_status >> 8) & 0x3ff);
+
+	/* disable spdif in patch, interrupt source will be cleard. */
+	if (!(intrpt_status & 0xff))
+		return;
+
+	/* clear irq bits immediametely, except sample rate irq */
+	is_sr_irq = (bool)(intrpt_status & 0x4);
+	if (p_spdif->chipinfo && !is_sr_irq)
+		aml_spdifin_clr_irq(p_spdif->actrl,
 			p_spdif->chipinfo->clr_irq_all_bits,
 			intrpt_status & 0xff);
 
@@ -936,25 +993,71 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 	if (intrpt_status & 0x4) {
 		int mode = (intrpt_status >> 28) & 0x7;
 
-		pr_debug("sample rate, mode:%x\n", mode);
-		if (mode == 0x7 || (((intrpt_status >> 18) & 0x3ff) == 0x3ff)) {
-			p_spdif->in_err_cnt++;
-			if (p_spdif->in_err_cnt > SPDIFIN_ERR_CNT) {
-				pr_err("Not detect sample rate, spdifin may be disconneted\n");
-				p_spdif->in_err_cnt = 0;
-			}
-			extcon_set_state(p_spdif->edev,
-				EXTCON_SPDIFIN_SAMPLERATE, 0);
-		} else if (mode >= 0) {
-			if (p_spdif->last_sample_rate_mode != mode) {
-				pr_debug("Event: EXTCON_SPDIFIN_SAMPLERATE, new sample rate:%d\n",
-					sample_mode[mode]);
-				extcon_set_state(p_spdif->edev,
-						 EXTCON_SPDIFIN_SAMPLERATE, 1);
-			}
-		}
-		p_spdif->last_sample_rate_mode = mode;
+		pr_debug("\tsample rate, mode:%x, sample rate:%d\n",
+			mode,
+			spdifin_get_rate_by_mode(mode));
 
+		if (!p_spdif->check_swap) {
+			p_spdif->check_swap = true;
+			pr_debug("\t%s, check_swap:%d\n",
+				__func__,
+				p_spdif->check_swap);
+			spdifin_trigger_sr_event(p_spdif, false);
+		} else {
+			/* If we get here, it means that we previously found a
+			 * channel swap and reset.
+			 * We need to clear the DMA buffer before starting again.
+			 */
+			int clr_bytes, clr_offset;
+			snd_pcm_uframes_t pos, offset_frames;
+			struct snd_pcm_substream *substream = p_spdif->substream;
+			struct snd_pcm_runtime *runtime = substream->runtime;
+
+			pos = substream->ops->pointer(substream);
+			pr_debug("%s last pos:%lu, pos:%lu\n", __func__, p_spdif->last_pos, pos);
+			clr_offset = frames_to_bytes(runtime, p_spdif->last_pos);
+			offset_frames = (pos - p_spdif->last_pos
+				+ runtime->buffer_size) % runtime->buffer_size;
+			clr_bytes = frames_to_bytes(runtime, offset_frames);
+
+			if (clr_bytes > 0)
+#ifdef __CH_SWAP_DEBUG__
+			{
+				int offset, bytes;
+
+				offset = clr_offset;
+				bytes = clr_bytes;
+				pr_info("%s, Line:%d, offset:%d, bytes:%d\n",
+					__func__, __LINE__, offset, bytes);
+				if (offset + bytes <= runtime->dma_bytes) {
+					memset(runtime->dma_area + offset,
+						0xaf,
+						bytes);
+				} else {
+					memset(runtime->dma_area + offset,
+						0xaf,
+						runtime->dma_bytes - offset);
+					memset(runtime->dma_area,
+						0xaf,
+						bytes - (runtime->dma_bytes - offset));
+				}
+			}
+#else
+			clr_dma_buffer(runtime->dma_area,
+				clr_offset,
+				clr_bytes,
+				runtime->dma_bytes);
+#endif
+			p_spdif->check_swap = false;
+		}
+ #ifdef __SPDIFIN_AUDIO_TYPE_HW__
+		/* resample enable, by hw */
+		if (mode != 0x7 &&
+		    p_spdif->last_sr_mode != mode &&
+		    !spdifin_check_audiotype_by_sw(p_spdif))
+			resample_set(p_spdif->auto_asrc);
+ #endif
+		p_spdif->last_sr_mode = mode;
 	}
 
 	if (p_spdif->chipinfo->pcpd_separated) {
@@ -997,15 +1100,82 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 		pr_debug("valid changed\n");
 }
 
-static irqreturn_t aml_spdif_ddr_isr(int irq, void *devid)
+static irqreturn_t aml_spdif_ddr_isr(int irq, void *data)
 {
 	struct snd_pcm_substream *substream =
-		(struct snd_pcm_substream *)devid;
+		(struct snd_pcm_substream *)data;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct device *dev = rtd->cpu_dai->dev;
+	struct aml_spdif *p_spdif = (struct aml_spdif *)dev_get_drvdata(dev);
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	int is_capture = substream->stream == SNDRV_PCM_STREAM_CAPTURE;
+	snd_pcm_uframes_t pos = substream->ops->pointer(substream);
 
 	if (!snd_pcm_running(substream))
 		return IRQ_HANDLED;
 
+	if (is_capture) {
+		int offset = frames_to_bytes(runtime, pos);
+		char *hwbuf = runtime->dma_area + ((offset - 8 < 0) ? 0 : offset - 8);
+		bool swap = false;
+		int i;
+		char buf_val;
+
+		/* Check for a channel swap. We only need to look at the B subframe preamble; this
+		 * reduces complexity since there are 2 possible preambles for the A subframe (one
+		 * of which looks identical to the B preamble when the SPDIF HW parses it).
+		 */
+		for (i = 1; i < 8; i += 2) {
+			buf_val = *(hwbuf + (i * 4));
+#ifdef __CH_SWAP_DEBUG__
+			pr_info("\t%s, offset:%d, char val:%#x\n",
+				__func__,
+				offset,
+				buf_val);
+#endif
+			/* 0x60 is how the hardware parses the B subframe preamble */
+			if (buf_val && buf_val != 0x60) {
+				swap = true;
+				break;
+			}
+		}
+
+		if (swap) {
+			snd_pcm_stream_lock(substream);
+			pos = 0;
+			snd_pcm_stream_unlock(substream);
+		} else if (p_spdif->check_swap) {
+			/* sometimes, spdif in fs detect, it is unstable,
+			 * but store some data to dma
+			 */
+			snd_pcm_uframes_t remain_frames = 256;
+			snd_pcm_uframes_t offset_frames;
+			int clr_offset, clr_bytes;
+
+			clr_offset = frames_to_bytes(runtime,
+				p_spdif->last_pos - remain_frames);
+			if (clr_offset < 0)
+				clr_offset += runtime->dma_bytes;
+			offset_frames = (pos - (p_spdif->last_pos - remain_frames)
+				+ runtime->buffer_size) % runtime->buffer_size;
+			clr_bytes = frames_to_bytes(runtime, offset_frames);
+
+			spdifin_trigger_sr_event(p_spdif, false);
+
+			snd_pcm_stream_lock(substream);
+			clr_dma_buffer(runtime->dma_area,
+				clr_offset,
+				clr_bytes,
+				runtime->dma_bytes);
+			p_spdif->check_swap = false;
+			snd_pcm_stream_unlock(substream);
+		}
+	}
+
 	snd_pcm_period_elapsed(substream);
+
+	if (is_capture)
+		p_spdif->last_pos = pos;
 
 	return IRQ_HANDLED;
 }
@@ -1106,8 +1276,7 @@ static int aml_spdif_close(struct snd_pcm_substream *substream)
 
 		/* clear extcon status */
 		if (p_spdif->id == 0) {
-			extcon_set_state(p_spdif->edev,
-				EXTCON_SPDIFIN_SAMPLERATE, 0);
+			spdifin_trigger_sr_event(p_spdif, false);
 
 			extcon_set_state(p_spdif->edev,
 				EXTCON_SPDIFIN_AUDIOTYPE, 0);
@@ -1460,6 +1629,11 @@ static int aml_dai_spdif_prepare(struct snd_pcm_substream *substream,
 #ifdef __SPDIFIN_INSERT_CHNUM__
 		aml_toddr_insert_chanum(to);
 #endif
+
+		p_spdif->check_swap   = false;
+		memset(runtime->dma_area, 0x0, runtime->dma_bytes);
+		p_spdif->substream = substream;
+
 	}
 
 	aml_spdif_fifo_ctrl(p_spdif->actrl, bit_depth,
@@ -1511,6 +1685,7 @@ static int aml_dai_spdif_trigger(struct snd_pcm_substream *substream, int cmd,
 			aml_toddr_enable(p_spdif->tddr, 1);
 			aml_spdif_enable(p_spdif->actrl,
 			    substream->stream, p_spdif->id, true);
+			aml_toddr_update_width(p_spdif->tddr, 3, 27, 0);
 		}
 
 		break;
