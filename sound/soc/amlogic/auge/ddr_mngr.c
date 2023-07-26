@@ -528,6 +528,17 @@ void aml_toddr_set_format(struct toddr *to, struct toddr_fmt *fmt)
 	}
 }
 
+void aml_toddr_update_width(struct toddr *to, int type, int msb, int lsb)
+{
+	struct aml_audio_controller *actrl = to->actrl;
+	unsigned int reg_base = to->reg_base;
+	unsigned int reg;
+
+	reg = calc_toddr_address(EE_AUDIO_TODDR_A_CTRL0, reg_base);
+	aml_audiobus_update_bits(actrl, reg,
+		0x1fff << 3, type << 13 | msb << 8 | lsb << 3);
+}
+
 unsigned int aml_toddr_get_status(struct toddr *to)
 {
 	struct aml_audio_controller *actrl = to->actrl;
