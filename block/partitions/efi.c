@@ -89,6 +89,9 @@
 #include <linux/slab.h>
 #include "check.h"
 #include "efi.h"
+#if defined(CONFIG_SONOS)
+#include "mdp.h"
+#endif
 
 /* This allows a kernel command line option 'gpt' to override
  * the test for invalid PMBR.  Not __initdata because reloading
@@ -136,7 +139,15 @@ static u64 last_lba(struct block_device *bdev)
 	if (!bdev || !bdev->bd_inode)
 		return 0;
 #if defined(CONFIG_SONOS)
-	return GPT_ALTERNATE_PARTITION_TABLE_LBA - 1ULL;
+	switch (sys_mdp.mdp_model) {
+		case MDP_MODEL_PALLAS:
+			return GPT_ALTERNATE_PARTITION_TABLE_LBA_8GB - 1ULL;
+			printk(KERN_INFO "using 8GB GPT\n");
+			break;
+		default:
+			return GPT_ALTERNATE_PARTITION_TABLE_LBA - 1ULL;
+			break;
+	}
 #else
 	return div_u64(bdev->bd_inode->i_size,
 		       bdev_logical_block_size(bdev)) - 1ULL;
@@ -599,7 +610,15 @@ static int find_valid_gpt(struct parsed_partitions *state, gpt_header **gpt,
 
 	lastlba = last_lba(state->bdev);
 #if defined(CONFIG_SONOS)
-	total_sectors = GPT_ALTERNATE_PARTITION_TABLE_LBA;
+	switch (sys_mdp.mdp_model) {
+		case MDP_MODEL_PALLAS:
+			total_sectors = GPT_ALTERNATE_PARTITION_TABLE_LBA_8GB;
+			printk(KERN_INFO "using 8GB GPT\n");
+			break;
+		default:
+			total_sectors = GPT_ALTERNATE_PARTITION_TABLE_LBA;
+			break;
+	}
 #endif
         if (!force_gpt) {
 		/* This will be added to the EFI Spec. per Intel after v1.02. */
