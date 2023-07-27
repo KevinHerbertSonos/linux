@@ -1214,6 +1214,7 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 	int ret = 0;
 
 	p_spdif = (struct aml_spdif *)dev_get_drvdata(dev);
+	runtime->private_data = p_spdif;
 
 	snd_soc_set_runtime_hwparams(substream, &aml_spdif_hardware);
 	snd_pcm_lib_preallocate_pages(substream, SNDRV_DMA_TYPE_DEV,
@@ -1229,6 +1230,8 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 			aml_spdif_ddr_isr, substream, false);
 		if (!p_spdif->fddr) {
 			ret = -ENXIO;
+			/* Clear private data if registration fails. */
+			runtime->private_data = NULL;
 			dev_err(dev, "failed to claim from ddr\n");
 			goto err_ddr;
 		}
@@ -1237,6 +1240,8 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 			aml_spdif_ddr_isr, substream);
 		if (!p_spdif->tddr) {
 			ret = -ENXIO;
+			/* Clear private data if registration fails. */
+			runtime->private_data = NULL;
 			dev_err(dev, "failed to claim to ddr\n");
 			goto err_ddr;
 		}
@@ -1245,13 +1250,13 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 				aml_spdifin_status_isr, 0, "irq_spdifin",
 				p_spdif);
 		if (ret) {
+			/* Clear private data if registration fails. */
+			runtime->private_data = NULL;
 			dev_err(p_spdif->dev, "failed to claim irq_spdifin %u, ret: %d\n",
 						p_spdif->irq_spdifin, ret);
 			goto err_irq;
 		}
 	}
-
-	runtime->private_data = p_spdif;
 
 	return 0;
 
