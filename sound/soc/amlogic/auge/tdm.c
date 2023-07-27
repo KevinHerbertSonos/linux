@@ -139,7 +139,7 @@ struct aml_tdm {
 	int suspend_clk_off;
 };
 
-#define TDM_BUFFER_BYTES (512 * 1024)
+#define TDM_BUFFER_BYTES (1024 * 1024)
 static const struct snd_pcm_hardware aml_tdm_hardware = {
 	.info =
 	SNDRV_PCM_INFO_MMAP |
