@@ -613,6 +613,10 @@ config REGULATOR_MAX77541
 	  Say M here if you want to include support for the regulator as a
 	  module.
 
+config REGULATOR_MAX17135
+	tristate "Maxim MAX17135 Regulator Support"
+	depends on MFD_MAX17135
+
 config REGULATOR_MAX77620
 	tristate "Maxim 77620/MAX20024 voltage regulator"
 	depends on MFD_MAX77620 || COMPILE_TEST
