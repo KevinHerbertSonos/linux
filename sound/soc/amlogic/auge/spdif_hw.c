@@ -563,27 +563,34 @@ void spdif_set_validity(bool en, int spdif_id)
 
 void spdif_set_channel_status_info(struct iec958_chsts *chsts, int spdif_id)
 {
-	unsigned int offset, reg;
+	unsigned int reg_idx;
+	unsigned int offset = spdif_id ? 0x80 : 0x00;	/* Offset based on spdif A or B */
 
-	/* "ch status" = reg_chsts0~B */
-	offset = EE_AUDIO_SPDIFOUT_B_CTRL0 - EE_AUDIO_SPDIFOUT_CTRL0;
-	reg = EE_AUDIO_SPDIFOUT_CTRL0 + offset * spdif_id;
-	audiobus_update_bits(reg, 0x1 << 24, 0x0 << 24);
-	audiobus_update_bits(reg, 0x3 << 17, 1 << 17);
+	/*
+	 * Set bit 24 to 0 to use registers SPDIFOUT_CHSTS0 thru SPDIFOUT_CHSTSB
+	 * for CSB, instead of bit 30 from each sample.
+	 *
+	 * The A113 documentation claims the opposite flag polarity.
+	 */
+	audiobus_update_bits(EE_AUDIO_SPDIFOUT_CTRL0 + offset, 0x1 << 24, 0x0 << 24);
 
-	/* channel status a */
-	offset = EE_AUDIO_SPDIFOUT_B_CHSTS0 - EE_AUDIO_SPDIFOUT_CHSTS0;
-	reg = EE_AUDIO_SPDIFOUT_CHSTS0 + offset * spdif_id;
-	audiobus_write(reg, chsts->chstat1_l << 16 | chsts->chstat0_l);
-	reg = EE_AUDIO_SPDIFOUT_CHSTS1 + offset * spdif_id;
-	audiobus_write(reg, chsts->chstat2_l);
+	for (reg_idx = 0;
+	     reg_idx <= (EE_AUDIO_SPDIFOUT_CHSTSB - EE_AUDIO_SPDIFOUT_CHSTS0);
+	     reg_idx++) {
+		unsigned int reg = EE_AUDIO_SPDIFOUT_CHSTS0 + offset + reg_idx;
 
-	/* channel status b */
-	offset = EE_AUDIO_SPDIFOUT_B_CHSTS6 - EE_AUDIO_SPDIFOUT_CHSTS6;
-	reg = EE_AUDIO_SPDIFOUT_CHSTS6 + offset * spdif_id;
-	audiobus_write(reg, chsts->chstat1_r << 16 | chsts->chstat0_r);
-	reg = EE_AUDIO_SPDIFOUT_CHSTS7 + offset * spdif_id;
-	audiobus_write(reg, chsts->chstat2_r);
+		/*
+		 * The iec958_chsts struct only defines the first 4 bytes of the CSB
+		 * for each channel.  Therefore the remaining 20 bytes of each channel's
+		 * CSB should be set to zero.
+		 */
+		if (reg_idx == 0)
+			audiobus_write(reg, chsts->chstat1_l << 16 | chsts->chstat0_l);
+		else if (reg_idx == 6)
+			audiobus_write(reg, chsts->chstat1_r << 16 | chsts->chstat0_r);
+		else
+			audiobus_write(reg, 0);
+	}
 }
 
 void spdifout_play_with_zerodata(unsigned int spdif_id, bool reenable, int separated)
