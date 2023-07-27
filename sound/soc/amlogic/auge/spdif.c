@@ -957,7 +957,7 @@ static const struct snd_kcontrol_new snd_spdif_b_controls[] = {
 #define SPDIFIN_ERR_CNT 100
 static void spdifin_status_event(struct aml_spdif *p_spdif)
 {
-	int intrpt_status;
+	int intrpt_status, intrpt_masked;
 	bool is_sr_irq = false;
 
 	if (!p_spdif)
@@ -965,6 +965,7 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 
 	/* interrupt status, check and clear by reg_clk_interrupt */
 	intrpt_status = aml_spdifin_status_check(p_spdif->actrl);
+	intrpt_masked = intrpt_status & aml_spdifin_irq_mask(p_spdif->actrl);
 
 	/* clear irq bits immediately */
 	pr_debug("%s(), irq src:%#x, sample rate mode:%#x, width min:%#x, max:%#x\n",
@@ -985,12 +986,12 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 			p_spdif->chipinfo->clr_irq_all_bits,
 			intrpt_status & 0xff);
 
-	if (intrpt_status & 0x1)
+	if (intrpt_masked & 0x1)
 		pr_debug("over flow!!\n");
-	if (intrpt_status & 0x2)
+	if (intrpt_masked & 0x2)
 		pr_debug("parity error\n");
 
-	if (intrpt_status & 0x4) {
+	if (intrpt_masked & 0x4) {
 		int mode = (intrpt_status >> 28) & 0x7;
 
 		pr_debug("\tsample rate, mode:%x, sample rate:%d\n",
@@ -1061,20 +1062,20 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 	}
 
 	if (p_spdif->chipinfo->pcpd_separated) {
-		if (intrpt_status & 0x8) {
+		if (intrpt_masked & 0x8) {
 			pr_debug("Pc changed, try to read spdifin audio type\n");
 
 			extcon_set_state(p_spdif->edev,
 				EXTCON_SPDIFIN_AUDIOTYPE, 1);
 
 		}
-		if (intrpt_status & 0x10)
+		if (intrpt_masked & 0x10)
 			pr_debug("Pd changed\n");
 	} else {
-		if (intrpt_status & 0x8)
+		if (intrpt_masked & 0x8)
 			pr_debug("CH status changed\n");
 
-		if (intrpt_status & 0x10) {
+		if (intrpt_masked & 0x10) {
 			int val = spdifin_get_ch_status0to31();
 			int pc_v = (val >> 16) & 0xffff;
 			int pd_v = val & 0xffff;
@@ -1090,13 +1091,13 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 		}
 	}
 
-	if (intrpt_status & 0x20) {
+	if (intrpt_masked & 0x20) {
 		pr_debug("nonpcm to pcm\n");
 		extcon_set_state(p_spdif->edev,
 			EXTCON_SPDIFIN_AUDIOTYPE, 0);
 	}
 
-	if (intrpt_status & 0x40)
+	if (intrpt_masked & 0x40)
 		pr_debug("valid changed\n");
 }
 
