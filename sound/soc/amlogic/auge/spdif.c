@@ -755,6 +755,11 @@ int spdif_set_audio_clk(int id, struct clk *clk_src,
 {
 	int ret = 0;
 
+	if (!spdif_priv[id]) {
+		pr_debug("spdif_priv[id] is null");
+		return 0;
+	}
+
 	if (spdif_priv[id]->on && same) {
 		pr_debug("spdif priority");
 		return 0;
