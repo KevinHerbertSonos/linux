@@ -12,6 +12,8 @@
 
 #include "earc_hw.h"
 
+static int s_csb[6];
+
 void earctx_dmac_mute(struct regmap *dmac_map, bool enable)
 {
 	int val = 0;
@@ -375,6 +377,27 @@ static void earcrx_mute_block_enable(struct regmap *dmac_map, bool en)
 }
 
 static DEFINE_SPINLOCK(earcrx_cs_mutex);
+static DEFINE_SPINLOCK(earcrx_csb_mutex);
+
+/* Note: mask without offset */
+static unsigned int earcrx_get_cs_bits_cached(int cs_offset, int mask)
+{
+	int reg_offset;
+	int bits_offset, val, cs_a;
+	unsigned long flags = 0;
+
+	spin_lock_irqsave(&earcrx_csb_mutex, flags);
+
+	reg_offset = cs_offset / REG_CS_LEN;
+	bits_offset = cs_offset % REG_CS_LEN;
+
+	val = s_csb[reg_offset];
+	cs_a = (val >> bits_offset) & mask;
+
+	spin_unlock_irqrestore(&earcrx_csb_mutex, flags);
+
+	return cs_a;
+}
 
 /* Note: mask without offset */
 static unsigned int earcrx_get_cs_bits(struct regmap *dmac_map,
@@ -419,31 +442,59 @@ static unsigned int earcrx_get_cs_bits(struct regmap *dmac_map,
 	return cs_a;
 }
 
-unsigned int earcrx_get_cs_iec958(struct regmap *dmac_map)
+unsigned int earcrx_invalidate_cs_iec958_cache(void)
+{
+	unsigned long flags = 0;
+
+	spin_lock_irqsave(&earcrx_csb_mutex, flags);
+	memset(s_csb, 0xff, 24);
+	spin_unlock_irqrestore(&earcrx_csb_mutex, flags);
+	return 0;
+}
+
+unsigned int earcrx_get_cs_iec958_chunk(struct regmap *dmac_map, unsigned int offset)
 {
 	/* channel status A/B bits [31 - 0]*/
 	return earcrx_get_cs_bits(dmac_map,
-		0x0, 0xffffffff);
+		offset, 0xffffffff);
+}
+
+void earcrx_get_cs_iec958_cache(struct regmap *dmac_map)
+{
+	unsigned int offset;
+	unsigned long flags = 0;
+
+	spin_lock_irqsave(&earcrx_csb_mutex, flags);
+	for (offset = 0; offset < 0xC0; offset += 0x20)
+		s_csb[offset / 0x20] = earcrx_get_cs_iec958_chunk(dmac_map, offset);
+	spin_unlock_irqrestore(&earcrx_csb_mutex, flags);
+}
+
+unsigned int earcrx_get_cs_iec958(unsigned int *csb)
+{
+	unsigned long flags = 0;
+
+	spin_lock_irqsave(&earcrx_csb_mutex, flags);
+	memcpy(csb, s_csb, 24);
+	spin_unlock_irqrestore(&earcrx_csb_mutex, flags);
+	return 0;
 }
 
 unsigned int earcrx_get_cs_layout(struct regmap *dmac_map)
 {
-	return earcrx_get_cs_bits(dmac_map,
-			IEC_CS_AUDIO_LAYOUT_OFFSET,
+	return earcrx_get_cs_bits_cached(IEC_CS_AUDIO_LAYOUT_OFFSET,
 			IEC_CS_AUDIO_LAYOUT_MASK);
 }
 
 unsigned int earcrx_get_cs_ca(struct regmap *dmac_map)
 {
-	return earcrx_get_cs_bits(dmac_map,
-			IEC_CS_AIF_DB4_OFFSET,
+	return earcrx_get_cs_bits_cached(IEC_CS_AIF_DB4_OFFSET,
 			IEC_CS_AIF_DB4_MASK);
 }
 
 unsigned int earcrx_get_cs_mute(struct regmap *dmac_map)
 {
-	return earcrx_get_cs_bits(dmac_map,
-		IEC_CS_MUTE_OFFSET,
+	return earcrx_get_cs_bits_cached(IEC_CS_MUTE_OFFSET,
 		IEC_CS_MUTE_MASK);
 }
 
@@ -457,7 +508,7 @@ static unsigned int ecc_syndrome(unsigned int val1, unsigned int val2)
 
 static int earcrx_get_cs_pcpd(struct regmap *dmac_map, bool ecc_check)
 {
-	unsigned int val = earcrx_get_cs_bits(dmac_map, 192, 0xffffffff);
+	unsigned int val = earcrx_get_cs_bits_cached(192, 0xffffffff);
 	unsigned int pc_e = (val >> 16) & 0xffff;
 	unsigned int pd_e = val & 0xffff;
 
@@ -473,7 +524,7 @@ unsigned int earcrx_get_cs_fmt(struct regmap *dmac_map, enum attend_type type)
 	enum audio_coding_types coding_type = AUDIO_CODING_TYPE_UNDEFINED;
 	unsigned int val, layout;
 
-	val = earcrx_get_cs_bits(dmac_map, 0x0, 0x3b);
+	val = earcrx_get_cs_bits_cached(0x0, 0x3b);
 	layout = earcrx_get_cs_layout(dmac_map);
 
 	/* One Bit Audio, Channel Status Bits 0,1,3,4, and 5
@@ -481,12 +532,11 @@ unsigned int earcrx_get_cs_fmt(struct regmap *dmac_map, enum attend_type type)
 	 * use case: 0 1 1 1 1 for bit 0,1,3,4 and 5
 	 */
 	if (unlikely((val & 0x30) == 0x30)) {
-		unsigned int val1 = earcrx_get_cs_bits(dmac_map, 0x32, 0x7);
+		unsigned int val1 = earcrx_get_cs_bits_cached(0x32, 0x7);
 
 		if (val1 == 0x0 &&
 		    (((val & 0x3b) == 0x30) || ((val & 0x3b) == 0x3a))) {
-			int layout = earcrx_get_cs_bits(dmac_map,
-				IEC_CS_AUDIO_LAYOUT_OFFSET,
+			int layout = earcrx_get_cs_bits_cached(IEC_CS_AUDIO_LAYOUT_OFFSET,
 				IEC_CS_AUDIO_LAYOUT_MASK);
 			if (layout == LO12_OBA) {
 				coding_type = AUDIO_CODING_TYPE_SACD_12CH;
@@ -600,8 +650,7 @@ unsigned int earcrx_get_cs_freq(struct regmap *dmac_map,
 	unsigned int val;
 	unsigned int csfs, freq, channels;
 
-	val = earcrx_get_cs_bits(dmac_map,
-				 IEC_CS_SFREQ_OFFSET,
+	val = earcrx_get_cs_bits_cached(IEC_CS_SFREQ_OFFSET,
 				 IEC_CS_SFREQ_MASK);
 
 	csfs = val & 0xf;
@@ -619,8 +668,7 @@ unsigned int earcrx_get_cs_word_length(struct regmap *dmac_map)
 	unsigned int val;
 	unsigned int max_len, len = 0;
 
-	val = earcrx_get_cs_bits(dmac_map,
-				 IEC_CS_WLEN_OFFSET,
+	val = earcrx_get_cs_bits_cached(IEC_CS_WLEN_OFFSET,
 				 IEC_CS_WLEN_MASK);
 
 	/* Maximum audio sample word length */
