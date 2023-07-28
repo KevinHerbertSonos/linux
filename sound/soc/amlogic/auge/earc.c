@@ -25,6 +25,7 @@
 #include <sound/pcm_params.h>
 #include <sound/tlv.h>
 #include <linux/workqueue.h>
+#include <linux/bitrev.h>
 #include <linux/amlogic/iomap.h>
 #include <linux/clk-provider.h>
 
@@ -316,6 +317,8 @@ static void earctx_init(int earc_port, bool st)
 		schedule_work(&p_earc->send_uevent);
 		/* set disconnect when cable plugout */
 		p_earc->earctx_connected_device_type = ATNDTYP_DISCNCT;
+		/* Make sure the CSB cache is invalidated */
+		earcrx_invalidate_cs_iec958_cache();
 		/* release earctx same source when cable plug out */
 		aml_check_and_release_sharebuffer(NULL, EARCTX_DMAC);
 		/* disable arc */
@@ -557,6 +560,7 @@ static irqreturn_t earc_rx_isr(int irq, void *data)
 				earcrx_pll_refresh(p_earc->rx_top_map,
 						   RST_BY_SELF, true);
 			}
+			earcrx_get_cs_iec958_cache(p_earc->rx_dmac_map);
 		}
 		if (p_earc->rx_status1 & INT_ARCRX_BIPHASE_DECODE_I_SAMPLE_MODE_CHANGE)
 			dev_dbg(p_earc->dev, "ARCRX_I_SAMPLE_MODE_CHANGE\n");
@@ -1912,31 +1916,22 @@ static int earcrx_get_iec958(struct snd_kcontrol *kcontrol,
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct earc *p_earc = dev_get_drvdata(component->dev);
 	unsigned long flags;
-	int cs = 0;
-	static int last_cs = -1;
+	int csb[6], cnt;
 
 	if (!p_earc || IS_ERR(p_earc->rx_dmac_map))
 		return 0;
 
 	spin_lock_irqsave(&p_earc->rx_lock, flags);
 	if (p_earc->rx_dmac_clk_on)
-		cs = earcrx_get_cs_iec958(p_earc->rx_dmac_map);
+		earcrx_get_cs_iec958(csb);
+
 	spin_unlock_irqrestore(&p_earc->rx_lock, flags);
 
-	if(cs != last_cs) {
-		ucontrol->value.iec958.status[0] = (cs >> 0) & 0xff;
-		ucontrol->value.iec958.status[1] = (cs >> 8) & 0xff;
-		ucontrol->value.iec958.status[2] = (cs >> 16) & 0xff;
-		ucontrol->value.iec958.status[3] = (cs >> 24) & 0xff;
-
-		dev_info(p_earc->dev,
-			"x get[AES0=%#x AES1=%#x AES2=%#x AES3=%#x]\n",
-			ucontrol->value.iec958.status[0],
-			ucontrol->value.iec958.status[1],
-			ucontrol->value.iec958.status[2],
-			ucontrol->value.iec958.status[3]
-		);
-		last_cs = cs;
+	for (cnt = 0; cnt < 6; cnt++) {
+		ucontrol->value.iec958.status[0 + (cnt * 4)] = bitrev8((csb[cnt] >> 0) & 0xff);
+		ucontrol->value.iec958.status[1 + (cnt * 4)] = bitrev8((csb[cnt] >> 8) & 0xff);
+		ucontrol->value.iec958.status[2 + (cnt * 4)] = bitrev8((csb[cnt] >> 16) & 0xff);
+		ucontrol->value.iec958.status[3 + (cnt * 4)] = bitrev8((csb[cnt] >> 24) & 0xff);
 	}
 
 	return 0;
@@ -2532,7 +2527,6 @@ void earc_resume(void)
 void earc_hdmitx_hpdst(bool st, int enabled)
 {
 	struct earc *p_earc = s_earc;
-	struct snd_kcontrol *kcont;
 
 	if(enabled != 2){
 		set_spdif_to_arc_hpd_status(p_earc->rx_cmdc_map, enabled);
@@ -2565,11 +2559,6 @@ void earc_hdmitx_hpdst(bool st, int enabled)
 	earcrx_cmdc_arc_connect(p_earc->rx_cmdc_map, st);
 
 	earcrx_cmdc_hpd_detect(p_earc->rx_cmdc_map, st);
-
-	dev_info(p_earc->dev, "HDMITX notify ALSA of cable event\n");
-	kcont = snd_ctl_find_name(p_earc->snd_card, "eARC_RX attended type");
-	snd_ctl_notify(p_earc->snd_card, SNDRV_CTL_EVENT_MASK_VALUE,
-		&kcont->id);
 }
 
 static int earcrx_cmdc_setup(struct earc *p_earc)
