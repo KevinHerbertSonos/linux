@@ -167,6 +167,7 @@ int meson_ir_raw_handler_register(struct meson_ir_raw_handler *handler)
 	mutex_unlock(&meson_ir_raw_handler_lock);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(meson_ir_raw_handler_register);
 
 void meson_ir_raw_handler_unregister(struct meson_ir_raw_handler *handler)
 {
@@ -174,3 +175,4 @@ void meson_ir_raw_handler_unregister(struct meson_ir_raw_handler *handler)
 	list_del(&handler->list);
 	mutex_unlock(&meson_ir_raw_handler_lock);
 }
+EXPORT_SYMBOL_GPL(meson_ir_raw_handler_unregister);
