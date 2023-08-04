@@ -667,7 +667,7 @@ config SONOS_FUSE_CTRL
 
 config SONOS_IR
 	tristate "Sonos IR shim driver"
-	depends on AMLOGIC_REMOTE
+	depends on AMLOGIC_MESON_IR
 	default n
 	help
 	  On Sonos IR links to decoder.
