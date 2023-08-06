@@ -204,8 +204,12 @@ kallsyms()
 	info KSYM ${2}
 	local kallsymopt;
 
-	# we don't need all symbols, this can help to save about 1MB memory
-	if ! [ -n "${CONFIG_AMLOGIC_MODIFY}" ]; then
+	# We don't need all symbols unless LTTng is active, in which case
+	# access via kallsyms is required to the symbols for certain data
+	# structures.  Otherwise, bypassing the check for
+	# ${CONFIG_KALLSYMS_ALL} being set can help to save about
+	# 1MB of memory.
+	if [ -z "${CONFIG_AMLOGIC_MODIFY}" -o -n "${CONFIG_TRACEPOINTS}" ]; then
 		if [ -n "${CONFIG_KALLSYMS_ALL}" ]; then
 			kallsymopt="${kallsymopt} --all-symbols"
 		fi
