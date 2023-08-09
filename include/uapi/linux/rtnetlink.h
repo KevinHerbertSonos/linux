@@ -624,6 +624,8 @@ enum
 	RWM_HTAP_CONN,
 	RWM_CMD_TIMEOUT,
 	RWM_NETWORK_SETTINGS,
+	RWM_NEW_CHANNEL_ON_INTF,
+	RWM_WAKE_CLIENT,
 };
 
 enum
@@ -644,6 +646,7 @@ enum
 	RWA_PATH_LENGTH,
 	RWA_DUPE_TIME,
 	RWA_NETWORK_SETTINGS_DATA,
+	RWA_NEW_CHANNEL_ON_INTF,
 };
 
 /********************************************************************
