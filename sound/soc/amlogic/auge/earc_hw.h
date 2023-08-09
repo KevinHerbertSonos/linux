@@ -263,6 +263,7 @@ unsigned int earcrx_get_cs_iec958(unsigned int *csb);
 unsigned int earcrx_get_cs_ca(struct regmap *dmac_map);
 unsigned int earcrx_get_cs_mute(struct regmap *dmac_map);
 unsigned int earcrx_get_cs_fmt(struct regmap *dmac_map, enum attend_type type);
+int earcrx_get_cs_channels(struct regmap *dmac_map, enum audio_coding_types coding_type);
 unsigned int earcrx_get_cs_freq(struct regmap *dmac_map,
 				enum audio_coding_types coding_type);
 unsigned int earcrx_get_cs_word_length(struct regmap *dmac_map);
