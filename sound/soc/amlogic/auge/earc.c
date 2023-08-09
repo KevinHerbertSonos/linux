@@ -1682,6 +1682,35 @@ int earcrx_get_freq(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+int earcrx_get_channel_count(struct snd_kcontrol *kcontrol,
+		    struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct earc *p_earc = dev_get_drvdata(component->dev);
+	enum audio_coding_types coding_type = 0;
+	enum attend_type type;
+	int channels = 0;
+	unsigned long flags;
+
+	if (!p_earc || IS_ERR(p_earc->rx_cmdc_map))
+		return 0;
+
+	if (!p_earc->rx_dmac_clk_on)
+		return 0;
+
+	type = earcrx_cmdc_get_attended_type(p_earc->rx_cmdc_map);
+	spin_lock_irqsave(&p_earc->rx_lock, flags);
+	if (p_earc->rx_dmac_clk_on) {
+		coding_type = earcrx_get_cs_fmt(p_earc->rx_dmac_map, type);
+		channels = earcrx_get_cs_channels(p_earc->rx_dmac_map, coding_type);
+	}
+	spin_unlock_irqrestore(&p_earc->rx_lock, flags);
+
+	ucontrol->value.integer.value[0] = channels;
+
+	return 0;
+}
+
 int earcrx_get_word_length(struct snd_kcontrol *kcontrol,
 			   struct snd_ctl_elem_value *ucontrol)
 {
@@ -2275,6 +2304,11 @@ static const struct snd_kcontrol_new earc_controls[] = {
 	SOC_SINGLE_EXT("eARC_RX Audio Sample Frequency",
 		       0, 0, 384000, 0,
 		       earcrx_get_freq,
+		       NULL),
+
+	SOC_SINGLE_EXT("HDMI eARC Channel Count",
+		       0, 0, 32, 0,
+		       earcrx_get_channel_count,
 		       NULL),
 
 	SOC_SINGLE_EXT("eARC_RX Audio Word Length",
