@@ -1711,6 +1711,32 @@ int earcrx_get_channel_count(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int earcrx_get_freq_by_pll(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct earc *p_earc = dev_get_drvdata(component->dev);
+	int val = 0x7;
+	unsigned long flags;
+
+	if (!p_earc || IS_ERR(p_earc->rx_cmdc_map))
+		return 0;
+
+	spin_lock_irqsave(&p_earc->rx_lock, flags);
+	if (p_earc->rx_dmac_clk_on)
+		val = earcrx_get_sample_rate(p_earc->rx_dmac_map);
+	spin_unlock_irqrestore(&p_earc->rx_lock, flags);
+
+	if (val == 0x7)
+		val = 0;
+	else
+		val += 1;
+
+	ucontrol->value.integer.value[0] = val;
+
+	return 0;
+}
+
 int earcrx_get_word_length(struct snd_kcontrol *kcontrol,
 			   struct snd_ctl_elem_value *ucontrol)
 {
@@ -2310,6 +2336,11 @@ static const struct snd_kcontrol_new earc_controls[] = {
 		       0, 0, 32, 0,
 		       earcrx_get_channel_count,
 		       NULL),
+
+	SOC_ENUM_EXT("eARC_RX Audio Sample Frequency by pll",
+				spdifin_sample_rate_enum,
+				earcrx_get_freq_by_pll,
+				NULL),
 
 	SOC_SINGLE_EXT("eARC_RX Audio Word Length",
 		       0, 0, 32, 0,
