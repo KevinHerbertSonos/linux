@@ -1934,3 +1934,27 @@ void earctx_cmdc_earc_mode(struct regmap *cmdc_map, bool enable)
 				 0xe << 28 | 0x3 << 8);
 	}
 }
+
+int earcrx_get_sample_rate(struct regmap *dmac_map)
+{
+	unsigned int val;
+	/*EE_AUDIO_SPDIFIN_STAT0*/
+	/*r_width_max bit17:8 (the max width of two edge;)*/
+	unsigned int max_width = 0;
+
+	val = mmio_read(dmac_map, EARCRX_SPDIFIN_SAMPLE_STAT0);
+
+	/* NA when check min width of two edges */
+	if (((val >> 18) & 0x3ff) == 0x3ff)
+		return 7;
+
+	/*check the max width of two edge when spdifin sr=32kHz*/
+	/*if max_width is more than 0x2f0(magic number),*/
+	/*sr(32kHz) is unavailable*/
+	max_width = ((val >> 8) & 0x3ff);
+
+	if ((((val >> 28) & 0x7) == 0) && max_width == 0x3ff)
+		return 7;
+
+	return (val >> 28) & 0x7;
+}
