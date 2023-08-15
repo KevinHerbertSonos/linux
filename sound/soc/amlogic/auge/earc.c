@@ -1732,6 +1732,32 @@ static int earcrx_get_freq_by_pll(struct snd_kcontrol *kcontrol,
 	else
 		val += 1;
 
+	switch (val) {
+	case 0:
+		break;
+	case 1:
+		val = 32000;
+		break;
+	case 2:
+		val = 44100;
+		break;
+	case 3:
+		val = 48000;
+		break;
+	case 4:
+		val = 88200;
+		break;
+	case 5:
+		val = 96000;
+		break;
+	case 6:
+		val = 176400;
+		break;
+	case 7:
+		val = 192000;
+		break;
+	}
+
 	ucontrol->value.integer.value[0] = val;
 
 	return 0;
@@ -2337,8 +2363,8 @@ static const struct snd_kcontrol_new earc_controls[] = {
 		       earcrx_get_channel_count,
 		       NULL),
 
-	SOC_ENUM_EXT("eARC_RX Audio Sample Frequency by pll",
-				spdifin_sample_rate_enum,
+	SOC_SINGLE_EXT("eARC_RX Audio Sample Frequency by pll",
+				0, 0, 384000, 0,
 				earcrx_get_freq_by_pll,
 				NULL),
 
