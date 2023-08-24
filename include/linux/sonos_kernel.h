@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2020, Sonos, Inc.
+ * Copyright (c) 2014-2023, Sonos, Inc.
  *
  * SPDX-License-Identifier:	GPL-2.0
  *
@@ -54,12 +54,16 @@ extern int sonos_product_id;
 
 #elif defined(SONOS_ARCH_ATTR_SOC_IS_S767)
 /* Match gpio values defined in u-boot/patches/2016.11/to_add/board/sonos/s767/board_parameter.h */
+#define PRODUCT_ID_RYLESS767 0x0
 #define PRODUCT_ID_OPTIMO1 0x1
 #define PRODUCT_ID_OPTIMO1SL 0x2
 #define PRODUCT_ID_OPTIMO2 0x3
 #define PRODUCT_ID_PRIMA 0x4
 #define PRODUCT_ID_LASSO 0x5
-#define PRODUCT_ID_RYLESS767 0x7
+#define PRODUCT_ID_RAVEN 0x6
+#define PRODUCT_ID_JAWS 0x7
+#define PRODUCT_ID_PALLAS_PLUS 0x8
+#define PRODUCT_ID_LOTUS 0xA
 
 /* NOTE:  usage of these defines should be wrapped in SOC_IS checks, as the product id is only
  * unique on a per-SoC basis.
@@ -67,6 +71,11 @@ extern int sonos_product_id;
 #define PRODUCT_ID_IS_OPTIMO1 ( (sonos_product_id == PRODUCT_ID_OPTIMO1) )
 #define PRODUCT_ID_IS_OPTIMO1SL ( (sonos_product_id == PRODUCT_ID_OPTIMO1SL) )
 #define PRODUCT_ID_IS_OPTIMO2 ( (sonos_product_id == PRODUCT_ID_OPTIMO2) )
+#define PRODUCT_ID_IS_PRIMA ( (sonos_product_id == PRODUCT_ID_PRIMA) )
+#define PRODUCT_ID_IS_LASSO ( (sonos_product_id == PRODUCT_ID_LASSO) )
+#define PRODUCT_ID_IS_RAVEN ( (sonos_product_id == PRODUCT_ID_RAVEN) )
+#define PRODUCT_ID_IS_PALLAS_PLUS ( (sonos_product_id == PRODUCT_ID_PALLAS_PLUS) )
+#define PRODUCT_ID_IS_LOTUS ( (sonos_product_id == PRODUCT_ID_LOTUS) )
 
 #elif defined(SONOS_ARCH_ATTR_SOC_IS_IMX6)
 /* Match gpio values defined in patches/2016.11/to_add/board/sonos/imx6/board_parameter.h */
