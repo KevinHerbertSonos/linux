@@ -207,6 +207,18 @@ struct chip_desc {
 
 static const struct chip_desc chips[last_ds_type];
 
+/* Calculate day of the week from rtc_time and set it */
+static void set_wday(struct rtc_time *tm){
+    time64_t time;
+    int days;
+
+    time = rtc_tm_to_time64(tm);
+    days = div_s64(time, 86400);
+    /* day of the week, 1970-01-01 was a Thursday */
+    tm->tm_wday = (days + 4) % 7;
+}
+
+
 static int ds1307_get_time(struct device *dev, struct rtc_time *t)
 {
 	struct ds1307	*ds1307 = dev_get_drvdata(dev);
@@ -330,6 +342,7 @@ static int ds1307_set_time(struct device *dev, struct rtc_time *t)
 	int		tmp;
 	u8		regs[7];
 
+	set_wday(t);
 	dev_dbg(dev, "%s secs=%d, mins=%d, "
 		"hours=%d, mday=%d, mon=%d, year=%d, wday=%d\n",
 		"write", t->tm_sec, t->tm_min,
@@ -461,6 +474,11 @@ static int ds1337_set_alarm(struct device *dev, struct rtc_wkalrm *t)
 	unsigned char		regs[9];
 	u8			control, status;
 	int			ret;
+
+	if (!test_bit(HAS_ALARM, &ds1307->flags))
+		return -EINVAL;
+
+	set_wday(&t->time);
 
 	dev_dbg(dev, "%s secs=%d, mins=%d, "
 		"hours=%d, mday=%d, enabled=%d, pending=%d\n",
@@ -782,6 +800,11 @@ static int mcp794xx_set_alarm(struct device *dev, struct rtc_wkalrm *t)
 	struct ds1307 *ds1307 = dev_get_drvdata(dev);
 	unsigned char regs[10];
 	int wday, ret;
+
+	if (!test_bit(HAS_ALARM, &ds1307->flags))
+		return -EINVAL;
+
+	set_wday(&t->time);
 
 	wday = mcp794xx_alm_weekday(dev, &t->time);
 	if (wday < 0)
@@ -2011,10 +2034,38 @@ exit:
 	return err;
 }
 
+#ifdef CONFIG_PM
+static int ds1307_rtc_pm_resume(struct device *dev)
+{
+	struct i2c_client       *client = to_i2c_client(dev);
+	struct ds1307           *ds1307 = i2c_get_clientdata(client);
+
+	ds1307->rtc->resume_cntr++;
+	return 0;
+}
+
+static int ds1307_rtc_pm_suspend(struct device *dev)
+{
+	return 0;
+}
+#else /* !CONFIG_PM */
+
+#define ds1307_rtc_pm_suspend   NULL
+#define ds1307_rtc_pm_resume    NULL
+#endif /* CONFIG_PM */
+
+static const struct dev_pm_ops rtc_dev_pm_ops = {
+	.suspend = ds1307_rtc_pm_suspend,
+	.resume = ds1307_rtc_pm_resume,
+};
+
+
 static struct i2c_driver ds1307_driver = {
 	.driver = {
 		.name	= "rtc-ds1307",
-		.of_match_table = ds1307_of_match,
+		.pm = &rtc_dev_pm_ops,
+		.of_match_table = of_match_ptr(ds1307_of_match),
+		.acpi_match_table = ACPI_PTR(ds1307_acpi_ids),
 	},
 	.probe		= ds1307_probe,
 	.id_table	= ds1307_id,
