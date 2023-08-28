@@ -462,6 +462,17 @@ void rtc_dev_prepare(struct rtc_device *rtc)
 	rtc->char_dev.owner = rtc->owner;
 }
 
+void rtc_dev_add_device(struct rtc_device *rtc)
+{
+	cdev_add(&rtc->char_dev, rtc->dev.devt, 1);
+}
+
+void rtc_dev_del_device(struct rtc_device *rtc)
+{
+	if (rtc->dev.devt)
+	cdev_del(&rtc->char_dev);
+}
+
 void __init rtc_dev_init(void)
 {
 	int err;

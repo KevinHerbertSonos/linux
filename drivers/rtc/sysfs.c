@@ -247,6 +247,15 @@ range_show(struct device *dev, struct device_attribute *attr, char *buf)
 }
 static DEVICE_ATTR_RO(range);
 
+#ifdef CONFIG_RTC_DRV_DS1307
+static ssize_t
+resume_count_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "0x%08x\n", to_rtc_device(dev)->resume_cntr);
+}
+static DEVICE_ATTR_RO(resume_count);
+#endif
+
 static struct attribute *rtc_attrs[] = {
 	&dev_attr_name.attr,
 	&dev_attr_date.attr,
@@ -257,6 +266,9 @@ static struct attribute *rtc_attrs[] = {
 	&dev_attr_wakealarm.attr,
 	&dev_attr_offset.attr,
 	&dev_attr_range.attr,
+#ifdef CONFIG_RTC_DRV_DS1307
+	&dev_attr_resume_count.attr,
+#endif
 	NULL,
 };
 

@@ -119,6 +119,7 @@ struct rtc_device {
 
 	int irq_freq;
 	int max_user_freq;
+	unsigned int resume_cntr;
 
 	struct timerqueue_head timerqueue;
 	struct rtc_timer aie_timer;
