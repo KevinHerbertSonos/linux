@@ -44,6 +44,8 @@
 #include "dwmac1000.h"
 #include "dwxgmac2.h"
 #include "hwif.h"
+#include <linux/netdevice.h>
+#include <linux/sonos_kernel.h>
 
 #define	STMMAC_ALIGN(x)		ALIGN(ALIGN(x, SMP_CACHE_BYTES), 16)
 #define	TSO_MAX_BUFF_SIZE	(SZ_16K - 1)
@@ -917,11 +919,16 @@ static void stmmac_mac_link_down(struct phylink_config *config,
 				 unsigned int mode, phy_interface_t interface)
 {
 	struct stmmac_priv *priv = netdev_priv(to_net_dev(config->dev));
+	struct phy_device *phy = NULL;
 
 	stmmac_mac_set(priv, priv->ioaddr, false);
 	priv->eee_active = false;
 	stmmac_eee_init(priv);
 	stmmac_set_eee_pls(priv, priv->hw, false);
+	if (priv->phylink)
+		phy = priv->phylink->phydev;
+	if (phy && phy->attached_dev)
+		sonos_announce_linkup(phy->attached_dev);
 }
 
 static void stmmac_mac_link_up(struct phylink_config *config,
@@ -936,6 +943,8 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 		priv->eee_enabled = stmmac_eee_init(priv);
 		stmmac_set_eee_pls(priv, priv->hw, true);
 	}
+	if (phy->attached_dev)
+		sonos_announce_linkup(phy->attached_dev);
 }
 
 static const struct phylink_mac_ops stmmac_phylink_mac_ops = {
