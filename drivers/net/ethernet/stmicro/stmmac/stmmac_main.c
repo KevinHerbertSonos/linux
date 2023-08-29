@@ -50,6 +50,8 @@
 #include "dwmac1000.h"
 #include "dwxgmac2.h"
 #include "hwif.h"
+#include <linux/netdevice.h>
+#include <linux/sonos_kernel.h>
 
 /* As long as the interface is active, we keep the timestamping counter enabled
  * with fine resolution and binary rollover. This avoid non-monotonic behavior
@@ -1107,6 +1109,34 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 
 	stmmac_mac_flow_ctrl(priv, duplex);
 
+	if (state->pause)
+		stmmac_mac_flow_ctrl(priv, state->duplex);
+
+	writel(ctrl, priv->ioaddr + MAC_CTRL_REG);
+}
+
+static void stmmac_mac_an_restart(struct phylink_config *config)
+{
+	/* Not Supported */
+}
+
+static void stmmac_mac_link_down(struct phylink_config *config,
+				 unsigned int mode, phy_interface_t interface)
+{
+	struct stmmac_priv *priv = netdev_priv(to_net_dev(config->dev));
+	struct phy_device *phy = NULL;
+
+	stmmac_mac_set(priv, priv->ioaddr, false);
+	priv->eee_active = false;
+	stmmac_eee_init(priv);
+	stmmac_set_eee_pls(priv, priv->hw, false);
+	if (priv->phylink)
+		phy = priv->phylink->phydev;
+	if (phy && phy->attached_dev)
+		sonos_announce_linkup(phy->attached_dev);
+}
+>>>>>>> 2b8817b164db6... add sonos announce linkup
+
 	if (ctrl != old_ctrl)
 		writel(ctrl, priv->ioaddr + MAC_CTRL_REG);
 
@@ -1125,6 +1155,9 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 
 	if (priv->plat->flags & STMMAC_FLAG_HWTSTAMP_CORRECT_LATENCY)
 		stmmac_hwtstamp_correct_latency(priv, priv);
+
+	if (phy->attached_dev)
+		sonos_announce_linkup(phy->attached_dev);
 }
 
 static const struct phylink_mac_ops stmmac_phylink_mac_ops = {
