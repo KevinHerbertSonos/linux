@@ -46,15 +46,11 @@ sonosInitKeyTable(void)
 		g_SonosSigningKeys[0] = &SRKE_unlock_optimo;
 		g_SonosSigningKeys[1] = &SRKE_unitCA_optimo;
 	}
-// TODO FIXME remove this if 0 in the arch feature branch,
-// when the arch is defined without STUB_SECBOOT_ARCH_KEYS
-#if 0
 	else if (sonos_product_id == PRODUCT_ID_JAWS ||
                  sonos_product_id == PRODUCT_ID_LOTUS) {
 		g_SonosSigningKeys[0] = &SRKE_unlock_jaws;
 		g_SonosSigningKeys[1] = &SRKE_unitCA_jaws;
 	}
-#endif
 	else if (sonos_product_id == PRODUCT_ID_LASSO) {
 		g_SonosSigningKeys[0] = &SRKE_unlock_lasso;
 		g_SonosSigningKeys[1] = &SRKE_unitCA_lasso;
