@@ -2127,6 +2127,8 @@ static int ao_cec_set_log_addr(struct cec_adapter *adap, u8 logical_addr)
 		logical_addr == CEC_PLAYBACK_DEVICE_2_ADDR ||
 		logical_addr == CEC_PLAYBACK_DEVICE_3_ADDR) {
 		cec_dev->dev_type = CEC_PLAYBACK_DEVICE_1_ADDR;
+	} else if (logical_addr == CEC_AUDIO_SYSTEM_ADDR) {
+		cec_dev->dev_type = CEC_AUDIO_SYSTEM_ADDR;
 	} else {
 		cec_dev->dev_type = CEC_PLAYBACK_DEVICE_1_ADDR;
 		CEC_ERR("cec_adapter logic_addr abnormal\n");
