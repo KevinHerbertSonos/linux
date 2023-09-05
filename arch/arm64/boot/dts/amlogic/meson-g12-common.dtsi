@@ -2618,6 +2618,78 @@
 			assigned-clock-rates = <0>, /* Do Nothing */
 					       <800000000>,
 					       <0>; /* Do Nothing */
+		dwc2_a: dwc2_a@ff400000 {
+			compatible = "amlogic,dwc2";
+			status = "disable";
+			device_name = "dwc2_a";
+			reg = <0x0 0xff400000 0x0 0x40000>;
+			interrupts = <GIC_SPI 31 IRQ_TYPE_LEVEL_HIGH>;
+			pl-periph-id = <0>; /** lm name */
+			clock-src = "usb0"; /** clock src */
+			port-id = <0>;  /** ref to mach/usb.h */
+			port-type = <2>;	/** 0: otg, 1: host, 2: slave */
+			port-speed = <0>; /** 0: default, high, 1: full */
+			port-config = <0>; /** 0: default */
+			/*0:default,1:single,2:incr,3:incr4,4:*/
+			/*incr8,5:incr16,6:disable*/
+			port-dma = <0>;
+			/** 0: hardware, 1: sw_host, 2: sw_slave*/
+			port-id-mode = <0>;
+			usb-fifo = <728>;
+			cpu-type = "v2";
+			phy-reg = <0xffe09000>;
+			phy-reg-size = <0xa0>;
+			/** phy-interface: 0x0: amlogic phy,*/
+			/*0x1: synopsys phy **/
+			phy-interface = <0x2>;
+			clocks = <&clkc CLKID_USB>,
+					 <&clkc CLKID_USB1_DDR_BRIDGE>;
+			clock-names = "usb_general",
+					"usb1";
+		};
+
+		pcie: pcie@fc000000 {
+			compatible = "amlogic, amlogic-pcie-v2";
+			reg = <0x0 0xfc000000 0x0 0x400000
+				0x0 0xff648000 0x0 0x2000
+				0x0 0xfc400000 0x0 0x200000
+				0x0 0xff646000 0x0 0x2000
+				0x0 0xffd01080 0x0 0x10>;
+			reg-names = "elbi", "cfg", "config", "phy", "reset";
+			interrupts = <GIC_SPI 221 IRQ_TYPE_EDGE_RISING>;
+			#interrupt-cells = <1>;
+			bus-range = <0x0 0xff>;
+			#address-cells = <3>;
+			#size-cells = <2>;
+			interrupt-map-mask = <0 0 0 0>;
+			interrupt-map = <0 0 0 0 &gic GIC_SPI 223 IRQ_TYPE_EDGE_RISING>;
+			device_type = "pci";
+			ranges = <0x81000000 0 0 0 0xfc600000 0x0 0x100000
+				/* downstream I/O */
+				0x82000000 0 0xfc700000 0x0 0xfc700000 0 0x1900000>;
+				/* non-prefetched memory */
+			num-lanes = <1>;
+			pcie-num = <1>;
+
+			clocks = <&clkc CLKID_PCIE_PLL
+				&clkc CLKID_PCIE_COMB
+				&clkc CLKID_PCIE_PHY
+				&clkc CLKID_PCIE_HCSL>;
+			clock-names = "pcie_refpll",
+					"pcie",
+					"pcie_phy",
+					"pcie_hcsl";
+			/*reset-gpio-type 0:Shared pad(no reset)1:OD pad2:Normal pad*/
+			gpio-type = <2>;
+			pcie-apb-rst-bit = <15>;
+			pcie-phy-rst-bit = <14>;
+			pcie-ctrl-a-rst-bit = <12>;
+			pwr-ctl = <1>;
+			pcie-ctrl-sleep-shift = <18>;
+			pcie-hhi-mem-pd-shift = <26>;
+			pcie-hhi-mem-pd-mask = <0xf>;
+			pcie-ctrl-iso-shift = <18>;
+			status = "disabled";
 		};
 	};
 
@@ -2639,6 +2711,84 @@
 		clock-frequency = <24000000>;
 		clock-output-names = "xtal";
 		#clock-cells = <0>;
+	};
+
+	jtag {
+		compatible = "amlogic, jtag";
+		status = "okay";
+		/* disable/jtag_a/jtag_b */
+		select = "disable";
+		pinctrl-names="jtag_a_pins", "jtag_b_pins";
+		pinctrl-0=<&jtag_a_pins>;
+		pinctrl-1=<&jtag_b_pins>;
+	};
+};
+
+&periphs_pinctrl {
+	sd_1bit_pins:sd_1bit_pins {
+		mux {
+			groups = "sdcard_d0_c",
+					"sdcard_cmd_c";
+			function = "sdcard";
+			input-enable;
+			bias-pull-up;
+			drive-strength = <4>;
+		};
+		mux1 {
+			groups = "sdcard_clk_c";
+			function = "sdcard";
+			bias-pull-up;
+			output-high;
+			drive-strength = <4>;
+		};
+	};
+
+	sd_clr_all_pins:sd_clr_all_pins {
+		mux {
+			groups = "GPIOC_0",
+				   "GPIOC_1",
+				   "GPIOC_2",
+				   "GPIOC_3",
+				   "GPIOC_5";
+			function = "gpio_periphs";
+			output-high;
+		};
+		mux1 {
+			groups = "GPIOC_4";
+			function = "gpio_periphs";
+			output-low;
+		};
+	};
+
+	sd_clr_noall_pins:sd_clr_noall_pins {
+		mux {
+			groups = "GPIOC_0",
+				   "GPIOC_1",
+				   "GPIOC_4",
+				   "GPIOC_5";
+			function = "gpio_periphs";
+			output-high;
+		};
+	};
+
+	ao_to_sd_uart_pins:ao_to_sd_uart_pins {
+		mux {
+			groups = "uart_ao_a_rx_c",
+					"uart_ao_a_tx_c";
+			function = "uart_ao_a_c";
+			bias-pull-up;
+			input-enable;
+		};
+	};
+};
+
+&ao_pinctrl {
+	sd_to_ao_uart_clr_pins:sd_to_ao_uart_clr_pins {
+		mux {
+			groups = "GPIOAO_0",
+				   "GPIOAO_1";
+			function = "gpio_aobus";
+		};
 	};
 
 };
