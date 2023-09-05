@@ -3,7 +3,7 @@
  * Copyright (c) 2019 Amlogic, Inc. All rights reserved.
  */
 
-#define DEBUG
+//#define DEBUG
 #undef pr_fmt
 #define pr_fmt(fmt) "iec_info: " fmt
 

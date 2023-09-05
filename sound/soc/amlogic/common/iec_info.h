@@ -151,6 +151,11 @@ enum audio_coding_types {
 	AUDIO_CODING_TYPE_DTS_HD_LAYOUT_B    = 20,
 	AUDIO_CODING_TYPE_DTS_HD_MA_LAYOUT_B = 21,
 
+	// SONOS: eARC RX only.
+	// Lump all encoded layouts into A or B instead of
+	// trying to identify the content type.
+	AUDIO_CODING_TYPE_ENCODED_LAYOUT_A   = 22,
+	AUDIO_CODING_TYPE_ENCODED_LAYOUT_B   = 23,
 };
 
 static const char * const audio_coding_type_names[] = {
@@ -176,6 +181,8 @@ static const char * const audio_coding_type_names[] = {
 	/* 19 */ "DTS Layout B",
 	/* 20 */ "DTS-HD Layout B",
 	/* 21 */ "DTS-HD MA Layout B",
+	/* 22 */ "Encoded Layout A",
+	/* 23 */ "Encoded Layout B",
 };
 
 /* spdif in audio format detect: LPCM or NONE-LPCM */
