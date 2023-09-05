@@ -562,45 +562,19 @@ unsigned int earcrx_get_cs_fmt(struct regmap *dmac_map, enum attend_type type)
 		}
 	} else if ((val & IEC958_AES0_NONAUDIO) == IEC958_AES0_NONAUDIO) {
 		if ((val & 0x38) == 0x0) {
-			int pcpd, pc_v;
 
-			if (layout == 0x7) //Layout B
+			// Unused function
+			(void)earcrx_get_cs_pcpd;
+
+			if (layout == 0x7) { //Layout B
 				mmio_update_bits(dmac_map, EARCRX_SPDIFIN_CTRL2,
 					0x1 << 9, 0x1 << 9);
-			else
-				mmio_update_bits(dmac_map, EARCRX_SPDIFIN_CTRL2, 0x1 << 9, 0);
-			pcpd = earcrx_get_cs_pcpd(dmac_map, type == ATNDTYP_EARC);
-			pc_v = (pcpd >> 16) & 0xffff;
-
-			/* compressed audio  type */
-			coding_type = iec_61937_pc_to_coding_type(pc_v);
-
-			if (layout == 0x7) {
-				switch (coding_type) {
-				case AUDIO_CODING_TYPE_AC3:
-					coding_type = AUDIO_CODING_TYPE_AC3_LAYOUT_B;
-					break;
-				case AUDIO_CODING_TYPE_EAC3:
-					coding_type = AUDIO_CODING_TYPE_EAC3_LAYOUT_B;
-					break;
-				case AUDIO_CODING_TYPE_MLP:
-					coding_type = AUDIO_CODING_TYPE_MLP_LAYOUT_B;
-					break;
-				case AUDIO_CODING_TYPE_DTS:
-					coding_type = AUDIO_CODING_TYPE_DTS_LAYOUT_B;
-					break;
-				case AUDIO_CODING_TYPE_DTS_HD:
-					coding_type = AUDIO_CODING_TYPE_DTS_HD_LAYOUT_B;
-					break;
-				case AUDIO_CODING_TYPE_DTS_HD_MA:
-					coding_type = AUDIO_CODING_TYPE_DTS_HD_MA_LAYOUT_B;
-					break;
-				default:
-					coding_type = AUDIO_CODING_TYPE_PAUSE;
-					break;
-				}
+				coding_type = AUDIO_CODING_TYPE_ENCODED_LAYOUT_B;
 			}
-
+			else {
+				mmio_update_bits(dmac_map, EARCRX_SPDIFIN_CTRL2, 0x1 << 9, 0);
+				coding_type = AUDIO_CODING_TYPE_ENCODED_LAYOUT_A;
+			}
 		}
 	} else {
 		coding_type = AUDIO_CODING_TYPE_STEREO_LPCM;
@@ -633,8 +607,15 @@ int earcrx_get_cs_channels(struct regmap *dmac_map,
 	case AUDIO_CODING_TYPE_SACD_6CH:
 		channels = 6;
 		break;
-	case AUDIO_CODING_TYPE_AC3_LAYOUT_B:
+	case AUDIO_CODING_TYPE_ENCODED_LAYOUT_A:
 		channels = 8; /* Layout for coding type */
+		break;
+	case AUDIO_CODING_TYPE_ENCODED_LAYOUT_B:
+		/* We currently do not have a way to filter out the 6 channels
+		 * of padding inherent to Layout B in hardware so all of the
+		 * data must be conveyed to user-space.
+		 */
+		channels = 8;
 		break;
 	default:
 		channels = 2;
