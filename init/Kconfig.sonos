@@ -813,6 +813,23 @@ config SONOS_DISABLE_LICENSE_CHECK
         help
           Disable enforcing MODULE_LICENSE restrictions
 
+config MALI_MIDGARD
+	tristate "Mali Midgard series support"
+	select GPU_TRACEPOINTS if ANDROID
+	select DMA_SHARED_BUFFER
+	default n
+	help
+	  Enable this option to build support for a ARM Mali Midgard GPU.
+
+	  To compile this driver as a module, choose M here:
+	  this will generate a single module, called mali_kbase
+
+config MALI_MIDGARD_DVFS
+	bool "Enable legacy DVFS"
+	depends on MALI_MIDGARD && !MALI_DEVFREQ
+	default n
+	help
+	  Choose this option to enable legacy DVFS in the Mali Midgard DDK.
 config SONOS_QCA_DDFA
 	tristate "Sonos QCA DDFA image loader"
 	depends on SONOS
