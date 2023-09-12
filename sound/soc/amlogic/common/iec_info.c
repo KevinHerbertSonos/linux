@@ -94,7 +94,8 @@ unsigned int iec_rate_from_csfs(unsigned int csfs)
 {
 	unsigned int rate = 0;
 
-	switch (csfs) {
+	// Only test bits 24-17,30,31
+	switch (csfs & 0xcf) {
 	case IEC958_AES3_CON_FS_22050:
 		rate = 22050;
 		break;
@@ -127,6 +128,39 @@ unsigned int iec_rate_from_csfs(unsigned int csfs)
 		break;
 	case IEC958_AES3_CON_FS_NOTID:
 		rate = 0;
+		break;
+
+	// Extended FS values using CSB bits 30 & 31
+	// ALSA currently does not have defines for these
+	case 0x05:
+		rate = 384000;
+		break;
+	case 0x45:
+		rate = 1536000;
+		break;
+	case 0xc5:
+		rate = 1024000;
+		break;
+	case 0x0d:
+		rate = 352800;
+		break;
+	case 0x8d:
+		rate = 705600;
+		break;
+	case 0x4d:
+		rate = 1411200;
+		break;
+	case 0x0b:
+		rate = 64000;
+		break;
+	case 0x8b:
+		rate = 128000;
+		break;
+	case 0x4b:
+		rate = 256000;
+		break;
+	case 0xcb:
+		rate = 512000;
 		break;
 	}
 

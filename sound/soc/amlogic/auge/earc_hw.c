@@ -628,13 +628,10 @@ int earcrx_get_cs_channels(struct regmap *dmac_map,
 unsigned int earcrx_get_cs_freq(struct regmap *dmac_map,
 				enum audio_coding_types coding_type)
 {
-	unsigned int val;
 	unsigned int csfs, freq, channels;
 
-	val = earcrx_get_cs_bits_cached(IEC_CS_SFREQ_OFFSET,
+	csfs = earcrx_get_cs_bits_cached(IEC_CS_SFREQ_OFFSET,
 				 IEC_CS_SFREQ_MASK);
-
-	csfs = val & 0xf;
 	freq = iec_rate_from_csfs(csfs);
 
 	/* Fix to really fs */
