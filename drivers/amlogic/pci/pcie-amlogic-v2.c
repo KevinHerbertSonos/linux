@@ -861,9 +861,9 @@ static int amlogic_pcie_probe(struct platform_device *pdev)
 	if (pwr_ctl)
 		power_switch_to_pcie(amlogic_pcie->phy);
 
-	tee_start = roundup(virt_to_phys((void *)_text), TEE_MEM_ALIGN_SIZE);
-	tee_end = rounddown(virt_to_phys((void *)_etext), TEE_MEM_ALIGN_SIZE);
-	dev_dbg(dev, "tee_start = 0x%x, tee_end = 0x%x\n", tee_start, tee_end);
+	tee_start = roundup(__pa_symbol(_text), TEE_MEM_ALIGN_SIZE);
+	tee_end = rounddown(__pa_symbol(_etext), TEE_MEM_ALIGN_SIZE);
+	printk("tee_start = 0x%x, tee_end = 0x%x\n", tee_start, tee_end);
 
 	ret = tee_protect_mem_by_type(TEE_MEM_TYPE_KERNEL, tee_start,
 				      tee_end - tee_start, &handle);
