@@ -260,7 +260,7 @@ void earcrx_dmac_init(struct regmap *top_map,
 		   (1 << 12)  | /* reg_user_lr */
 		   (29 << 0)	/* reg_data_bit */
 		  );
-	mmio_write(dmac_map, EARCRX_ANA_RST_CTRL0, 1 << 31 | 2000 << 0);
+	mmio_write(dmac_map, EARCRX_ANA_RST_CTRL0, 1 << 31 | 1000 << 0);
 	if (chnum_mult_mode)
 		mmio_update_bits(dmac_map, EARCRX_SPDIFIN_CTRL6, 0x1 << 27, 0x1 << 27);
 	if (unstable_tick_sel) {
@@ -334,6 +334,7 @@ void earcrx_arc_init(struct regmap *dmac_map)
 		   EARCRX_SPDIFIN_CTRL0,
 		   0x1 << 31 | /* reg_work_en */
 		   0x0 << 30 | /* reg_chnum_sel */
+		   0x1 << 26 | /*ch num sync*/
 		   0x1 << 25 | /* reg_findpapb_en */
 		   0x1 << 24 | /* nonpcm2pcm_th enable */
 		   0xFFF << 12 |  /* reg_nonpcm2pcm_th */
