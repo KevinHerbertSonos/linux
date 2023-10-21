@@ -186,6 +186,30 @@ static int meson_gxbb_wdt_probe(struct platform_device *pdev)
 
 	meson_gxbb_wdt_set_timeout(&data->wdt_dev, data->wdt_dev.timeout);
 
+#ifdef CONFIG_AMLOGIC_MODIFY
+	if (meson_gxbb_wdt_info.options & WDIOF_PRETIMEOUT) {
+		/* Configuration pretimeout */
+		meson_gxbb_wdt_set_pretimeout(&data->wdt_dev,
+					      data->wdt_dev.pretimeout);
+		/* Watchdog interrupt enable */
+		writel(readl(data->reg_base + GXBB_WDT_CTRL_REG) |
+		       GXBB_WDT_CTRL_IRQ_EN, data->reg_base + GXBB_WDT_CTRL_REG);
+	}
+
+	watchdog_set_nowayout(&data->wdt_dev, WATCHDOG_NOWAYOUT_INIT_STATUS);
+
+	ret = of_property_read_u32(pdev->dev.of_node,
+				   "amlogic,feed_watchdog_mode",
+				   &data->feed_watchdog_mode);
+	if (ret)
+		data->feed_watchdog_mode = 1;
+	if (data->feed_watchdog_mode == 1) {
+		set_bit(WDOG_HW_RUNNING, &data->wdt_dev.status);
+		meson_gxbb_wdt_start(&data->wdt_dev);
+	}
+	dev_info(&pdev->dev, "feeding watchdog mode: [%s]\n",
+		 data->feed_watchdog_mode ? "kernel" : "userspace");
+#endif
 	watchdog_stop_on_reboot(&data->wdt_dev);
 	return devm_watchdog_register_device(dev, &data->wdt_dev);
 }
