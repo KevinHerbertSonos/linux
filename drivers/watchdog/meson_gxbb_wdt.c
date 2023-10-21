@@ -372,6 +372,8 @@ static int meson_gxbb_wdt_probe(struct platform_device *pdev)
 		       GXBB_WDT_CTRL_IRQ_EN, data->reg_base + GXBB_WDT_CTRL_REG);
 	}
 
+	watchdog_set_nowayout(&data->wdt_dev, WATCHDOG_NOWAYOUT_INIT_STATUS);
+
 	ret = of_property_read_u32(pdev->dev.of_node,
 				   "amlogic,feed_watchdog_mode",
 				   &data->feed_watchdog_mode);
