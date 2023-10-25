@@ -528,17 +528,6 @@ void aml_toddr_set_format(struct toddr *to, struct toddr_fmt *fmt)
 	}
 }
 
-void aml_toddr_update_width(struct toddr *to, int type, int msb, int lsb)
-{
-	struct aml_audio_controller *actrl = to->actrl;
-	unsigned int reg_base = to->reg_base;
-	unsigned int reg;
-
-	reg = calc_toddr_address(EE_AUDIO_TODDR_A_CTRL0, reg_base);
-	aml_audiobus_update_bits(actrl, reg,
-		0x1fff << 3, type << 13 | msb << 8 | lsb << 3);
-}
-
 unsigned int aml_toddr_get_status(struct toddr *to)
 {
 	struct aml_audio_controller *actrl = to->actrl;
@@ -839,6 +828,17 @@ void toddr_vad_set_format(struct toddr_fmt *fmt)
 	vad_top_update_bits(reg, 0x7 << 24 | 0x1fff << 3,
 			    fmt->endian << 24 | fmt->type << 13 |
 			    fmt->msb << 8 | fmt->lsb << 3);
+}
+
+void aml_toddr_update_width(struct toddr *to, int type, int msb, int lsb)
+{
+	struct aml_audio_controller *actrl = to->actrl;
+	unsigned int reg_base = to->reg_base;
+	unsigned int reg;
+
+	reg = calc_toddr_address(EE_AUDIO_TODDR_A_CTRL0, reg_base);
+	aml_audiobus_update_bits(actrl, reg,
+		0x1fff << 3, type << 13 | msb << 8 | lsb << 3);
 }
 
 unsigned int toddr_vad_get_status(void)
