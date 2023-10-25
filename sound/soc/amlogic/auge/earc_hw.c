@@ -230,7 +230,7 @@ void earcrx_dmac_init(struct regmap *top_map,
 	mmio_update_bits(top_map, EARCRX_DMAC_INT_MASK,
 			 0x3FFFF,
 			 (0x1 << 17) | /* earcrx_ana_rst c_new_format_set */
-			 (0x1 << 16) | /* earcrx_ana_rst c_earcrx_div2_hold_set */
+			 (0x0 << 16) | /* earcrx_ana_rst c_earcrx_div2_hold_set */
 			 (0x1 << 15) | /* earcrx_err_correct c_bcherr_int_set */
 			 (0x0 << 14) | /* earcrx_err_correct r_afifo_overflow_set */
 			 (0x0 << 13) | /* earcrx_err_correct r_fifo_overflow_set */
@@ -238,7 +238,7 @@ void earcrx_dmac_init(struct regmap *top_map,
 			 (0x0 << 11) | /* earcrx_user_bit_check c_fifo_thd_pass */
 			 (0x0 << 10) | /* earcrx_user_bit_check c_u_pk_lost_int_set */
 			 (0x0 << 9)	| /* arcrx_user_bit_check c_iu_pk_end */
-			 (0x0 << 8)	| /* arcrx_biphase_decode c_chst_mute_clr */
+			 (0x1 << 8)	| /* arcrx_biphase_decode c_chst_mute_clr */
 			 (0x1 << 7)	| /* arcrx_biphase_decode c_find_papb */
 			 (0x1 << 6)	| /* arcrx_biphase_decode c_valid_change */
 			 (0x0 << 5)	| /* arcrx_biphase_decode c_find_nonpcm2pcm */
@@ -261,6 +261,8 @@ void earcrx_dmac_init(struct regmap *top_map,
 		   (29 << 0)	/* reg_data_bit */
 		  );
 	mmio_write(dmac_map, EARCRX_ANA_RST_CTRL0, 1 << 31 | 1000 << 0);
+	//1us*7*3*100=2.1ms
+	mmio_write(dmac_map, EARCRX_ANA_RST_CTRL1,  1 << 15 | 7 << 12 | 1 << 9 | 100 << 0);
 	if (chnum_mult_mode)
 		mmio_update_bits(dmac_map, EARCRX_SPDIFIN_CTRL6, 0x1 << 27, 0x1 << 27);
 	if (unstable_tick_sel) {
@@ -342,6 +344,9 @@ void earcrx_arc_init(struct regmap *dmac_map)
 		  );
 	mmio_write(dmac_map,
 		   EARCRX_SPDIFIN_CTRL2,
+		   (1 << 19) |
+		   (146 << 24) |
+		   (1 << 17) |
 		   (1 << 16) | /* auto clear compress mode if cs not compress */
 		   (1 << 15) | /* auto clear compress mode when nonpcm2pcm */
 		   (1 << 14) | /* earc_auto */
@@ -362,8 +367,8 @@ static void earcrx_mute_block_enable(struct regmap *dmac_map, bool en)
 	mmio_update_bits(dmac_map,
 			 EARCRX_SPDIFIN_CTRL1,
 			 0x7fff << 9,
-			 0x500 << 12 | /* thd */
-			 0x4 << 9      /* tick, 1ms */
+			 0x1 << 12 | /* thd */
+			 0x0 << 9      /* tick, 1ms */
 	);
 
 	/* Mute bit in CS
@@ -373,7 +378,7 @@ static void earcrx_mute_block_enable(struct regmap *dmac_map, bool en)
 	mmio_update_bits(dmac_map,
 			 EARCRX_SPDIFIN_CTRL2,
 			 0x7fff << 17,
-			 IEC_CS_MUTE_OFFSET | 0x2 << 19 | en << 17
+			 IEC_CS_MUTE_OFFSET << 24 | 0x1 << 19 | en << 17
 	);
 }
 
