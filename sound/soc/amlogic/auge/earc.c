@@ -4,7 +4,7 @@
  *
  */
 
-//#define DEBUG
+#define DEBUG
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -201,6 +201,7 @@ struct earc {
 	int suspend_clk_off;
 	bool resumed;
 	bool becoming_noise;
+	char *tmp_buf;
 	bool reset_xrun;
 	struct timer_list reset_timer;
 	int err_cnt;
@@ -236,9 +237,8 @@ bool get_earcrx_chnum_mult_mode(void)
 
 #define EARC_BUFFER_BYTES (512 * 1024 * 2)
 #define EARC_RATES      (SNDRV_PCM_RATE_8000_192000)
-#define EARC_FORMATS    (SNDRV_PCM_FMTBIT_S16_LE |\
-			SNDRV_PCM_FMTBIT_S24_LE |\
-			SNDRV_PCM_FMTBIT_S32_LE)
+#define EARC_FORMATS    (SNDRV_PCM_FMTBIT_S32_LE)
+#define IEC_FRAMES_SIZE_BYTES (192 * 8)
 
 static const struct snd_pcm_hardware earc_hardware = {
 	.info =
@@ -349,6 +349,70 @@ static void earctx_init(int earc_port, bool st)
 		schedule_work(&p_earc->send_uevent);
 }
 
+static void earcrx_fast_reset(struct snd_pcm_substream *substream)
+{
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	unsigned int bit_depth = snd_pcm_format_width(runtime->format);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct device *dev = rtd->cpu_dai->dev;
+	struct earc *p_earc = (struct earc *)dev_get_drvdata(dev);
+	struct toddr *to = p_earc->tddr;
+	unsigned int msb = 0, lsb = 0, toddr_type = 0;
+	unsigned int src = EARCRX_DMAC;
+	struct toddr_fmt fmt;
+	unsigned int start_addr, end_addr, int_addr;
+	unsigned int period, threshold;
+
+	pr_debug("%s\n", __func__);
+	/* earc rx disable */
+	earcrx_enable(p_earc->rx_cmdc_map,
+				      p_earc->rx_dmac_map,
+				      false);
+	aml_toddr_enable(p_earc->tddr, false);
+	memset(runtime->dma_area, 0, runtime->dma_bytes);
+	/* prepare earc */
+	fmt.type      = toddr_type;
+	fmt.msb       = msb;
+	fmt.lsb       = lsb;
+	fmt.endian    = 0;
+	fmt.bit_depth = bit_depth;
+	fmt.ch_num    = runtime->channels;
+	fmt.rate      = runtime->rate;
+
+	earcrx_pll_refresh(p_earc->rx_top_map, RST_BY_SELF, true);
+	start_addr = runtime->dma_addr;
+	end_addr = start_addr + runtime->dma_bytes - FIFO_BURST;
+	period	 = frames_to_bytes(runtime, runtime->period_size);
+	int_addr = period / FIFO_BURST;
+	/*
+	 * Contrast minimum of period and fifo depth,
+	 * and set the value as half.
+	 */
+	threshold = min(period, to->chipinfo->fifo_depth);
+	threshold /= 2;
+	aml_toddr_set_fifos(to, threshold);
+
+	aml_toddr_set_buf(to, start_addr, end_addr);
+	aml_toddr_set_intrpt(to, int_addr);
+
+	aml_toddr_select_src(to, src);
+	aml_toddr_set_format(to, &fmt);
+
+	earcrx_dmac_init(p_earc->rx_top_map,
+			 p_earc->rx_dmac_map,
+			 p_earc->chipinfo->unstable_tick_sel,
+			 p_earc->chipinfo->chnum_mult_mode);
+	earcrx_arc_init(p_earc->rx_dmac_map);
+	/* toddr enable */
+		aml_toddr_update_width(p_earc->tddr, 3, 27, 0);
+	  aml_toddr_enable(p_earc->tddr, true);
+	/* earcrx in reset & enable */
+	earcrx_enable(p_earc->rx_cmdc_map,
+			      p_earc->rx_dmac_map,
+			      true);
+	pr_info("earcrx_finish %s\n", __func__);
+}
+
 static irqreturn_t earc_ddr_isr(int irq, void *data)
 {
 	struct snd_pcm_substream *substream =
@@ -356,10 +420,35 @@ static irqreturn_t earc_ddr_isr(int irq, void *data)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct device *dev = rtd->cpu_dai->dev;
 	struct earc *p_earc = (struct earc *)dev_get_drvdata(dev);
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	int is_capture = substream->stream == SNDRV_PCM_STREAM_CAPTURE;
+	snd_pcm_uframes_t pos = substream->ops->pointer(substream);
 
 	if (!snd_pcm_running(substream))
 		return IRQ_HANDLED;
 
+	if (is_capture && (earcrx_cmdc_get_attended_type(p_earc->rx_cmdc_map) == ATNDTYP_EARC)) {
+		int offset = frames_to_bytes(runtime, pos);
+		int frame_pos = offset / IEC_FRAMES_SIZE_BYTES;
+		char *hwbuf = runtime->dma_area + frame_pos * IEC_FRAMES_SIZE_BYTES;
+		bool swap = false;
+		char buf_val, buf_val1;
+
+		buf_val = *hwbuf; // Z preamble
+		buf_val1 = *(hwbuf + 4); // Y preamble
+		if ((buf_val && buf_val != 0x60) || (buf_val1 && buf_val1 != 0x60))
+			swap = true;
+		#ifdef __CH_SWAP_DEBUG__
+		pr_info("earc val0=%#x, val1=%#x\n", buf_val, buf_val1);
+		#endif
+		if (swap) {
+			snd_pcm_stream_lock(substream);
+			/* reset earc rx path */
+			earcrx_fast_reset(substream);
+			p_earc->becoming_noise = false;
+			snd_pcm_stream_unlock(substream);
+		}
+	}
 	if (p_earc->reset_xrun) {
 		snd_pcm_stop_xrun(substream);
 		p_earc->reset_xrun = false;
@@ -480,15 +569,7 @@ static void rx_format_work_func(struct work_struct *p_work)
 {
 	struct earc *p_earc = container_of(to_delayed_work(p_work), struct earc, rx_format_change_work);
 
-	mmio_update_bits(p_earc->rx_dmac_map, EARCRX_DMAC_SYNC_CTRL0,
-		   1 << 31,        /* reg_work_disable for earc*/
-		   0 << 31);
-	mmio_write(p_earc->rx_dmac_map,EARCRX_SPDIFIN_CTRL0,0x0 << 31);  /* reg_work_en for arc */
-	earcrx_pll_refresh(p_earc->rx_top_map,RST_BY_SELF, true);
-	mmio_update_bits(p_earc->rx_dmac_map, EARCRX_DMAC_SYNC_CTRL0,
-		   1 << 31,        /* reg_work_disable for earc*/
-		   1 << 31);
-	mmio_write(p_earc->rx_dmac_map,EARCRX_SPDIFIN_CTRL0,0x1 << 31);  /* reg_work_en for arc */
+	earcrx_pll_refresh(p_earc->rx_top_map, RST_BY_SELF, true);
 	pr_info("%s\n", __func__);
 }
 
@@ -511,7 +592,6 @@ static irqreturn_t rx_handler(int irq, void *data)
 
 static void reset_start_timer(struct earc *p_earc,int delay)
 {
-	p_earc->becoming_noise = true;
 	mod_timer(&p_earc->reset_timer, jiffies + msecs_to_jiffies(delay));
 	dev_dbg(p_earc->dev, "reset_start_timer,%d\n", delay);
 }
@@ -526,7 +606,9 @@ static void reset_stop_timer(struct earc *p_earc)
 static void timer_func(struct timer_list *t)
 {
 	struct earc *p_earc = from_timer(p_earc, t, reset_timer);
-	p_earc->reset_xrun = true;
+	earcrx_pll_refresh(p_earc->rx_top_map,
+				   RST_BY_SELF,
+				   true);
 	dev_dbg(p_earc->dev, "timer_func\n");
 }
 
@@ -581,52 +663,26 @@ static irqreturn_t earc_rx_isr(int irq, void *data)
 		if (p_earc->rx_status1 & INT_EARCRX_ANA_RST_C_NEW_FORMAT_SET) {
 			dev_dbg(p_earc->dev, "EARCRX_ANA_RST_C_NEW_FORMAT_SET\n");
 			schedule_delayed_work(&p_earc->rx_format_change_work,msecs_to_jiffies(10));
-			reset_start_timer(p_earc, 400);
-
-			mmio_update_bits(p_earc->rx_top_map, EARCRX_DMAC_INT_MASK,
-			 0x3FFFF,
-			 (0x0 << 15) | /* earcrx_err_correct c_bcherr_int_set */  //disable bcherr int
-			 (0x0 << 1)	 /* arcrx_biphase_decode r_parity_err */ //disable parity_err int
-			);
-			p_earc->rx_status1 &= ~INT_EARCRX_ERR_CORRECT_C_BCHERR_INT_SET;
-			p_earc->rx_status1 &= ~INT_ARCRX_BIPHASE_DECODE_R_PARITY_ERR;
-			p_earc->err_cnt = 0;
 		}
 
 		if (p_earc->rx_status1 & INT_EARCRX_ERR_CORRECT_C_BCHERR_INT_SET) {
-			dev_dbg(p_earc->dev, "EARCRX_ERR_CORRECT_BCHERR\n");
-			p_earc->err_cnt++;
-			if (p_earc->err_cnt > 100) {
-				earcrx_pll_refresh(p_earc->rx_top_map,RST_BY_SELF, true);
-				mmio_update_bits(p_earc->rx_top_map, EARCRX_DMAC_INT_MASK,
-				 0x3FFFF,
-				 (0x0 << 15) | /* earcrx_err_correct c_bcherr_int_set */  //disable bcherr int
-				 (0x0 << 1)	 /* arcrx_biphase_decode r_parity_err */ //disable parity_err int
-				);
-				p_earc->rx_status1 &= ~INT_EARCRX_ERR_CORRECT_C_BCHERR_INT_SET;
-				p_earc->rx_status1 &= ~INT_ARCRX_BIPHASE_DECODE_R_PARITY_ERR;
-				p_earc->err_cnt = 0;
-				dev_dbg(p_earc->dev, "EARCRX_ERR_CORRECT_BCHERR,earcrx_pll_refresh\n");
-			}
-			reset_start_timer(p_earc, 400);
+			p_earc->becoming_noise = true;
+			reset_start_timer(p_earc, 10);
+			dev_dbg(p_earc->dev, "EARCRX_ERR_CORRECT_BCHERR,reset timer\n");
 		}
 		if (p_earc->rx_status1 & INT_ARCRX_BIPHASE_DECODE_R_PARITY_ERR) {
-			dev_dbg(p_earc->dev, "ARCRX_R_PARITY_ERR reset\n");
-			p_earc->err_cnt++;
-			if (p_earc->err_cnt > 100) {
-				earcrx_pll_refresh(p_earc->rx_top_map,RST_BY_SELF, true);
-				mmio_update_bits(p_earc->rx_top_map, EARCRX_DMAC_INT_MASK,
-				 0x3FFFF,
-				 (0x0 << 15) | /* earcrx_err_correct c_bcherr_int_set */  //disable bcherr
-				 (0x0 << 1)	 /* arcrx_biphase_decode r_parity_err */ //disable parity_err
-				);
-				p_earc->err_cnt = 0;
-				dev_dbg(p_earc->dev, "ARCRX_R_PARITY_ERR reset,earcrx_pll_refresh\n");
-			}
-			reset_start_timer(p_earc, 400);
+			p_earc->becoming_noise = true;
+			dev_dbg(p_earc->dev, "ARCRX_R_PARITY_ERR reset timer\n");
+			reset_start_timer(p_earc, 10);
 		}
 		//if (p_earc->rx_status0 & INT_EARCRX_CMDC_HB_STATUS)
 		//	dev_dbg(p_earc->dev, "EARCRX_CMDC_HB_STATUS\n");
+		if (p_earc->rx_status1 & INT_ARCRX_BIPHASE_DECODE_C_CHST_MUTE_CLR) {
+			mmio_update_bits(p_earc->rx_dmac_map, EARCRX_ERR_CORRECT_CTRL0,
+			 0x3,
+			 0x1); /* EARCRX_ERR_CORRECT_CTRL0 force mode enable */
+			dev_dbg(p_earc->dev, "INT_ARCRX_BIPHASE_DECODE_C_CHST_MUTE_CLR\n");
+		}
 		//if (p_earc->rx_status1 & INT_ARCRX_BIPHASE_DECODE_C_FIND_PAPB)
 		//	dev_dbg(p_earc->dev, "ARCRX_C_FIND_PAPB\n");
 
@@ -637,15 +693,19 @@ static irqreturn_t earc_rx_isr(int irq, void *data)
 		if (p_earc->rx_status1 & INT_ARCRX_BIPHASE_DECODE_C_PCPD_CHANGE)
 			dev_dbg(p_earc->dev, "ARCRX_C_PCPD_CHANGE\n");
 		if (p_earc->rx_status1 & INT_ARCRX_BIPHASE_DECODE_C_CH_STATUS_CHANGE) {
-			dev_dbg(p_earc->dev, "ARCRX_C_CH_STATUS_CHANGE\n");
-			int mute = earcrx_get_cs_mute(p_earc->rx_dmac_map);
-
+			int mute = 0;
+			earcrx_get_cs_iec958_cache(p_earc->rx_dmac_map);
+			mute = earcrx_get_cs_mute(p_earc->rx_dmac_map);
 			if (p_earc->rx_cs_mute != mute) {
 				p_earc->rx_cs_mute = mute;
-				earcrx_pll_refresh(p_earc->rx_top_map,
-						   RST_BY_SELF, true);
+				if (!mute) {
+					mmio_update_bits(p_earc->rx_dmac_map,
+					EARCRX_ERR_CORRECT_CTRL0,
+					0x3,
+					0x0); /* EARCRX_ERR_CORRECT_CTRL0 force mode disable */
+				}
+				dev_dbg(p_earc->dev, "ARCRX_C_CH_STATUS_CHANGE\n");
 			}
-			earcrx_get_cs_iec958_cache(p_earc->rx_dmac_map);
 		}
 		if (p_earc->rx_status1 & INT_ARCRX_BIPHASE_DECODE_I_SAMPLE_MODE_CHANGE)
 			dev_dbg(p_earc->dev, "ARCRX_I_SAMPLE_MODE_CHANGE\n");
@@ -877,12 +937,20 @@ static int earc_close(struct snd_pcm_substream *substream)
 static int earc_hw_params(struct snd_pcm_substream *substream,
 			 struct snd_pcm_hw_params *hw_params)
 {
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct earc *p_earc = runtime->private_data;
+
+	p_earc->tmp_buf = kmalloc(params_buffer_bytes(hw_params), GFP_KERNEL);
 	return snd_pcm_lib_malloc_pages(substream,
 			params_buffer_bytes(hw_params));
 }
 
 static int earc_hw_free(struct snd_pcm_substream *substream)
 {
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct earc *p_earc = runtime->private_data;
+
+	kfree(p_earc->tmp_buf);
 	snd_pcm_lib_free_pages(substream);
 
 	return 0;
@@ -977,9 +1045,6 @@ static int aml_write_copy(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-
-/* default copy_user ops for read; used for both interleaved and non- modes */
-char tmp[500*1024];
 static int aml_read_copy(struct snd_pcm_substream *substream,
 		int channel, unsigned long hwoff,
 		void *buf, unsigned long bytes)
@@ -988,8 +1053,8 @@ static int aml_read_copy(struct snd_pcm_substream *substream,
 	struct earc *p_earc = runtime->private_data;
 
 	if (p_earc->becoming_noise) {
-		memset(tmp, 0, bytes);
-		if (copy_to_user((void __user *)buf, tmp, bytes))
+		memset(p_earc->tmp_buf, 0, bytes);
+		if (copy_to_user((void __user *)buf, p_earc->tmp_buf, bytes))
 			return -EFAULT;
 		return 0;
 	}
@@ -1089,7 +1154,6 @@ static int earc_dai_prepare(struct snd_pcm_substream *substream,
 		struct toddr_fmt fmt;
 		enum attend_type type =
 			earcrx_cmdc_get_attended_type(p_earc->rx_cmdc_map);
-		p_earc->becoming_noise = false;
 
 		if (type == ATNDTYP_DISCNCT) {
 //			dev_err(p_earc->dev,
@@ -1097,8 +1161,6 @@ static int earc_dai_prepare(struct snd_pcm_substream *substream,
 //			return -ENOTCONN;
 			type = ATNDTYP_ARC;
 		}
-		earcrx_pll_refresh(p_earc->rx_top_map,RST_BY_SELF, true);
-		msleep(100);
 
 		dev_info(p_earc->dev,
 			"%s connected, Expected toddr src:%s\n",
@@ -1348,6 +1410,8 @@ static int earc_dai_trigger(struct snd_pcm_substream *substream, int cmd,
 					  p_earc->tx_mute);
 		} else {
 			dev_info(substream->pcm->card->dev, "eARC/ARC RX enable\n");
+			/* store preamble */
+			aml_toddr_update_width(p_earc->tddr, 3, 27, 0);
 
 			aml_toddr_enable(p_earc->tddr, true);
 			earcrx_enable(p_earc->rx_cmdc_map,
@@ -1445,6 +1509,9 @@ static int earc_dai_startup(struct snd_pcm_substream *substream,
 		}
 
 		earcrx_pll_refresh(p_earc->rx_top_map, RST_BY_SELF, true);
+		snd_pcm_hw_constraint_step(substream->runtime, 0,
+						SNDRV_PCM_HW_PARAM_BUFFER_BYTES,
+						IEC_FRAMES_SIZE_BYTES);
 		timer_setup(&p_earc->reset_timer, timer_func, 0);
 	}
 
