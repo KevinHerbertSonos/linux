@@ -4,7 +4,7 @@
  *
  */
 
-#define DEBUG
+//#define DEBUG
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -202,7 +202,6 @@ struct earc {
 	bool resumed;
 	bool becoming_noise;
 	char *tmp_buf;
-	bool reset_xrun;
 	struct timer_list reset_timer;
 	int err_cnt;
 };
@@ -448,11 +447,6 @@ static irqreturn_t earc_ddr_isr(int irq, void *data)
 			p_earc->becoming_noise = false;
 			snd_pcm_stream_unlock(substream);
 		}
-	}
-	if (p_earc->reset_xrun) {
-		snd_pcm_stop_xrun(substream);
-		p_earc->reset_xrun = false;
-		return IRQ_HANDLED;
 	}
 	snd_pcm_period_elapsed(substream);
 
