@@ -23,7 +23,8 @@ int br_priority_for_addr(const unsigned char *addr)
 	    (0xf0 == addr[0] && 0xf6 == addr[1] && 0xc1 == addr[2]) ||
 	    (0x38 == addr[0] && 0x42 == addr[1] && 0x0b == addr[2]) ||
 	    (0xc4 == addr[0] && 0x38 == addr[1] && 0x75 == addr[2]) ||
-	    (0x80 == addr[0] && 0x4a == addr[1] && 0xf2 == addr[2])) {
+	    (0x80 == addr[0] && 0x4a == addr[1] && 0xf2 == addr[2]) ||
+	    (0x74 == addr[0] && 0xca == addr[1] && 0x60 == addr[2])) {
 		return 1;
 	}
 
