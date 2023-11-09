@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2019, Sonos, Inc.
+ * Copyright (c) 2015-2023, Sonos, Inc.
  *
  * SPDX-License-Identifier:	GPL-2.0
  *
@@ -50,7 +50,7 @@ typedef struct _sonos_rollback_dev {
 	int shift;
 	int saved_state;
 	struct mutex corruption_mutex;
-	int num_rootfs_failures;
+	bool rootfs_failure;
 } sonos_rollback_dev;
 
 /* used by sonos_rootfs_failure_notify */
@@ -118,7 +118,12 @@ static unsigned int update_boot_counter(sonos_rollback_dev *sonos_rollback,
 		else {
 			data->boot_counter = value;
 		}
-		write_boot_counter(sonos_rollback, boot_counter);
+		// Set the boot counter only if no rootfs corruption yet
+		mutex_lock(&sonos_rollback->corruption_mutex);
+		if (!sonos_rollback->rootfs_failure) {
+			write_boot_counter(sonos_rollback, boot_counter);
+		}
+		mutex_unlock(&sonos_rollback->corruption_mutex);
 	} else {
 		boot_counter = read_boot_counter(sonos_rollback);
 	}
@@ -127,7 +132,7 @@ static unsigned int update_boot_counter(sonos_rollback_dev *sonos_rollback,
 
 // Set BootCounterReg fields on rootfs digest validation failure:
 // fallback flag to BC_FLAG_BAD_SIGNATURE,
-// boot counter over the fallback threshold
+// boot counter over the fallback or failure threshold
 void sonos_rootfs_failure_notify(void)
 {
 	unsigned int boot_counter;
@@ -141,17 +146,22 @@ void sonos_rootfs_failure_notify(void)
 	boot_counter = read_boot_counter(sonos_rollback);
 	bc = (BootCounterReg_t*)&boot_counter;
 
+	bc->fallback_flags |= BC_FLAG_BAD_SIGNATURE;
+
+	// If this is a fallback already, force failure
+	if (sonos_rollback->saved_state == FALLBACK_BOOT_COUNTER) {
+		bc->boot_counter = BOOT_COUNTER_FAILURE_THRESHOLD + 1;
+		printk(KERN_DEBUG "Prepare boot counter to cause failure on next boot.");
+	}
+	else {
+		bc->boot_counter = BOOT_COUNTER_FALLBACK_THRESHOLD + 1;
+		printk(KERN_DEBUG "Prepare boot counter to cause fallback on next boot.");
+	}
+
+	// Actually set boot counter at first failure
 	mutex_lock(&sonos_rollback->corruption_mutex);
-	sonos_rollback->num_rootfs_failures++;
-	if (sonos_rollback->num_rootfs_failures == 1) {
-		bc->fallback_flags |= BC_FLAG_BAD_SIGNATURE;
-		bc->boot_counter += BOOT_COUNTER_FALLBACK_THRESHOLD;
-		if (bc->boot_counter > BOOT_COUNTER_FAILURE_THRESHOLD) {
-			printk(KERN_DEBUG "Wrote to boot counter to cause failure on next boot.");
-		}
-		else {
-			printk(KERN_DEBUG "Wrote to boot counter to cause fallback on next boot.");
-		}
+	if (!sonos_rollback->rootfs_failure) {
+		sonos_rollback->rootfs_failure = true;
 		write_boot_counter(sonos_rollback, boot_counter);
 	}
 	mutex_unlock(&sonos_rollback->corruption_mutex);
@@ -297,7 +307,7 @@ static int sonos_rollback_probe(struct platform_device *pdev)
 	data = (BootCounterReg_t*)&boot_counter;
 	sonos_rollback->saved_state = data->boot_state;
 
-	sonos_rollback->num_rootfs_failures = 0;
+	sonos_rollback->rootfs_failure = false;
 	mutex_init(&sonos_rollback->corruption_mutex);
 
 #ifdef CONFIG_PROC_FS
