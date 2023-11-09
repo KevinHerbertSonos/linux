@@ -427,7 +427,7 @@ static irqreturn_t earc_ddr_isr(int irq, void *data)
 	if (!snd_pcm_running(substream))
 		return IRQ_HANDLED;
 
-	if (is_capture && (earcrx_cmdc_get_attended_type(p_earc->rx_cmdc_map) == ATNDTYP_EARC)) {
+	if (is_capture) {
 		int offset = frames_to_bytes(runtime, pos);
 		int frame_pos = offset / IEC_FRAMES_SIZE_BYTES;
 		char *hwbuf = runtime->dma_area + frame_pos * IEC_FRAMES_SIZE_BYTES;
@@ -609,6 +609,7 @@ static void timer_func(struct timer_list *t)
 	earcrx_pll_refresh(p_earc->rx_top_map,
 				   RST_BY_SELF,
 				   true);
+	p_earc->becoming_noise = false;
 	dev_dbg(p_earc->dev, "timer_func\n");
 }
 
