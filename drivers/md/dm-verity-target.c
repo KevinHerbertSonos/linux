@@ -47,6 +47,13 @@
 
 static unsigned int dm_verity_prefetch_cluster = DM_VERITY_DEFAULT_PREFETCH_SIZE;
 
+#ifdef CONFIG_SONOS
+/* From added file fs/proc/sonos_rollback.c. This function is called before
+ * rebooting if dm-verity finds corrupted data.
+ */
+void sonos_rootfs_failure_notify(void);
+#endif
+
 module_param_named(prefetch_cluster, dm_verity_prefetch_cluster, uint, 0644);
 
 static DEFINE_STATIC_KEY_FALSE(use_bh_wq_enabled);
@@ -275,8 +282,12 @@ out:
 	if (v->mode == DM_VERITY_MODE_LOGGING)
 		return 0;
 
-	if (v->mode == DM_VERITY_MODE_RESTART)
+	if (v->mode == DM_VERITY_MODE_RESTART) {
+#ifdef CONFIG_SONOS
+		sonos_rootfs_failure_notify();
+#endif
 		kernel_restart("dm-verity device corrupted");
+	}
 
 	if (v->mode == DM_VERITY_MODE_PANIC)
 		panic("dm-verity device corrupted");
