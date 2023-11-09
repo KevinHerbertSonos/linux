@@ -36,6 +36,13 @@
 #define DM_VERITY_OPTS_MAX		(3 + DM_VERITY_OPTS_FEC + \
 					 DM_VERITY_ROOT_HASH_VERIFICATION_OPTS)
 
+#ifdef CONFIG_SONOS
+/* From added file fs/proc/sonos_rollback.c. This function is called before
+ * rebooting if dm-verity finds corrupted data.
+ */
+void sonos_rootfs_failure_notify(void);
+#endif
+
 static unsigned dm_verity_prefetch_cluster = DM_VERITY_DEFAULT_PREFETCH_SIZE;
 
 module_param_named(prefetch_cluster, dm_verity_prefetch_cluster, uint, S_IRUGO | S_IWUSR);
@@ -251,8 +258,12 @@ out:
 	if (v->mode == DM_VERITY_MODE_LOGGING)
 		return 0;
 
-	if (v->mode == DM_VERITY_MODE_RESTART)
+	if (v->mode == DM_VERITY_MODE_RESTART) {
+#ifdef CONFIG_SONOS
+		sonos_rootfs_failure_notify();
+#endif
 		kernel_restart("dm-verity device corrupted");
+	}
 
 	return 1;
 }
