@@ -1151,10 +1151,9 @@ static int earc_dai_prepare(struct snd_pcm_substream *substream,
 			earcrx_cmdc_get_attended_type(p_earc->rx_cmdc_map);
 
 		if (type == ATNDTYP_DISCNCT) {
-//			dev_err(p_earc->dev,
-//				"Neither eARC_RX or ARC_RX is attended!\n");
+			dev_err(p_earc->dev,
+				"Neither eARC_RX or ARC_RX is attended!\n");
 //			return -ENOTCONN;
-			type = ATNDTYP_ARC;
 		}
 
 		dev_info(p_earc->dev,
@@ -1485,8 +1484,8 @@ static int earc_dai_startup(struct snd_pcm_substream *substream,
 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 		unsigned long flags;
 
-		if (IS_ERR(p_earc->clk_rx_dmac) || IS_ERR(p_earc->clk_rx_dmac_srcpll))
-			return -ENOTCONN;
+		//if (IS_ERR(p_earc->clk_rx_dmac) || IS_ERR(p_earc->clk_rx_dmac_srcpll))
+		//	return -ENOTCONN;
 		/* rx dmac clk */
 		ret = clk_prepare_enable(p_earc->clk_rx_dmac);
 		if (ret) {
