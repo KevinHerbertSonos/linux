@@ -1217,8 +1217,6 @@ static int ax88179_bind(struct usbnet *dev, struct usb_interface *intf)
 	dev->net->hw_features |= NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM |
 				 NETIF_F_RXCSUM;
 
-	ax88179_reset(dev);
-
 	return 0;
 }
 
