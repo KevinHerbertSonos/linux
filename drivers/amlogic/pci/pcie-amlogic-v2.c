@@ -1270,7 +1270,7 @@ static int amlogic_pcie_resume_noirq(struct device *dev)
 	val = amlogic_cfg_readl(amlogic_pcie, PCIE_CFG0);
 	val |= (APP_LTSSM_ENABLE);
 	amlogic_cfg_writel(amlogic_pcie, val, PCIE_CFG0);
-	usleep_range(500, 510);
+	usleep_range(9000, 9010);
 
 	return 0;
 }
