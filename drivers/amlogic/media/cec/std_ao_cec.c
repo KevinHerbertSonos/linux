@@ -117,6 +117,19 @@ static int hdmitx_notify_callback(struct notifier_block *block,
 		queue_delayed_work(cec_dev->hdmi_plug_wq,
 				   &cec_dev->work_hdmi_plug, 0);
 		break;
+	case HDMITX_PHY_ADDR_VALID:
+		if (para) {
+			u16 phy_addr = *((u16*)para);
+			CEC_INFO("[%s] event: new physical address %04x\n", __func__, phy_addr);
+			cec_s_phys_addr(std_ao_cec.adap,
+					phy_addr,
+					false);
+		}
+		else {
+			CEC_ERR("[%s]: no physical address\n", __func__);
+			ret = -EINVAL;
+		}
+		break;
 	default:
 		CEC_ERR("[%s] unsupported notify:%ld\n", __func__, cmd);
 		ret = -EINVAL;
@@ -520,10 +533,6 @@ int cec_ll_tx(const unsigned char *msg, unsigned char len, unsigned char signal_
 			return CEC_FAIL_NACK;
 		}
 	}
-
-	/* make sure we got valid physical address */
-	if (len >= 2 && msg[1] == CEC_OC_REPORT_PHYSICAL_ADDRESS)
-		check_physical_addr_valid(3);
 
 try_again:
 	reinit_completion(&cec_dev->tx_ok);
@@ -2241,9 +2250,6 @@ static int aml_aocec_probe(struct platform_device *pdev)
 	struct resource *res;
 	resource_size_t *base;
 #endif
-	unsigned char a, b, c, d;
-	u16 phy_addr = 0;
-	struct vsdb_phyaddr *tx_phy_addr = get_hdmitx_phy_addr();
 	unsigned int is_ee_cec;
 
 
@@ -2744,18 +2750,6 @@ static int aml_aocec_probe(struct platform_device *pdev)
 	}
 #endif
 #endif
-	if (get_hpd_state() &&
-	    tx_phy_addr &&
-	    tx_phy_addr->valid == 1) {
-		a = tx_phy_addr->a;
-		b = tx_phy_addr->b;
-		c = tx_phy_addr->c;
-		d = tx_phy_addr->d;
-		phy_addr = ((a << 12) | (b << 8) | (c << 4) | (d));
-		cec_s_phys_addr(std_ao_cec.adap,
-				phy_addr,
-				false);
-	}
 	CEC_ERR("%s success end\n", __func__);
 	cec_dev->probe_finish = true;
 	return 0;
