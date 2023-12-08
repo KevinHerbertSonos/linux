@@ -28,6 +28,7 @@
 #include <linux/bitrev.h>
 #include <linux/amlogic/iomap.h>
 #include <linux/clk-provider.h>
+#include <linux/amlogic/clk_measure.h>
 
 #include <linux/amlogic/media/sound/hdmi_earc.h>
 #include "resample.h"
@@ -204,6 +205,9 @@ struct earc {
 	char *tmp_buf;
 	struct timer_list reset_timer;
 	int err_cnt;
+	struct timer_list timer;
+	unsigned int position_addr;
+	int earcrx_pointer;
 };
 
 static struct earc *s_earc;
@@ -904,6 +908,7 @@ static int earc_open(struct snd_pcm_substream *substream)
 		}
 		p_earc->earctx_on = true;
 	} else {
+		p_earc->earcrx_pointer = 0;
 		p_earc->tddr = aml_audio_register_toddr(dev,
 			earc_ddr_isr, substream);
 		if (!p_earc->tddr) {
@@ -930,6 +935,7 @@ static int earc_close(struct snd_pcm_substream *substream)
 		p_earc->earctx_on = false;
 		aml_audio_unregister_frddr(p_earc->dev, substream);
 	} else {
+		del_timer_sync(&p_earc->timer);
 		aml_audio_unregister_toddr(p_earc->dev, substream);
 	}
 
@@ -1022,6 +1028,7 @@ static snd_pcm_uframes_t earc_pointer(struct snd_pcm_substream *substream)
 	if (frames > runtime->buffer_size)
 		frames = 0;
 
+	p_earc->earcrx_pointer = 1;
 	return frames;
 }
 
@@ -1421,6 +1428,8 @@ static int earc_dai_trigger(struct snd_pcm_substream *substream, int cmd,
 			earcrx_enable(p_earc->rx_cmdc_map,
 				      p_earc->rx_dmac_map,
 				      true);
+			p_earc->position_addr = 0;
+			mod_timer(&p_earc->timer, jiffies);
 		}
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
@@ -2996,6 +3005,37 @@ static void earc_work_func(struct work_struct *work)
 	}
 }
 
+static void earcrx_timer_func(struct timer_list *t)
+{
+	struct earc *p_earc = from_timer(p_earc, t, timer);
+	unsigned long delay = msecs_to_jiffies(1000);
+	unsigned int cur_addr;
+	enum attend_type type;
+	unsigned int clock = 0;
+
+	if (!p_earc->earcrx_pointer)
+		goto exit;
+
+	type = earcrx_cmdc_get_attended_type(p_earc->rx_cmdc_map);
+	if (type == ATNDTYP_DISCNCT)
+		goto exit;
+
+	cur_addr = aml_toddr_get_position(p_earc->tddr);
+	if (p_earc->position_addr == cur_addr) {
+		clock = meson_clk_measure(125);//get earcrx_pll_test
+
+		if (clock) {
+			earcrx_pll_refresh(p_earc->rx_top_map, RST_BY_SELF, true);
+			pr_info("hw_ptr reset %s,clock= %d\n", __func__,clock);
+		}
+	}
+
+	p_earc->position_addr = cur_addr;
+
+exit:
+	mod_timer(&p_earc->timer, jiffies + delay);
+}
+
 static int earc_platform_probe(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node;
@@ -3110,6 +3150,7 @@ static int earc_platform_probe(struct platform_device *pdev)
 			dev_info(dev, "%s, irq_earc_rx:%d\n", __func__, p_earc->irq_earc_rx);
 
 		earc_dai[0].capture = pcm_stream;
+		timer_setup(&p_earc->timer, earcrx_timer_func, 0);
 	}
 
 	/* TX */
