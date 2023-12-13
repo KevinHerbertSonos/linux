@@ -488,6 +488,13 @@ config SONOS_SYMBOLIC_GPIO
         help
           Support for Sonos GPIO toggle through symbolic sysfs files
 
+config SONOS_POWER_OVER_ETHERNET
+        tristate "Sonos Power Over Ethernet Control"
+        depends on SONOS
+        default n
+        help
+          Support for Sonos Power over Ethernet
+
 config SONOS_PSMON
        tristate "Sonos power supply monitoring (brownout detection) module"
        default n
