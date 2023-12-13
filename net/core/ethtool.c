@@ -490,6 +490,8 @@ convert_link_ksettings_to_legacy_settings(
 	const struct ethtool_link_ksettings *link_ksettings)
 {
 	bool retval = true;
+	u32 unknown_speed = 0;
+	int link_speed = link_ksettings->base.speed;
 
 	memset(legacy_settings, 0, sizeof(*legacy_settings));
 	/* this also clears the deprecated fields in legacy structure:
@@ -507,7 +509,11 @@ convert_link_ksettings_to_legacy_settings(
 	retval &= ethtool_convert_link_mode_to_legacy_u32(
 		&legacy_settings->lp_advertising,
 		link_ksettings->link_modes.lp_advertising);
-	ethtool_cmd_speed_set(legacy_settings, link_ksettings->base.speed);
+
+	if (link_speed < 0)
+		link_speed = unknown_speed;
+
+	ethtool_cmd_speed_set(legacy_settings, link_speed);
 	legacy_settings->duplex
 		= link_ksettings->base.duplex;
 	legacy_settings->port
