@@ -583,6 +583,13 @@ unsigned int earcrx_get_cs_fmt(struct regmap *dmac_map, enum attend_type type)
 	return coding_type;
 }
 
+static unsigned int earcrx_get_raw_cs_freq(void)
+{
+	unsigned int csfs = earcrx_get_cs_bits_cached(IEC_CS_SFREQ_OFFSET,
+						      IEC_CS_SFREQ_MASK);
+	return iec_rate_from_csfs(csfs);
+}
+
 int earcrx_get_cs_channels(struct regmap *dmac_map,
 				  enum audio_coding_types coding_type)
 {
@@ -608,7 +615,16 @@ int earcrx_get_cs_channels(struct regmap *dmac_map,
 		channels = 6;
 		break;
 	case AUDIO_CODING_TYPE_ENCODED_LAYOUT_A:
-		channels = 8; /* Layout for coding type */
+		// Layout A needs to take the raw sample rate into account because
+		// this driver cannot represent sample rates > 192k.  So if the frequency
+		// is above 192k we must set the channel count such that the sample
+		// rate can be divided down to a supported lower canonical rate.
+		if (earcrx_get_raw_cs_freq() > 192000) {
+			channels = 8;
+		}
+		else {
+			channels = 2;
+		}
 		break;
 	case AUDIO_CODING_TYPE_ENCODED_LAYOUT_B:
 		/* We currently do not have a way to filter out the 6 channels
@@ -628,11 +644,9 @@ int earcrx_get_cs_channels(struct regmap *dmac_map,
 unsigned int earcrx_get_cs_freq(struct regmap *dmac_map,
 				enum audio_coding_types coding_type)
 {
-	unsigned int csfs, freq, channels;
+	unsigned int freq, channels;
 
-	csfs = earcrx_get_cs_bits_cached(IEC_CS_SFREQ_OFFSET,
-				 IEC_CS_SFREQ_MASK);
-	freq = iec_rate_from_csfs(csfs);
+	freq = earcrx_get_raw_cs_freq();
 
 	/* Fix to really fs */
 	channels = earcrx_get_cs_channels(dmac_map, coding_type);
