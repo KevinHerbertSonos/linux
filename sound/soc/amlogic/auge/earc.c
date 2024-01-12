@@ -208,6 +208,7 @@ struct earc {
 	struct timer_list timer;
 	unsigned int position_addr;
 	int earcrx_pointer;
+	u8 rx_latency;
 };
 
 static struct earc *s_earc;
@@ -649,9 +650,7 @@ static irqreturn_t earc_rx_isr(int irq, void *data)
 	if (p_earc->rx_status0 & INT_EARCRX_CMDC_DISC1)
 		dev_info(p_earc->dev, "EARCRX_CMDC_DISC1\n");
 	if (p_earc->rx_status0 & INT_EARCRX_CMDC_EARC) {
-		u8 latency = EARCRX_DEFAULT_LATENCY;
-
-		earcrx_cmdc_set_latency(p_earc->rx_cmdc_map, &latency);
+		earcrx_cmdc_set_latency(p_earc->rx_cmdc_map, &p_earc->rx_latency);
 		earcrx_cmdc_set_cds(p_earc->rx_cmdc_map, p_earc->rx_cds_data);
 		earcrx_update_attend_event(p_earc,
 					   true, true);
@@ -1761,19 +1760,11 @@ static int earcrx_get_latency(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct earc *p_earc = dev_get_drvdata(component->dev);
-	enum cmdc_st state;
-	u8  val = 0;
 
 	if (!p_earc || IS_ERR(p_earc->rx_cmdc_map))
 		return 0;
 
-	state = earcrx_cmdc_get_state(p_earc->rx_cmdc_map);
-	if (state != CMDC_ST_EARC)
-		return 0;
-
-	earcrx_cmdc_get_latency(p_earc->rx_cmdc_map, &val);
-
-	ucontrol->value.integer.value[0] = val;
+	ucontrol->value.integer.value[0] = p_earc->rx_latency;
 
 	return 0;
 }
@@ -1789,6 +1780,7 @@ static int earcrx_set_latency(struct snd_kcontrol *kcontrol,
 	if (!p_earc || IS_ERR(p_earc->rx_cmdc_map))
 		return 0;
 
+	p_earc->rx_latency = latency;
 	state = earcrx_cmdc_get_state(p_earc->rx_cmdc_map);
 	if (state != CMDC_ST_EARC)
 		return 0;
@@ -3210,6 +3202,7 @@ static int earc_platform_probe(struct platform_device *pdev)
 	}
 	p_earc->tx_earc_mode = true;
 	p_earc->tx_ui_flag = 1;
+	p_earc->rx_latency = EARCRX_DEFAULT_LATENCY;
 	s_earc = p_earc;
 
 	/* RX */
