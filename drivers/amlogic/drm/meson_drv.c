@@ -617,93 +617,6 @@ static const struct of_device_id am_meson_drm_dt_match[] = {
 };
 MODULE_DEVICE_TABLE(of, am_meson_drm_dt_match);
 
-#ifdef CONFIG_PM_SLEEP
-static void am_meson_drm_fb_suspend(struct drm_device *drm)
-{
-#ifdef CONFIG_DRM_MESON_EMULATE_FBDEV
-	int i;
-	struct meson_drm_fbdev *fbdev;
-	struct meson_drm *priv = drm->dev_private;
-
-	for (i = 0; i < MESON_MAX_OSD; i++) {
-		fbdev = priv->osd_fbdevs[i];
-		if (fbdev)
-			drm_fb_helper_set_suspend(&fbdev->base, 1);
-	}
-#endif
-}
-
-static void am_meson_drm_fb_resume(struct drm_device *drm)
-{
-#ifdef CONFIG_DRM_MESON_EMULATE_FBDEV
-	int i;
-	struct meson_drm_fbdev *fbdev;
-	struct meson_drm *priv = drm->dev_private;
-
-	for (i = 0; i < MESON_MAX_OSD; i++) {
-		fbdev = priv->osd_fbdevs[i];
-		if (fbdev)
-			drm_fb_helper_set_suspend(&fbdev->base, 0);
-	}
-#endif
-}
-
-static int am_meson_drm_pm_suspend(struct device *dev)
-{
-	struct drm_device *drm;
-	struct meson_drm *priv;
-
-	priv = dev_get_drvdata(dev);
-	if (!priv) {
-		DRM_ERROR("%s: Failed to get meson drm!\n", __func__);
-		return 0;
-	}
-	drm = priv->drm;
-	if (!drm) {
-		DRM_ERROR("%s: Failed to get drm device!\n", __func__);
-		return 0;
-	}
-	drm_kms_helper_poll_disable(drm);
-	am_meson_drm_fb_suspend(drm);
-	priv->state = drm_atomic_helper_suspend(drm);
-	if (IS_ERR(priv->state)) {
-		am_meson_drm_fb_resume(drm);
-		drm_kms_helper_poll_enable(drm);
-		DRM_INFO("%s: drm_atomic_helper_suspend fail\n", __func__);
-		return PTR_ERR(priv->state);
-	}
-	DRM_INFO("%s: done\n", __func__);
-	return 0;
-}
-
-static int am_meson_drm_pm_resume(struct device *dev)
-{
-	struct drm_device *drm;
-	struct meson_drm *priv;
-
-	priv = dev_get_drvdata(dev);
-	if (!priv) {
-		DRM_ERROR("%s: Failed to get meson drm!\n", __func__);
-		return 0;
-	}
-	drm = priv->drm;
-	if (!drm) {
-		DRM_ERROR("%s: Failed to get drm device!\n", __func__);
-		return 0;
-	}
-	drm_atomic_helper_resume(drm, priv->state);
-	am_meson_drm_fb_resume(drm);
-	drm_kms_helper_poll_enable(drm);
-	DRM_INFO("%s: done\n", __func__);
-	return 0;
-}
-#endif
-
-static const struct dev_pm_ops am_meson_drm_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(am_meson_drm_pm_suspend,
-				am_meson_drm_pm_resume)
-};
-
 static struct platform_driver am_meson_drm_platform_driver = {
 	.probe      = am_meson_drv_probe,
 	.remove     = am_meson_drv_remove,
@@ -711,7 +624,6 @@ static struct platform_driver am_meson_drm_platform_driver = {
 		.owner  = THIS_MODULE,
 		.name   = DRIVER_NAME,
 		.of_match_table = am_meson_drm_dt_match,
-		.pm = &am_meson_drm_pm_ops,
 	},
 };
 
