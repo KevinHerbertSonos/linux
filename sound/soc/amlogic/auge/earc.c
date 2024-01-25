@@ -881,6 +881,8 @@ static int earc_open(struct snd_pcm_substream *substream)
 
 	p_earc = (struct earc *)dev_get_drvdata(dev);
 
+	runtime->private_data = p_earc;
+
 	snd_soc_set_runtime_hwparams(substream, &earc_hardware);
 	snd_pcm_lib_preallocate_pages(substream, SNDRV_DMA_TYPE_DEV,
 		dev, EARC_BUFFER_BYTES / 2, EARC_BUFFER_BYTES);
@@ -917,8 +919,6 @@ static int earc_open(struct snd_pcm_substream *substream)
 			goto err_ddr;
 		}
 	}
-
-	runtime->private_data = p_earc;
 
 	return 0;
 err_ddr:
