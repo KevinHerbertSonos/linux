@@ -1189,6 +1189,8 @@ static int aml_tdm_open(struct snd_pcm_substream *substream)
 
 	p_tdm = (struct aml_tdm *)dev_get_drvdata(dev);
 
+	runtime->private_data = p_tdm;
+
 	snd_soc_set_runtime_hwparams(substream, &aml_tdm_hardware);
 	snd_pcm_lib_preallocate_pages(substream, SNDRV_DMA_TYPE_DEV,
 		dev, TDM_BUFFER_BYTES / 2, TDM_BUFFER_BYTES);
@@ -1217,7 +1219,6 @@ static int aml_tdm_open(struct snd_pcm_substream *substream)
 		}
 	}
 
-	runtime->private_data = p_tdm;
 	return 0;
 
 err_ddr:
