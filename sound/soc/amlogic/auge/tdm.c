@@ -138,6 +138,12 @@ struct aml_tdm {
 	struct regulator *regulator_vcc5v;
 	int suspend_clk_off;
 	bool in_suspend;
+#if defined(CONFIG_SONOS)
+	/* non-zero if a custom value specified in device tree */
+	unsigned int start_clk_sample_rate;
+	/* non-zero if a custom value specified in device tree */
+	unsigned int fixed_mclk_frequency;
+#endif
 };
 
 #define TDM_BUFFER_BYTES (1024 * 1024)
@@ -192,8 +198,13 @@ static inline enum toddr_src aml_tdm_id2src(int id)
 	return src;
 }
 
+#if defined(CONFIG_SONOS)
+static int pcm_setting_init(struct pcm_setting *setting, unsigned int rate,
+			unsigned int channels, unsigned int fixed_mclk_frequency)
+#else
 static int pcm_setting_init(struct pcm_setting *setting, unsigned int rate,
 			unsigned int channels)
+#endif
 {
 	unsigned int ratio = 0;
 
@@ -201,6 +212,23 @@ static int pcm_setting_init(struct pcm_setting *setting, unsigned int rate,
 	setting->bclk_lrclk_ratio = setting->slots * setting->slot_width;
 	setting->bclk = setting->lrclk * setting->bclk_lrclk_ratio;
 
+#if defined(CONFIG_SONOS)
+	if (fixed_mclk_frequency > 0 && setting->bclk > 0) {
+		setting->sysclk_bclk_ratio = fixed_mclk_frequency / setting->bclk;
+		setting->sysclk = fixed_mclk_frequency;
+	} else {
+		/* calculate mclk */
+		if (setting->pcm_mode == SND_SOC_DAIFMT_DSP_A ||
+			setting->pcm_mode == SND_SOC_DAIFMT_DSP_B) {
+			/* for some TDM codec, mclk limites */
+			ratio = 2;
+		} else {
+			ratio = 4;
+		}
+		setting->sysclk_bclk_ratio = ratio;
+		setting->sysclk = ratio * setting->bclk;
+	}
+#else
 	/* calculate mclk */
 	if (setting->pcm_mode == SND_SOC_DAIFMT_DSP_A ||
 		setting->pcm_mode == SND_SOC_DAIFMT_DSP_B) {
@@ -211,6 +239,7 @@ static int pcm_setting_init(struct pcm_setting *setting, unsigned int rate,
 	}
 	setting->sysclk_bclk_ratio = ratio;
 	setting->sysclk = ratio * setting->bclk;
+#endif
 	setting->standard_sysclk = setting->sysclk;
 
 	return 0;
@@ -616,7 +645,12 @@ int aml_tdm_hw_setting_init(struct aml_tdm *p_tdm,
 		return -EINVAL;
 
 	setting = &p_tdm->setting;
+#if defined(CONFIG_SONOS)
+	ret = pcm_setting_init(setting, rate, channels,
+				p_tdm->fixed_mclk_frequency);
+#else
 	ret = pcm_setting_init(setting, rate, channels);
+#endif
 	if (ret)
 		return ret;
 
@@ -1920,7 +1954,12 @@ static int aml_dai_tdm_mute_stream(struct snd_soc_dai *cpu_dai,
 
 static int aml_set_default_tdm_clk(struct aml_tdm *p_tdm)
 {
+#if defined(CONFIG_SONOS)
+	unsigned int mclk = p_tdm->fixed_mclk_frequency > 0 ?
+				p_tdm->fixed_mclk_frequency : 12288000;
+#else
 	unsigned int mclk = 12288000;
+#endif
 	unsigned int ratio = aml_mpll_mclk_ratio(mclk);
 	unsigned int lrclk_hi;
 	unsigned long pll = mclk * ratio;
@@ -1935,7 +1974,17 @@ static int aml_set_default_tdm_clk(struct aml_tdm *p_tdm)
 
 	/*set default i2s clk for codec sequence*/
 	p_tdm->setting.bclk_lrclk_ratio = 64;
+#if defined(CONFIG_SONOS)
+	if (p_tdm->start_clk_sample_rate > 0) {
+		/* calculate sysclk_bclk_ratio based on specified sample rate */
+		p_tdm->setting.sysclk_bclk_ratio = mclk /
+			(p_tdm->start_clk_sample_rate * p_tdm->setting.bclk_lrclk_ratio);
+	} else {
+		p_tdm->setting.sysclk_bclk_ratio = 4;
+	}
+#else
 	p_tdm->setting.sysclk_bclk_ratio = 4;
+#endif
 	lrclk_hi = p_tdm->setting.bclk_lrclk_ratio - 1;
 
 	aml_tdm_set_lrclkdiv(p_tdm->actrl, p_tdm->clk_sel,
@@ -2347,6 +2396,21 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 			/*return PTR_ERR(p_tdm->pin_ctl);*/
 		}
 	}
+#if defined(CONFIG_SONOS)
+	ret = of_property_read_u32(node, "fixed_mclk_frequency", &p_tdm->fixed_mclk_frequency);
+	if (ret < 0)
+		p_tdm->fixed_mclk_frequency = 0;
+	else
+		pr_info("TDM id %d fixed_mclk_frequency:%u\n",
+			p_tdm->id, p_tdm->fixed_mclk_frequency);
+
+	ret = of_property_read_u32(node, "start_clk_sample_rate", &p_tdm->start_clk_sample_rate);
+	if (ret < 0)
+		p_tdm->start_clk_sample_rate = 0;
+	else
+		pr_info("TDM id %d start_clk_sample_rate:%u\n",
+			p_tdm->id, p_tdm->start_clk_sample_rate);
+#endif
 	ret = of_property_read_u32(node, "start_clk_enable", &p_tdm->start_clk_enable);
 	if (ret < 0)
 		p_tdm->start_clk_enable = 0;
