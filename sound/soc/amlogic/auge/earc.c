@@ -49,7 +49,7 @@
 
 #define DRV_NAME "EARC"
 
-#define EARCRX_DEFAULT_LATENCY 100
+#define EARCRX_DEFAULT_LATENCY 0
 
 /*
  * IEC958 controller(mixer) functions
@@ -1760,11 +1760,19 @@ static int earcrx_get_latency(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct earc *p_earc = dev_get_drvdata(component->dev);
+	enum cmdc_st state;
+	u8  val = 0;
 
 	if (!p_earc || IS_ERR(p_earc->rx_cmdc_map))
 		return 0;
 
-	ucontrol->value.integer.value[0] = p_earc->rx_latency;
+	state = earcrx_cmdc_get_state(p_earc->rx_cmdc_map);
+	if (state != CMDC_ST_EARC)
+		return 0;
+
+	earcrx_cmdc_get_latency(p_earc->rx_cmdc_map, &val);
+
+	ucontrol->value.integer.value[0] = val;
 
 	return 0;
 }
