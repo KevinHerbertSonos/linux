@@ -5460,9 +5460,6 @@ static void r8156_eee_en(struct r8152 *tp, bool enable)
 	ocp_reg_write(tp, OCP_EEE_ADV2, config);
 
 	usb_autopm_put_interface(tp->intf);
-#ifdef CONFIG_SONOS
-	sonos_announce_linkup(tp->netdev);
-#endif
 }
 
 static void rtl_eee_enable(struct r8152 *tp, bool enable)
@@ -10007,6 +10004,10 @@ static int rtl8152_probe_once(struct usb_interface *intf,
 
 	set_bit(PROBED_WITH_NO_ERRORS, &tp->flags);
 	netif_info(tp, probe, netdev, "%s\n", DRIVER_VERSION);
+
+#ifdef CONFIG_SONOS
+	sonos_announce_linkup(tp->netdev);
+#endif
 
 	return 0;
 
