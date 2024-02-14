@@ -1,0 +1,29 @@
+config AMLOGIC_MESON_CPUFREQ
+	tristate  "MESON based CPUfreq driver"
+	default n
+        help
+          This adds the CPUfreq driver support for ARM big.LITTLE platforms
+          using MESON dt for CPU power management.
+
+          This driver uses meson cpufreq driver to interact with the
+          firmware providing the CPU DVFS functionality.
+
+config AMLOGIC_INPUT_BOOST
+    bool "Meson BOOST cpufreq when key input"
+    depends on CPU_FREQ_GOV_INTERACTIVE
+    help
+        This adds boost cpuferq support when key input detected.
+        This adds boost cpuferq support when key input detected.
+        When key input, cpufreq is boosted.
+        And boost_duration is decideded by AMLOGIC_INPUT_BOOST_DURATION
+
+config AMLOGIC_INPUT_BOOST_DURATION
+    int "Input boost duration"
+    range 0 5000
+    default 1000
+    depends on AMLOGIC_INPUT_BOOST
+    help
+        This set boost cpuferq duration.
+        unit is ms.
+
+	  this driver use mailbox communicate with uboot to do dvfs
