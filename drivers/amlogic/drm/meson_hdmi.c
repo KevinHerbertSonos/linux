@@ -1989,6 +1989,8 @@ static void meson_hdmitx_hpd_cb(void *data)
 		am_hdmi_info.hdcp_rx_type = am_hdmi_info.hdmitx_dev->get_rx_hdcp_cap();
 
 #ifdef CONFIG_CEC_NOTIFIER
+	am_hdmi_info.hdmitx_on = 0;
+
 	if (am_hdmi->hdmitx_dev->detect()) {
 		DRM_INFO("%s[%d]\n", __func__, __LINE__);
 		pedid = (struct edid *)am_hdmi->hdmitx_dev->get_raw_edid();
