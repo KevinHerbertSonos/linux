@@ -27,6 +27,7 @@
 #include <linux/sched.h>
 #include <linux/sched/rt.h>
 #include <linux/sched/task.h>
+#include <uapi/linux/sched/types.h>
 #include <linux/tick.h>
 #include <linux/time.h>
 #include <linux/timer.h>
@@ -759,7 +760,7 @@ static int cpufreq_interactive_notifier(struct notifier_block *nb,
 	}
 
 	spin_lock_irqsave(&icpu->load_lock, flags);
-	update_load(icpu, freq->cpu);
+	update_load(icpu, freq->policy->cpu);
 	spin_unlock_irqrestore(&icpu->load_lock, flags);
 
 	up_read(&icpu->enable_sem);
@@ -1205,7 +1206,7 @@ static inline void gov_clear_update_util(struct cpufreq_policy *policy)
 	for_each_cpu(i, policy->cpus)
 		cpufreq_remove_update_util_hook(i);
 
-	synchronize_sched();
+	synchronize_rcu();
 }
 
 static void icpu_cancel_work(struct interactive_cpu *icpu)
@@ -1511,8 +1512,7 @@ static int __init cpufreq_interactive_gov_init(void)
 		init_rwsem(&icpu->enable_sem);
 
 		/* Initialize per-cpu slack-timer */
-		init_timer_pinned(&icpu->slack_timer);
-		icpu->slack_timer.function = cpufreq_interactive_nop_timer;
+		timer_setup(&icpu->slack_timer, cpufreq_interactive_nop_timer, TIMER_PINNED);
 	}
 
 	spin_lock_init(&speedchange_cpumask_lock);
