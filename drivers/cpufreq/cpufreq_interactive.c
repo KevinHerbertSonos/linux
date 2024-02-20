@@ -1486,7 +1486,7 @@ static struct interactive_governor interactive_gov = {
 	}
 };
 
-static void cpufreq_interactive_nop_timer(unsigned long data)
+static void cpufreq_interactive_nop_timer(struct timer_list *data)
 {
 	/*
 	 * The purpose of slack-timer is to wake up the CPU from IDLE, in order
