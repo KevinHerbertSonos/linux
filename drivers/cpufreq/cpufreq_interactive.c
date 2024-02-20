@@ -26,6 +26,7 @@
 #include <linux/rwsem.h>
 #include <linux/sched.h>
 #include <linux/sched/rt.h>
+#include <linux/sched/task.h>
 #include <linux/tick.h>
 #include <linux/time.h>
 #include <linux/timer.h>
@@ -743,7 +744,7 @@ static int cpufreq_interactive_notifier(struct notifier_block *nb,
 					unsigned long val, void *data)
 {
 	struct cpufreq_freqs *freq = data;
-	struct interactive_cpu *icpu = &per_cpu(interactive_cpu, freq->cpu);
+	struct interactive_cpu *icpu = &per_cpu(interactive_cpu, freq->policy->cpu);
 	unsigned long flags;
 
 	if (val != CPUFREQ_POSTCHANGE)
@@ -1475,7 +1476,6 @@ void cpufreq_interactive_limits(struct cpufreq_policy *policy)
 static struct interactive_governor interactive_gov = {
 	.gov = {
 		.name			= "interactive",
-		.max_transition_latency	= TRANSITION_LATENCY_LIMIT,
 		.owner			= THIS_MODULE,
 		.init			= cpufreq_interactive_init,
 		.exit			= cpufreq_interactive_exit,
