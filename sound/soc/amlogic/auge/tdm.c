@@ -1928,7 +1928,7 @@ static int aml_set_default_tdm_clk(struct aml_tdm *p_tdm)
 
 	/*set default i2s  timing sequence*/
 	int fmt = SND_SOC_DAIFMT_CBS_CFS | SND_SOC_DAIFMT_I2S
-	| SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CONT;
+	| SND_SOC_DAIFMT_NB_NF;
 
 	aml_tdm_set_fmt(p_tdm, fmt, 1);
 	/*set default i2s clk for codec sequence*/
@@ -1955,9 +1955,9 @@ static int aml_set_default_tdm_clk(struct aml_tdm *p_tdm)
 			pll = 1806336 * 1000;
 	}
 
-	clk_prepare_enable(p_tdm->mclk);
 	clk_set_rate(p_tdm->clk, pll);
 	clk_set_rate(p_tdm->mclk, mclk);
+	clk_prepare_enable(p_tdm->mclk);
 
 	p_tdm->last_mclk_freq = mclk;
 	p_tdm->last_mpll_freq = pll;
@@ -2323,16 +2323,6 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 			dev_warn(dev, "can't set tdm parent clock\n");
 	}
 
-	/* clk tree style after SM1, instead of legacy prop */
-	p_tdm->mclk2pad = devm_clk_get(&pdev->dev, "mclk_pad");
-	if (!IS_ERR(p_tdm->mclk2pad)) {
-		ret = clk_set_parent(p_tdm->mclk2pad, p_tdm->mclk);
-		if (ret) {
-			dev_err(&pdev->dev, "Can't set tdm mclk_pad parent\n");
-			return -EINVAL;
-		}
-		clk_prepare_enable(p_tdm->mclk2pad);
-	}
 	p_tdm->clk_gate = devm_clk_get(&pdev->dev, "gate_in");
 	if (!IS_ERR(p_tdm->clk_gate))
 		clk_prepare_enable(p_tdm->clk_gate);
@@ -2361,6 +2351,17 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 	/*set default clk for output*/
 	if (p_tdm->start_clk_enable == 1)
 		aml_set_default_tdm_clk(p_tdm);
+
+	/* clk tree style after SM1, instead of legacy prop */
+	p_tdm->mclk2pad = devm_clk_get(&pdev->dev, "mclk_pad");
+	if (!IS_ERR(p_tdm->mclk2pad)) {
+		ret = clk_set_parent(p_tdm->mclk2pad, p_tdm->mclk);
+		if (ret) {
+			dev_err(&pdev->dev, "Can't set tdm mclk_pad parent\n");
+			return -EINVAL;
+		}
+		clk_prepare_enable(p_tdm->mclk2pad);
+	}
 
 	p_tdm->dev = dev;
 	dev_set_drvdata(dev, p_tdm);
