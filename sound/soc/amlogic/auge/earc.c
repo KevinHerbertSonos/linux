@@ -692,7 +692,7 @@ static irqreturn_t earc_rx_isr(int irq, void *data)
 	}
 
 	if (p_earc->rx_status0 & INT_EARCRX_CMDC_LOSTHB)
-		dev_dbg(p_earc->dev, "EARCRX_CMDC_LOSTHB\n");
+		dev_info(p_earc->dev, "EARCRX_CMDC_LOSTHB\n");
 
 	if (p_earc->rx_status0 & INT_EARCRX_CMDC_STATUS_CH)
 		dev_dbg(p_earc->dev, "EARCRX_CMDC_STATUS_CH\n");
