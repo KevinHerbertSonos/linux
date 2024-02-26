@@ -516,8 +516,10 @@ int cec_ll_tx(const unsigned char *msg, unsigned char len, unsigned char signal_
 	 *	address already set. Must clear it before poll again
 	 * self polling mode
 	 */
+#if 0
 	if (is_poll_message(msg[0]))
 		cec_clear_all_logical_addr(cec_sel);
+#endif
 
 	/*
 	 * for CEC CTS 9.3. Android will try 3 poll message if got NACK
@@ -567,6 +569,7 @@ try_again:
 		mutex_unlock(&cec_dev->cec_tx_mutex);
 		return CEC_FAIL_BUSY;
 	}
+#if 0
 	cec_tx_result = -1;
 	ret = wait_for_completion_timeout(&cec_dev->tx_ok, t);
 	if (ret <= 0) {
@@ -596,6 +599,7 @@ try_again:
 			last_cec_msg->last_jiffies = jiffies;
 		}
 	}
+#endif
 
 	dprintk(L_2, "%s ret:%d, %s\n", __func__, ret, cec_tx_ret_str(ret));
 	mutex_unlock(&cec_dev->cec_tx_mutex);
@@ -2176,10 +2180,12 @@ static int ao_cec_transmit(struct cec_adapter *adap, u8 attempts,
 		return -1;
 	dprintk(L_2, "%s signal_free_time: %x, attempts: %d\n",
 		__func__, signal_free_time, attempts);
+#if 0
 	if (is_get_cec_ver_msg(msg->msg, msg->len))
 		cec_ver_cnt++;
 	else
 		cec_ver_cnt = 0;
+#endif
 	cec_ll_tx(msg->msg, msg->len, signal_free_time);
 
 	return 0;
