@@ -2700,7 +2700,7 @@ static int aml_aocec_probe(struct platform_device *pdev)
 	 * There were 87 messages in the receive queue for 68 transmits
 	 * int_sts:0x11 and irq_flg:INITIATOR
 	 */
-	cec_dev->chk_sig_free_time = false;
+	cec_dev->chk_sig_free_time = true;
 	cec_dev->sw_chk_bus = false;
 	std_ao_cec.adapt_log_addr_valid = false;
 	/* std linux cec not need uevent, for back */
