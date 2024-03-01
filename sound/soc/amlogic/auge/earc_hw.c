@@ -202,6 +202,13 @@ void earcrx_cmdc_hpd_detect(struct regmap *cmdc_map, bool st)
 				 0x0 << 19 | /* comma_cnt_rst */
 				 0xa << 0
 				);
+
+		mmio_update_bits(cmdc_map,
+				 EARC_RX_CMDC_VSM_CTRL1,
+				 0xfffff << 12,
+				 //0x80 << 12
+				 0x40 << 12
+				);
 	} else {
 		/* soft reset */
 		mmio_update_bits(cmdc_map,
