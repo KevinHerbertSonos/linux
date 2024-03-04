@@ -13,6 +13,7 @@
 #include "earc_hw.h"
 
 static int s_csb[6];
+static int s_csb_tmp[6];
 
 void earctx_dmac_mute(struct regmap *dmac_map, bool enable)
 {
@@ -219,6 +220,12 @@ void earcrx_dmac_sync_int_enable(struct regmap *top_map, int enable)
 	/* dmac_sync dmac_valid_auto neg_int_se */
 	mmio_update_bits(top_map, EARCRX_DMAC_INT_MASK,
 			 (0x1 << 28),  (enable << 28));
+}
+
+void earcrx_dmac_csb_change_irq(struct regmap *top_map, bool en)
+{
+	mmio_update_bits(top_map, EARCRX_DMAC_INT_MASK,
+			1 << 3, !!en << 3);
 }
 
 void earcrx_dmac_init(struct regmap *top_map,
@@ -459,15 +466,25 @@ unsigned int earcrx_get_cs_iec958_chunk(struct regmap *dmac_map, unsigned int of
 		offset, 0xffffffff);
 }
 
-void earcrx_get_cs_iec958_cache(struct regmap *dmac_map)
+bool earcrx_get_cs_iec958_cache(struct regmap *dmac_map)
 {
 	unsigned int offset;
 	unsigned long flags = 0;
+	bool change = false;
+	int i = 0;
 
 	spin_lock_irqsave(&earcrx_csb_mutex, flags);
-	for (offset = 0; offset < 0xC0; offset += 0x20)
-		s_csb[offset / 0x20] = earcrx_get_cs_iec958_chunk(dmac_map, offset);
+	for (offset = 0; offset < 0xC0; offset += 0x20) {
+		i = offset / 0x20;
+		s_csb_tmp[i] = earcrx_get_cs_iec958_chunk(dmac_map, offset);
+		if (s_csb_tmp[i] != s_csb[i]) {
+			change = true;
+		}
+		s_csb[i] = s_csb_tmp[i];
+	}
 	spin_unlock_irqrestore(&earcrx_csb_mutex, flags);
+
+	return change;
 }
 
 unsigned int earcrx_get_cs_iec958(unsigned int *csb)

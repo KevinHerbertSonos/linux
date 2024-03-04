@@ -252,13 +252,14 @@ void earcrx_cmdc_arc_connect(struct regmap *cmdc_map, bool init);
 void set_spdif_to_arc_hpd_status(struct regmap *cmdc_map, int st);
 void earcrx_cmdc_hpd_detect(struct regmap *cmdc_map, bool st);
 void earcrx_dmac_sync_int_enable(struct regmap *top_map, int enable);
+void earcrx_dmac_csb_change_irq(struct regmap *top_map, bool en);
 void earcrx_dmac_init(struct regmap *top_map,
 		      struct regmap *dmac_map,
 		      bool unstable_tick_sel,
 		      bool chnum_mult_mode);
 void earcrx_arc_init(struct regmap *dmac_map);
 unsigned int earcrx_invalidate_cs_iec958_cache(void);
-void earcrx_get_cs_iec958_cache(struct regmap *dmac_map);
+bool earcrx_get_cs_iec958_cache(struct regmap *dmac_map);
 unsigned int earcrx_get_cs_iec958(unsigned int *csb);
 unsigned int earcrx_get_cs_ca(struct regmap *dmac_map);
 unsigned int earcrx_get_cs_mute(struct regmap *dmac_map);
