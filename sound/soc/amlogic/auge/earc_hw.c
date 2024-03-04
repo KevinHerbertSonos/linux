@@ -250,7 +250,7 @@ void earcrx_dmac_init(struct regmap *top_map,
 			 (0x1 << 6)	| /* arcrx_biphase_decode c_valid_change */
 			 (0x0 << 5)	| /* arcrx_biphase_decode c_find_nonpcm2pcm */
 			 (0x1 << 4)	| /* arcrx_biphase_decode c_pcpd_change */
-			 (0x1 << 3)	| /* arcrx_biphase_decode c_ch_status_change */
+			 (0x0 << 3)	| /* arcrx_biphase_decode c_ch_status_change */
 			 (0x1 << 2)	| /* arcrx_biphase_decode sample_mod_change */
 			 (0x1 << 1)	| /* arcrx_biphase_decode r_parity_err */
 			 (0x0 << 0)	  /* arcrx_dmac_sync afifo_overflow */
@@ -466,25 +466,40 @@ unsigned int earcrx_get_cs_iec958_chunk(struct regmap *dmac_map, unsigned int of
 		offset, 0xffffffff);
 }
 
-bool earcrx_get_cs_iec958_cache(struct regmap *dmac_map)
+bool earcrx_read_cs_iec958(struct regmap *dmac_map)
 {
 	unsigned int offset;
 	unsigned long flags = 0;
 	bool change = false;
 	int i = 0;
+	int csb_val;
 
 	spin_lock_irqsave(&earcrx_csb_mutex, flags);
 	for (offset = 0; offset < 0xC0; offset += 0x20) {
 		i = offset / 0x20;
-		s_csb_tmp[i] = earcrx_get_cs_iec958_chunk(dmac_map, offset);
-		if (s_csb_tmp[i] != s_csb[i]) {
+		csb_val = earcrx_get_cs_iec958_chunk(dmac_map, offset);
+		if (csb_val !=  s_csb_tmp[i]) {
 			change = true;
 		}
-		s_csb[i] = s_csb_tmp[i];
+		s_csb_tmp[i] = csb_val;
 	}
 	spin_unlock_irqrestore(&earcrx_csb_mutex, flags);
 
 	return change;
+}
+
+void earcrx_update_cs_iec958_cache(void)
+{
+	unsigned int offset;
+	unsigned long flags = 0;
+	int i = 0;
+	spin_lock_irqsave(&earcrx_csb_mutex, flags);
+	for (offset = 0; offset < 0xC0; offset += 0x20) {
+		i = offset / 0x20;
+		s_csb[i] =  s_csb_tmp[i];
+	}
+	pr_debug("csb updated %*ph\n", (int)sizeof(s_csb), s_csb);
+	spin_unlock_irqrestore(&earcrx_csb_mutex, flags);
 }
 
 unsigned int earcrx_get_cs_iec958(unsigned int *csb)
