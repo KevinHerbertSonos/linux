@@ -209,7 +209,6 @@ struct earc {
 	unsigned int position_addr;
 	int earcrx_pointer;
 	u8 rx_latency;
-	bool CSB_updating;
 	int CSB_check_cnt;
 };
 
@@ -439,6 +438,8 @@ static irqreturn_t earc_ddr_isr(int irq, void *data)
 		char *hwbuf = runtime->dma_area + frame_pos * IEC_FRAMES_SIZE_BYTES;
 		bool swap = false;
 		char buf_val, buf_val1;
+		bool csb_change;
+		bool mute = false;
 
 		buf_val = *hwbuf; // Z preamble
 		buf_val1 = *(hwbuf + 4); // Y preamble
@@ -454,31 +455,34 @@ static irqreturn_t earc_ddr_isr(int irq, void *data)
 			p_earc->becoming_noise = false;
 			snd_pcm_stream_unlock(substream);
 		}
-		if (p_earc->CSB_updating) {
-			bool change = earcrx_get_cs_iec958_cache(p_earc->rx_dmac_map);
 
-			if (change) {
-				p_earc->CSB_check_cnt = 0;
-			} else {
-				p_earc->CSB_check_cnt++;
-			}
+		csb_change = earcrx_read_cs_iec958(p_earc->rx_dmac_map);
+		if (csb_change) {
+			p_earc->CSB_check_cnt = 0;
+			mute = true;	// assume mute bit is asserted while CSB is changing
+		}
+		else {
+			p_earc->CSB_check_cnt++;
 
 			/* exit csb changing flow */
-			if (p_earc->CSB_check_cnt > 2) {
-				int mute = earcrx_get_cs_mute(p_earc->rx_dmac_map);
-				if (p_earc->rx_cs_mute != mute) {
-					p_earc->rx_cs_mute = mute;
-					if (!mute) {
-						mmio_update_bits(p_earc->rx_dmac_map,
-						EARCRX_ERR_CORRECT_CTRL0,
-						0x3,
-						0x0); /* EARCRX_ERR_CORRECT_CTRL0 force mode disable */
-					}
-					dev_dbg(p_earc->dev, "ARCRX_C_CH_STATUS_CHANGE\n");
-				}
-				p_earc->CSB_updating = false;
+			if (p_earc->CSB_check_cnt >= 1) {
 				p_earc->CSB_check_cnt = 0;
-				earcrx_dmac_csb_change_irq(p_earc->rx_dmac_map, 1);
+				dev_dbg(p_earc->dev, "earc csb stabilized\n");
+				earcrx_update_cs_iec958_cache();
+
+				// override mute with true status
+				mute = earcrx_get_cs_mute(p_earc->rx_dmac_map);
+			}
+		}
+
+		if (p_earc->rx_cs_mute != mute) {
+			dev_dbg(p_earc->dev, "mute change %d\n", mute);
+			p_earc->rx_cs_mute = mute;
+			if (!mute) {
+				mmio_update_bits(p_earc->rx_dmac_map,
+				EARCRX_ERR_CORRECT_CTRL0,
+				0x3,
+				0x0); /* EARCRX_ERR_CORRECT_CTRL0 force mode disable */
 			}
 		}
 	}
@@ -730,10 +734,7 @@ static irqreturn_t earc_rx_isr(int irq, void *data)
 		if (p_earc->rx_status1 & INT_ARCRX_BIPHASE_DECODE_C_PCPD_CHANGE)
 			dev_dbg(p_earc->dev, "ARCRX_C_PCPD_CHANGE\n");
 		if (p_earc->rx_status1 & INT_ARCRX_BIPHASE_DECODE_C_CH_STATUS_CHANGE) {
-			p_earc->CSB_updating = true;
-			p_earc->CSB_check_cnt = 0;
-			
-			earcrx_dmac_csb_change_irq(p_earc->rx_dmac_map, 0);
+			dev_dbg(p_earc->dev, "INT_ARCRX_BIPHASE_DECODE_C_CH_STATUS_CHANGE\n");
 #if 0
 			int mute = 0;
 			earcrx_get_cs_iec958_cache(p_earc->rx_dmac_map);
@@ -1560,7 +1561,6 @@ static int earc_dai_startup(struct snd_pcm_substream *substream,
 						SNDRV_PCM_HW_PARAM_BUFFER_BYTES,
 						IEC_FRAMES_SIZE_BYTES);
 		timer_setup(&p_earc->reset_timer, timer_func, 0);
-		p_earc->CSB_updating = false;
 		p_earc->CSB_check_cnt = 0;
 	}
 
