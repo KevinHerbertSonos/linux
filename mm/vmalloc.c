@@ -279,11 +279,20 @@ struct page *vmalloc_to_page(const void *vmalloc_addr)
 	pmd_t *pmd;
 	pte_t *ptep, pte;
 
+	if (!vmalloc_addr) {
+		dump_stack();
+		return NULL;
+	}
+	if (!is_vmalloc_or_module_addr(vmalloc_addr)) {
+		dump_stack();
+		return NULL;
+	}
+
 	/*
 	 * XXX we might need to change this if we add VIRTUAL_BUG_ON for
 	 * architectures that do not vmalloc module space
 	 */
-	VIRTUAL_BUG_ON(!is_vmalloc_or_module_addr(vmalloc_addr));
+	//VIRTUAL_BUG_ON(!is_vmalloc_or_module_addr(vmalloc_addr));
 
 	if (pgd_none(*pgd))
 		return NULL;
