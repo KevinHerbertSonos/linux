@@ -626,6 +626,8 @@ enum
 	RWM_NETWORK_SETTINGS,
 	RWM_NEW_CHANNEL_ON_INTF,
 	RWM_WAKE_CLIENT,
+	RWM_IDLE_SCAN,
+	RWM_PRIMARY_POWER_SAVE,
 };
 
 enum
@@ -647,6 +649,8 @@ enum
 	RWA_DUPE_TIME,
 	RWA_NETWORK_SETTINGS_DATA,
 	RWA_NEW_CHANNEL_ON_INTF,
+	RWA_IDLE_SCAN,
+	RWA_PRIMARY_POWER_SAVE,
 };
 
 /********************************************************************
