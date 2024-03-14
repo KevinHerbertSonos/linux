@@ -1063,7 +1063,7 @@ static int aml_read_copy(struct snd_pcm_substream *substream,
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct earc *p_earc = runtime->private_data;
 
-	if (p_earc->becoming_noise) {
+	if (p_earc->becoming_noise || p_earc->rx_cs_mute) {
 		memset(p_earc->tmp_buf, 0, bytes);
 		if (copy_to_user((void __user *)buf, p_earc->tmp_buf, bytes))
 			return -EFAULT;
