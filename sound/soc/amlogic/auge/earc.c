@@ -707,9 +707,7 @@ static irqreturn_t earc_rx_isr(int irq, void *data)
 		}
 
 		if (p_earc->rx_status1 & INT_EARCRX_ERR_CORRECT_C_BCHERR_INT_SET) {
-			p_earc->becoming_noise = true;
-			reset_start_timer(p_earc, 10);
-			dev_dbg(p_earc->dev, "EARCRX_ERR_CORRECT_BCHERR,reset timer\n");
+			dev_dbg(p_earc->dev, "EARCRX_ERR_CORRECT_BCHERR\n");
 		}
 		if (p_earc->rx_status1 & INT_ARCRX_BIPHASE_DECODE_R_PARITY_ERR) {
 			p_earc->becoming_noise = true;
