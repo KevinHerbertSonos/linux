@@ -2012,7 +2012,7 @@ static void hdmitx_set_phy(struct hdmitx_dev *hdev)
 		phy_addr = P_TM2_HHI_HDMI_PHY_CNTL0;
 	else
 		phy_addr = P_HHI_HDMI_PHY_CNTL0;
-	hd_write_reg(phy_addr, 0x0);
+	//hd_write_reg(phy_addr, 0x0);
 
 	if (hdev->data->chip_type == MESON_CPU_ID_TM2 ||
 	    hdev->data->chip_type == MESON_CPU_ID_TM2B)
@@ -6084,7 +6084,8 @@ static void hdmi_phy_suspend(void)
 		phy_cntl5 = P_HHI_HDMI_PHY_CNTL5;
 		break;
 	}
-	hd_write_reg(phy_cntl0, 0x0);
+	hd_write_reg(phy_cntl0, 0x0b4242);
+	pr_info("always enable phy bandgap \n");
 	/* keep PHY_CNTL3 bit[1:0] as 0b11,
 	 * otherwise may cause HDCP22 boot failed
 	 */
