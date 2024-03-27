@@ -221,7 +221,7 @@ void cecb_irq_handle(void)
 		else
 			queue_delayed_work(cec_dev->cec_tx_event_wq,
 					   &std_ao_cec.work_cec_tx,
-					   msecs_to_jiffies(wait_ms));
+					   msecs_to_jiffies(20));
 		complete(&cec_dev->tx_ok);
 	}
 
