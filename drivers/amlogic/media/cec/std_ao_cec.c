@@ -546,7 +546,11 @@ try_again:
 	 */
 	if (cec_dev->sw_chk_bus) {
 		if (check_conflict()) {
-			CEC_ERR("bus conflict too long\n");
+			CEC_ERR("bus conflict too long，retry\n");
+			std_ao_cec.tx_result = CEC_TX_STATUS_ERROR;
+			queue_delayed_work(cec_dev->cec_tx_event_wq,
+				&std_ao_cec.work_cec_tx,
+				msecs_to_jiffies(0));
 			mutex_unlock(&cec_dev->cec_tx_mutex);
 			return CEC_FAIL_BUSY;
 		}
@@ -566,6 +570,10 @@ try_again:
 			dprintk(L_2, "retry0 %d\n", retry);
 			goto try_again;
 		}
+		std_ao_cec.tx_result = CEC_TX_STATUS_ERROR;
+		queue_delayed_work(cec_dev->cec_tx_event_wq,
+			&std_ao_cec.work_cec_tx,
+			msecs_to_jiffies(0));
 		mutex_unlock(&cec_dev->cec_tx_mutex);
 		return CEC_FAIL_BUSY;
 	}
@@ -2701,7 +2709,7 @@ static int aml_aocec_probe(struct platform_device *pdev)
 	 * int_sts:0x11 and irq_flg:INITIATOR
 	 */
 	cec_dev->chk_sig_free_time = true;
-	cec_dev->sw_chk_bus = false;
+	cec_dev->sw_chk_bus = true;
 	std_ao_cec.adapt_log_addr_valid = false;
 	/* std linux cec not need uevent, for back */
 	std_ao_cec.need_rx_uevent = false;
