@@ -1303,6 +1303,7 @@ static void ax88179_get_mac_addr(struct usbnet *dev)
 
 	if (is_valid_ether_addr(mac)) {
 		eth_hw_addr_set(dev->net, mac);
+		memcpy(dev->net->dev_addr, mac, ETH_ALEN);
 		if (!is_local_ether_addr(mac))
 			dev->net->addr_assign_type = NET_ADDR_PERM;
 	} else {
