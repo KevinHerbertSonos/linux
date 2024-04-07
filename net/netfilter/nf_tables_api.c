@@ -7798,7 +7798,6 @@ static const struct nft_object_type *__nft_obj_type_get(u32 objtype, u8 family)
 		if (type->family != NFPROTO_UNSPEC &&
 		    type->family != family)
 			continue;
-
 		if (objtype == type->type)
 			return type;
 	}
