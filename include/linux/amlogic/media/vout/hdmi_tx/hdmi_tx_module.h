@@ -685,6 +685,7 @@ struct hdmitx_dev {
 #define MISC_TMDS_PHY_OP        (CMD_MISC_OFFSET + 0x04)
 #define TMDS_PHY_ENABLE     0x1
 #define TMDS_PHY_DISABLE    0x2
+#define TMDS_PHY_DISABLE_WITHOUT_BANDGAP    0x3
 #define MISC_VIID_IS_USING      (CMD_MISC_OFFSET + 0x05)
 #define MISC_CONF_MODE420       (CMD_MISC_OFFSET + 0x06)
 #define MISC_TMDS_CLK_DIV40     (CMD_MISC_OFFSET + 0x07)

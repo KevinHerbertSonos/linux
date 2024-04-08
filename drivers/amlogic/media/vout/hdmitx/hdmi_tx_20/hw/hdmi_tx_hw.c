@@ -50,7 +50,7 @@
 #include "hdmi_tx_debug_reg.h"
 
 static void mode420_half_horizontal_para(void);
-static void hdmi_phy_suspend(void);
+static void hdmi_phy_suspend(u32 flags);
 static void hdmi_phy_wakeup(struct hdmitx_dev *hdev);
 static void hdmitx_set_phy(struct hdmitx_dev *hdev);
 static void hdmitx_set_hw(struct hdmitx_dev *hdev);
@@ -1947,7 +1947,7 @@ static void hdmi_tvenc_set(struct hdmitx_vidpara *param)
 
 void phy_pll_off(void)
 {
-	hdmi_phy_suspend();
+	hdmi_phy_suspend(1);
 }
 
 /************************************
@@ -2012,7 +2012,6 @@ static void hdmitx_set_phy(struct hdmitx_dev *hdev)
 		phy_addr = P_TM2_HHI_HDMI_PHY_CNTL0;
 	else
 		phy_addr = P_HHI_HDMI_PHY_CNTL0;
-	//hd_write_reg(phy_addr, 0x0);
 
 	if (hdev->data->chip_type == MESON_CPU_ID_TM2 ||
 	    hdev->data->chip_type == MESON_CPU_ID_TM2B)
@@ -3043,7 +3042,7 @@ static int hdmitx_cntl(struct hdmitx_dev *hdev, unsigned int cmd,
 		return 0;
 	} else if (cmd == HDMITX_EARLY_SUSPEND_RESUME_CNTL) {
 		if (argv == HDMITX_EARLY_SUSPEND) {
-			hdmi_phy_suspend();
+			hdmi_phy_suspend(0);
 		}
 		if (argv == HDMITX_LATE_RESUME) {
 			/* No need below, will be set at set_disp_mode_auto() */
@@ -5891,7 +5890,9 @@ static int hdmitx_cntl_misc(struct hdmitx_dev *hdev, unsigned int cmd,
 		if (argv == TMDS_PHY_ENABLE)
 			hdmi_phy_wakeup(hdev);  /* TODO */
 		if (argv == TMDS_PHY_DISABLE)
-			hdmi_phy_suspend();
+			hdmi_phy_suspend(0);
+		if (argv == TMDS_PHY_DISABLE_WITHOUT_BANDGAP)
+			hdmi_phy_suspend(1);
 		break;
 	case MISC_TMDS_RXSENSE:
 		return hdmitx_tmds_rxsense();
@@ -6059,7 +6060,7 @@ static int hdmitx_get_state(struct hdmitx_dev *hdev, unsigned int cmd,
 	return 0;
 }
 
-static void hdmi_phy_suspend(void)
+static void hdmi_phy_suspend(u32 flags)
 {
 	struct hdmitx_dev *hdev = get_hdmitx_device();
 	unsigned int phy_cntl0;
@@ -6084,8 +6085,12 @@ static void hdmi_phy_suspend(void)
 		phy_cntl5 = P_HHI_HDMI_PHY_CNTL5;
 		break;
 	}
-	hd_write_reg(phy_cntl0, 0x0b4242);
-	pr_info("always enable phy bandgap \n");
+
+	if (flags == 1)
+		hd_set_reg_bits(phy_cntl0, 0xb4242, 20, 0);
+	else
+		hd_write_reg(phy_cntl0, 0x0);
+
 	/* keep PHY_CNTL3 bit[1:0] as 0b11,
 	 * otherwise may cause HDCP22 boot failed
 	 */
