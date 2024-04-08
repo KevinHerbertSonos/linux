@@ -4407,7 +4407,7 @@ static ssize_t phy_store(struct device *dev,
 	pr_info(SYS "%s %s\n", __func__, buf);
 
 	if (strncmp(buf, "0", 1) == 0)
-		cmd = TMDS_PHY_DISABLE;
+		cmd = TMDS_PHY_DISABLE_WITHOUT_BANDGAP;
 	else if (strncmp(buf, "1", 1) == 0)
 		cmd = TMDS_PHY_ENABLE;
 	else

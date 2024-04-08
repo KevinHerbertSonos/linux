@@ -611,11 +611,7 @@ void set_hpll_sspll_g12a(enum hdmi_vic vic)
 
 void hdmitx_phy_bandgap_en_g12(void)
 {
-	unsigned int val = 0;
-
-	val = hd_read_reg(P_HHI_HDMI_PHY_CNTL0);
-	if (val == 0)
-		hd_write_reg(P_HHI_HDMI_PHY_CNTL0, 0x0b4242);
+	hd_write_reg(P_HHI_HDMI_PHY_CNTL0, 0x0b4242);
 }
 
 int hdmitx_ddc_hw_op_g12a(enum ddc_op cmd)
