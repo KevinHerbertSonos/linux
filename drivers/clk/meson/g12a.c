@@ -5537,6 +5537,23 @@ static int meson_g12a_probe(struct platform_device *pdev)
 	if (!eeclkc_data)
 		return -EINVAL;
 
+#ifdef CONFIG_SONOS
+	/*
+	 * If spicc0 is being used by firmware running in a coprocessor
+	 * (e.g. the M4), its clock appears to be unused from Linux's
+	 * perspective.
+	 *
+	 * Linux's default behavior is to disable unused clocks after all
+	 * driver probes have completed.  Add a device tree property that
+	 * allows us to specify that spicc0's clock should remain enabled.
+	 */
+	if (of_property_read_bool(pdev->dev.of_node,
+				  "spicc0-ignore-unused")) {
+		((struct clk_init_data *)g12a_spicc0_gate.hw.init)->flags |=
+							CLK_IGNORE_UNUSED;
+	}
+#endif
+
 	ret = meson_eeclkc_probe(pdev);
 	if (ret)
 		return ret;
