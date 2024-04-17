@@ -260,7 +260,8 @@ void earcrx_dmac_init(struct regmap *top_map,
 void earcrx_arc_init(struct regmap *dmac_map);
 unsigned int earcrx_invalidate_cs_iec958_cache(void);
 bool earcrx_read_cs_iec958(struct regmap *dmac_map);
-void earcrx_update_cs_iec958_cache(void);
+bool earcrx_update_cs_iec958_cache(void);
+void earcrx_dump_cs_iec958_cache(void);
 unsigned int earcrx_get_cs_iec958(unsigned int *csb);
 unsigned int earcrx_get_cs_ca(struct regmap *dmac_map);
 unsigned int earcrx_get_cs_mute(struct regmap *dmac_map);
