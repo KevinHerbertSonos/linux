@@ -494,17 +494,29 @@ bool earcrx_read_cs_iec958(struct regmap *dmac_map)
 	return change;
 }
 
-void earcrx_update_cs_iec958_cache(void)
+bool earcrx_update_cs_iec958_cache(void)
 {
 	unsigned int offset;
 	unsigned long flags = 0;
 	int i = 0;
+	bool change = false;
 	spin_lock_irqsave(&earcrx_csb_mutex, flags);
 	for (offset = 0; offset < 0xC0; offset += 0x20) {
 		i = offset / 0x20;
+		if (s_csb[i] != s_csb_tmp[i]) {
+			change = true;
+		}
 		s_csb[i] =  s_csb_tmp[i];
 	}
-	pr_debug("csb updated %*ph\n", (int)sizeof(s_csb), s_csb);
+	spin_unlock_irqrestore(&earcrx_csb_mutex, flags);
+	return change;
+}
+
+void earcrx_dump_cs_iec958_cache(void)
+{
+	unsigned long flags = 0;
+	spin_lock_irqsave(&earcrx_csb_mutex, flags);
+	pr_info("csb: %*ph\n", (int)sizeof(s_csb), s_csb);
 	spin_unlock_irqrestore(&earcrx_csb_mutex, flags);
 }
 

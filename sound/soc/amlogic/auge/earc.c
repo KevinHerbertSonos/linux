@@ -210,7 +210,7 @@ struct earc {
 	unsigned int prev_irq_cnt;
 	int earcrx_pointer;
 	u8 rx_latency;
-	int CSB_check_cnt;
+	unsigned int CSB_check_cnt;
 };
 
 static struct earc *s_earc;
@@ -469,9 +469,12 @@ static irqreturn_t earc_ddr_isr(int irq, void *data)
 
 			/* exit csb changing flow */
 			if (p_earc->CSB_check_cnt >= 1) {
-				p_earc->CSB_check_cnt = 0;
-				dev_dbg(p_earc->dev, "earc csb stabilized\n");
-				earcrx_update_cs_iec958_cache();
+				if (earcrx_update_cs_iec958_cache()) {
+#ifdef DEBUG
+					dev_dbg(p_earc->dev, "earc csb stabilized\n");
+					earcrx_dump_cs_iec958_cache();
+#endif
+				}
 
 				// override mute with true status
 				mute = earcrx_get_cs_mute(p_earc->rx_dmac_map);
