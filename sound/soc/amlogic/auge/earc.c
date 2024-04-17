@@ -2585,8 +2585,8 @@ static const struct snd_kcontrol_new earc_controls[] = {
 		     earctx_get_attend_type,
 		     earctx_set_attend_type),
 
-	SND_SOC_BYTES_EXT("eARC_RX Latency",
-			  1,
+	SOC_SINGLE_EXT("eARC_RX Latency",
+			  0, 0, 255, 0,
 			  earcrx_get_latency,
 			  earcrx_set_latency),
 
