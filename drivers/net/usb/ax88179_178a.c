@@ -1488,6 +1488,9 @@ static int ax88179_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 
 			/* Skip IP alignment pseudo header */
 			skb_pull(skb, 2);
+			skb->len = pkt_len;
+			skb_set_tail_pointer(skb, pkt_len);
+			skb->truesize = pkt_len + sizeof(struct sk_buff);
 
 			ax88179_rx_checksum(skb, pkt_hdr);
 			return 1;
