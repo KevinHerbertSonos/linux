@@ -1227,6 +1227,10 @@ static int meson_mmc_probe(struct platform_device *pdev)
 
 	spin_lock_init(&host->lock);
 
+	if (aml_card_type_mmc(host))
+		mmc->caps |= MMC_CAP_ERASE | MMC_CAP_CMD23;
+		//mmc->caps |= MMC_CAP_CMD23;
+
 	if (host->dram_access_quirk) {
 		/* Limit segments to 1 due to low available sram memory */
 		mmc->max_segs = 1;
