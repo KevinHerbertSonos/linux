@@ -213,15 +213,16 @@ static unsigned int meson_mmc_get_timeout_msecs(struct mmc_data *data)
 	return min(timeout, 32768U); /* max. 2^15 ms */
 }
 
-static struct mmc_command *meson_mmc_get_next_command(struct mmc_command *cmd)
+static unsigned int meson_mmc_get_cmd_timeout_msecs(struct mmc_command *cmd)
 {
-	if (cmd->opcode == MMC_SET_BLOCK_COUNT && !cmd->error)
-		return cmd->mrq->cmd;
-	else if (mmc_op_multi(cmd->opcode) &&
-		 (!cmd->mrq->sbc || cmd->error || cmd->data->error))
-		return cmd->mrq->stop;
-	else
-		return NULL;
+	unsigned int timeout = cmd->busy_timeout;
+
+	if (!timeout)
+		return SD_EMMC_CMD_TIMEOUT;
+
+	timeout = roundup_pow_of_two(timeout);
+
+	return min(timeout, 32768U); /* max. 2^15 ms */
 }
 
 static void meson_mmc_get_transfer_mode(struct mmc_host *mmc,
@@ -966,8 +967,9 @@ static void meson_mmc_start_cmd(struct mmc_host *mmc, struct mmc_command *cmd)
 
 		cmd_data = host->bounce_dma_addr & CMD_DATA_MASK;
 	} else {
+		/* Set timeout according to the setting value in ext_csd */
 		cmd_cfg |= FIELD_PREP(CMD_CFG_TIMEOUT_MASK,
-				      ilog2(SD_EMMC_CMD_TIMEOUT));
+				      ilog2(meson_mmc_get_cmd_timeout_msecs(cmd)));
 	}
 
 	/* Last descriptor */
