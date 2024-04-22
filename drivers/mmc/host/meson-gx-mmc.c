@@ -1148,8 +1148,9 @@ static int meson_mmc_probe(struct platform_device *pdev)
 				   dev_name(&pdev->dev), host);
 	if (ret)
 		goto err_init_clk;
-
-	mmc->caps |= MMC_CAP_CMD23;
+	if (aml_card_type_mmc(host))
+		mmc->caps |= MMC_CAP_ERASE | MMC_CAP_CMD23;
+		//mmc->caps |= MMC_CAP_CMD23;
 	if (host->dram_access_quirk) {
 		/* Limit to the available sram memory */
 		mmc->max_segs = SD_EMMC_SRAM_DATA_BUF_LEN / mmc->max_blk_size;
