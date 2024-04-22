@@ -338,13 +338,6 @@ static void meson_mmc_clk_ungate(struct meson_host *host)
 	writel(cfg, host->regs + SD_EMMC_CFG);
 }
 
-<<<<<<< HEAD
-static int meson_mmc_clk_set(struct meson_host *host, unsigned long rate,
-			     bool ddr)
-{
-	struct mmc_host *mmc = host->mmc;
-	int ret;
-=======
 static void meson_mmc_set_phase_delay(struct meson_host *host, u32 mask,
 				      unsigned int phase)
 {
@@ -482,7 +475,6 @@ static int meson_mmc_clk_set(struct meson_host *host, struct mmc_ios *ios,
 {
 	struct mmc_host *mmc = host->mmc;
 	int ret = 0;
->>>>>>> fb5d790e643a2... commit 6911aa72dabe5213cf1f4855f8098e1b2823378d
 	u32 cfg;
 	unsigned long rate = ios->clock;
 
@@ -495,13 +487,6 @@ static int meson_mmc_clk_set(struct meson_host *host, struct mmc_ios *ios,
 	host->req_rate = 0;
 	mmc->actual_clock = 0;
 
-<<<<<<< HEAD
-	/* return with clock being stopped */
-	if (!rate)
-		return 0;
-
-=======
->>>>>>> fb5d790e643a2... commit 6911aa72dabe5213cf1f4855f8098e1b2823378d
 	/* Stop the clock during rate change to avoid glitches */
 	cfg = readl(host->regs + SD_EMMC_CFG);
 	cfg |= CFG_STOP_CLOCK;
@@ -517,22 +502,10 @@ static int meson_mmc_clk_set(struct meson_host *host, struct mmc_ios *ios,
 	writel(cfg, host->regs + SD_EMMC_CFG);
 	host->ddr = ddr;
 
-<<<<<<< HEAD
-	ret = clk_set_rate(host->mmc_clk, rate);
-	if (ret) {
-		dev_err(host->dev, "Unable to set cfg_div_clk to %lu. ret=%d\n",
-			rate, ret);
-		return ret;
-	}
-
-	host->req_rate = rate;
-	mmc->actual_clock = clk_get_rate(host->mmc_clk);
-=======
 	if (host->run_pxp_flag == 0)
 		ret = no_pxp_clk_set(host, ios, rate);
 	else
 		pxp_clk_set(host, rate);
->>>>>>> fb5d790e643a2... commit 6911aa72dabe5213cf1f4855f8098e1b2823378d
 
 	/* We should report the real output frequency of the controller */
 	if (ddr) {
@@ -1385,8 +1358,9 @@ static int meson_mmc_probe(struct platform_device *pdev)
 				   dev_name(&pdev->dev), host);
 	if (ret)
 		goto err_init_clk;
-
-	mmc->caps |= MMC_CAP_CMD23;
+	if (aml_card_type_mmc(host))
+		mmc->caps |= MMC_CAP_ERASE | MMC_CAP_CMD23;
+		//mmc->caps |= MMC_CAP_CMD23;
 	if (host->dram_access_quirk) {
 		/* Limit segments to 1 due to low available sram memory */
 		mmc->max_segs = 1;
