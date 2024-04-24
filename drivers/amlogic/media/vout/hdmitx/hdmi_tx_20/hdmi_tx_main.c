@@ -589,7 +589,7 @@ static void hdmitx_pre_display_init(void)
 	hdmitx_device.hwop.cntlddc(&hdmitx_device, DDC_HDCP_OP, HDCP14_OFF);
 	/* msleep(10); */
 	hdmitx_device.hwop.cntlmisc(&hdmitx_device, MISC_TMDS_PHY_OP,
-		TMDS_PHY_DISABLE);
+		TMDS_PHY_DISABLE_WITHOUT_BANDGAP);
 	hdmitx_device.hwop.cntlconfig(&hdmitx_device,
 		CONF_CLR_AVI_PACKET, 0);
 	hdmitx_device.hwop.cntlconfig(&hdmitx_device,
@@ -6415,7 +6415,7 @@ static int hdmitx_module_disable(enum vmode_e cur_vmod, void *data)
 
 	hdev->hwop.cntlconfig(hdev, CONF_CLR_AVI_PACKET, 0);
 	hdev->hwop.cntlconfig(hdev, CONF_CLR_VSDB_PACKET, 0);
-	hdev->hwop.cntlmisc(hdev, MISC_TMDS_PHY_OP, TMDS_PHY_DISABLE);
+	hdev->hwop.cntlmisc(hdev, MISC_TMDS_PHY_OP, TMDS_PHY_DISABLE_WITHOUT_BANDGAP);
 	hdev->para = hdmi_get_fmt_name("invalid", hdev->fmt_attr);
 	hdmitx_validate_vmode("null", 0, NULL);
 	if (hdev->cedst_policy)
@@ -7026,7 +7026,7 @@ static void hdmitx_hpd_plugout_handler(struct work_struct *work)
 	hdev->hwop.cntlddc(hdev, DDC_HDCP_MUX_INIT, 1);
 	hdev->hwop.cntlddc(hdev, DDC_HDCP_OP, HDCP14_OFF);
 	hdev->hwop.cntlddc(hdev, DDC_HDCP_SET_TOPO_INFO, 0);
-	hdev->hwop.cntlmisc(hdev, MISC_TMDS_PHY_OP, TMDS_PHY_DISABLE);
+	hdev->hwop.cntlmisc(hdev, MISC_TMDS_PHY_OP, TMDS_PHY_DISABLE_WITHOUT_BANDGAP);
 	hdev->hdmitx_event &= ~HDMI_TX_HPD_PLUGOUT;
 	hdev->hwop.cntlmisc(hdev, MISC_ESM_RESET, 0);
 	clear_rx_vinfo(hdev);
@@ -8658,7 +8658,7 @@ void drm_hdmitx_set_phy(unsigned char en)
 		return;
 
 	if (en == 0)
-		cmd = TMDS_PHY_DISABLE;
+		cmd = TMDS_PHY_DISABLE_WITHOUT_BANDGAP;
 	else
 		cmd = TMDS_PHY_ENABLE;
 	hdmitx_device.hwop.cntlmisc(&hdmitx_device, MISC_TMDS_PHY_OP, cmd);
