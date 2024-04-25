@@ -6086,10 +6086,13 @@ static void hdmi_phy_suspend(u32 flags)
 		break;
 	}
 
-	if (flags == 1)
+	if (flags == 1) {
 		hd_set_reg_bits(phy_cntl0, 0xb4242, 20, 0);
-	else
+		pr_info("Enabled PHY bandgap\n");
+	} else {
 		hd_write_reg(phy_cntl0, 0x0);
+		pr_info("Disabled PHY bandgap\n");
+	}
 
 	/* keep PHY_CNTL3 bit[1:0] as 0b11,
 	 * otherwise may cause HDCP22 boot failed
