@@ -206,7 +206,8 @@ struct earc {
 	struct timer_list reset_timer;
 	int err_cnt;
 	struct timer_list timer;
-	unsigned int position_addr;
+	unsigned int irq_cnt;
+	unsigned int prev_irq_cnt;
 	int earcrx_pointer;
 	u8 rx_latency;
 	int CSB_check_cnt;
@@ -428,6 +429,8 @@ static irqreturn_t earc_ddr_isr(int irq, void *data)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	int is_capture = substream->stream == SNDRV_PCM_STREAM_CAPTURE;
 	snd_pcm_uframes_t pos = substream->ops->pointer(substream);
+
+	p_earc->irq_cnt++;
 
 	if (!snd_pcm_running(substream))
 		return IRQ_HANDLED;
@@ -1461,7 +1464,6 @@ static int earc_dai_trigger(struct snd_pcm_substream *substream, int cmd,
 			earcrx_enable(p_earc->rx_cmdc_map,
 				      p_earc->rx_dmac_map,
 				      true);
-			p_earc->position_addr = 0;
 			mod_timer(&p_earc->timer, jiffies);
 		}
 		break;
@@ -3044,7 +3046,6 @@ static void earcrx_timer_func(struct timer_list *t)
 {
 	struct earc *p_earc = from_timer(p_earc, t, timer);
 	unsigned long delay = msecs_to_jiffies(1000);
-	unsigned int cur_addr;
 	enum attend_type type;
 	unsigned int clock = 0;
 
@@ -3055,17 +3056,16 @@ static void earcrx_timer_func(struct timer_list *t)
 	if (type == ATNDTYP_DISCNCT)
 		goto exit;
 
-	cur_addr = aml_toddr_get_position(p_earc->tddr);
-	if (p_earc->position_addr == cur_addr) {
+	if (p_earc->irq_cnt == p_earc->prev_irq_cnt) {
 		clock = meson_clk_measure(125);//get earcrx_pll_test
 
 		if (clock) {
 			earcrx_pll_refresh(p_earc->rx_top_map, RST_BY_SELF, true);
-			pr_info("hw_ptr reset %s,clock= %d\n", __func__,clock);
+			pr_info("hw_ptr reset %s, cnt %u, clock=%d\n", __func__, p_earc->irq_cnt, clock);
 		}
 	}
 
-	p_earc->position_addr = cur_addr;
+	p_earc->prev_irq_cnt = p_earc->irq_cnt;
 
 exit:
 	mod_timer(&p_earc->timer, jiffies + delay);
