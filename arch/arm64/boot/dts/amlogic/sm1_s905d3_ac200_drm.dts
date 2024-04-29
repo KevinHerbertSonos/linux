@@ -896,6 +896,7 @@
 
 &amhdmitx {
 	status = "okay";
+	hdcp_ctl_lvl = <1>;
 };
 
 &drm_subsystem {
