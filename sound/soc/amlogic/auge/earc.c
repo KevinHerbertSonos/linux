@@ -921,7 +921,7 @@ static int earc_open(struct snd_pcm_substream *substream)
 
 	snd_soc_set_runtime_hwparams(substream, &earc_hardware);
 	snd_pcm_lib_preallocate_pages(substream, SNDRV_DMA_TYPE_DEV,
-		dev, EARC_BUFFER_BYTES / 2, EARC_BUFFER_BYTES);
+		dev, EARC_BUFFER_BYTES, EARC_BUFFER_BYTES);
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		/* select hdmirx arc source from earctx spdif */
