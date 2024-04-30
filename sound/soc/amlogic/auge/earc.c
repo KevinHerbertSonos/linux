@@ -1064,6 +1064,10 @@ static snd_pcm_uframes_t earc_pointer(struct snd_pcm_substream *substream)
 	if (frames > runtime->buffer_size)
 		frames = 0;
 
+	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+		frames -= (frames % runtime->period_size);
+	}
+
 	p_earc->earcrx_pointer = 1;
 	return frames;
 }
