@@ -4,6 +4,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/delay.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/device.h>
@@ -38,6 +39,9 @@
 #define  PHY_CNTL1_ST_MODE	GENMASK(2, 0)
 #define  PHY_CNTL1_ST_PHYADD	GENMASK(7, 3)
 #define   EPHY_DFLT_ADD		8
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+#define  PHY_CNTL1_AUTOMDIX_EN	BIT(8)
+#endif
 #define  PHY_CNTL1_MII_MODE	GENMASK(15, 14)
 #define   EPHY_MODE_RMII	0x1
 #define  PHY_CNTL1_CLK_EN	BIT(16)
@@ -134,7 +138,11 @@ static void g12a_ephy_pll_init(struct clk_hw *hw)
 	writel(0x00000000, pll->base + ETH_PLL_CTL3);
 	writel(0x00000000, pll->base + ETH_PLL_CTL4);
 	writel(0x20200000, pll->base + ETH_PLL_CTL5);
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+	writel(0x0000cf02, pll->base + ETH_PLL_CTL6);
+#else
 	writel(0x0000c002, pll->base + ETH_PLL_CTL6);
+#endif
 	writel(0x00000023, pll->base + ETH_PLL_CTL7);
 }
 
@@ -148,6 +156,7 @@ static const struct clk_ops g12a_ephy_pll_ops = {
 
 static int g12a_enable_internal_mdio(struct g12a_mdio_mux *priv)
 {
+	u32 value;
 	int ret;
 
 	/* Enable the phy clock */
@@ -161,17 +170,56 @@ static int g12a_enable_internal_mdio(struct g12a_mdio_mux *priv)
 
 	/* Initialize ephy control */
 	writel(EPHY_G12A_ID, priv->regs + ETH_PHY_CNTL0);
-	writel(FIELD_PREP(PHY_CNTL1_ST_MODE, 3) |
-	       FIELD_PREP(PHY_CNTL1_ST_PHYADD, EPHY_DFLT_ADD) |
-	       FIELD_PREP(PHY_CNTL1_MII_MODE, EPHY_MODE_RMII) |
-	       PHY_CNTL1_CLK_EN |
-	       PHY_CNTL1_CLKFREQ |
-	       PHY_CNTL1_PHY_ENB,
-	       priv->regs + ETH_PHY_CNTL1);
+	/* Make sure we get a 0 -> 1 transition on the enable bit */
+	value = FIELD_PREP(PHY_CNTL1_ST_MODE, 3) |
+		FIELD_PREP(PHY_CNTL1_ST_PHYADD, EPHY_DFLT_ADD) |
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+		PHY_CNTL1_AUTOMDIX_EN |
+#endif
+		FIELD_PREP(PHY_CNTL1_MII_MODE, EPHY_MODE_RMII) |
+		PHY_CNTL1_CLK_EN |
+		PHY_CNTL1_CLKFREQ;
+	writel(value, priv->regs + ETH_PHY_CNTL1);
 	writel(PHY_CNTL2_USE_INTERNAL |
 	       PHY_CNTL2_SMI_SRC_MAC |
 	       PHY_CNTL2_RX_CLK_EPHY,
 	       priv->regs + ETH_PHY_CNTL2);
+	value |= PHY_CNTL1_PHY_ENB;
+	writel(value, priv->regs + ETH_PHY_CNTL1);
+	/* The phy needs a bit of time to power up */
+	mdelay(10);
+
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+	/*enet_type*/
+	if (of_property_read_u32(np, "enet_type", &enet_type))
+		pr_info("default enet type as 0\n");
+
+	if (of_property_read_u32(np, "tx_amp_src", &tx_amp_addr) != 0) {
+		pr_info("use default rx_amp_src as 0\n");
+		/*no tx_amp setting needn't below flow*/
+		return 0;
+	}
+	tx_amp_src = devm_ioremap(priv->dev,
+			(resource_size_t)tx_amp_addr, sizeof(resource_size_t));
+
+	tx_amp_bl2 = (readl(tx_amp_src) & 0x3f);
+	pr_info("wzh txamp 0x%x\n", readl(tx_amp_src));
+
+	/*valid bit
+	 * t5/t5d only consider bit5 as valid bit
+	 * bit4 was for internal resistor mode, which won't been used anymore
+	 * others both bit5 and bit4 are valid bit
+	 */
+	if (enet_type == ETH_PHY_T5)
+		cts_valid = ((tx_amp_bl2 >> 5) & 0x1);
+	else
+		cts_valid = ((tx_amp_bl2 >> 4) & 0x3);
+	/*0715-2021 new define bit3 as enhance bit*/
+	cts_enhance = ((tx_amp_bl2 >> 3) & 0x1);
+
+	if ((cts_valid) && (cts_enhance))
+		writel(0x0400000, priv->regs + ETH_PLL_CTL3);
+#endif
 
 	return 0;
 }
