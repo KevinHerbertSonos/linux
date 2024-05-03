@@ -17,7 +17,6 @@ typedef struct {
 # define LL_DEP_MAP_INIT(lockname)			\
 	.dep_map = {					\
 		.name = #lockname,			\
-		.wait_type_inner = LD_WAIT_CONFIG,	\
 	}
 #else
 # define LL_DEP_MAP_INIT(lockname)
