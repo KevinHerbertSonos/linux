@@ -2539,8 +2539,8 @@ static int aml_tdm_resume(struct aml_tdm *p_tdm)
 	}
 
 	/*set default clk for output*/
-	if (p_tdm->start_clk_enable == 1)
-		aml_set_default_tdm_clk(p_tdm);
+	//if (p_tdm->start_clk_enable == 1)
+		//aml_set_default_tdm_clk(p_tdm);
 
 	if (!IS_ERR_OR_NULL(p_tdm->pin_ctl)) {
 		struct pinctrl_state *state = NULL;
