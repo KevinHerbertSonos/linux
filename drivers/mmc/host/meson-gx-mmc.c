@@ -229,17 +229,6 @@ static void meson_mmc_set_phase_delay(struct meson_host *host, u32 mask,
 	writel(val, host->regs);
 }
 
-static int meson_mmc_clk_set(struct meson_host *host, unsigned long rate,
-			     bool ddr)
-{
-	u32 val;
-
-	val = readl(host->regs);
-	val &= ~mask;
-	val |= phase << __ffs(mask);
-	writel(val, host->regs);
-}
-
 static void pxp_clk_set(struct meson_host *host, unsigned long rate)
 {
 	u32 clk_src, val;
