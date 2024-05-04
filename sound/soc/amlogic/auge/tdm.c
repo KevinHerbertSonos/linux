@@ -137,6 +137,7 @@ struct aml_tdm {
 	struct regulator *regulator_vcc3v3;
 	struct regulator *regulator_vcc5v;
 	int suspend_clk_off;
+	bool in_suspend;
 };
 
 #define TDM_BUFFER_BYTES (1024 * 1024)
@@ -1895,6 +1896,8 @@ static int aml_dai_tdm_probe(struct snd_soc_dai *cpu_dai)
 		if (ret < 0)
 			pr_err("failed add snd tdmD controls\n");
 	}
+	p_tdm->in_suspend = 0;
+
 	return 0;
 }
 
@@ -2234,6 +2237,7 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 	if (ret < 0) {
 		dev_err(&pdev->dev, "Can't retrieve suspend-clk-off\n");
 	}
+	p_tdm->in_suspend = 0;
 
 	/* default no same source */
 	if (p_tdm->chipinfo->same_src_fn) {
@@ -2439,7 +2443,8 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 
 static int aml_tdm_suspend(struct aml_tdm *p_tdm)
 {
-	if (p_tdm->chipinfo->regulator || (p_tdm->suspend_clk_off && !is_pm_s2idle_mode())) {
+
+	if (p_tdm->suspend_clk_off) {
 		if (!IS_ERR(p_tdm->mclk2pad)) {
 			while (__clk_is_enabled(p_tdm->mclk2pad))
 				clk_disable_unprepare(p_tdm->mclk2pad);
@@ -2449,7 +2454,10 @@ static int aml_tdm_suspend(struct aml_tdm *p_tdm)
 			while (__clk_is_enabled(p_tdm->mclk))
 				clk_disable_unprepare(p_tdm->mclk);
 		}
+		p_tdm->in_suspend = 1;
+	}
 
+	if (p_tdm->chipinfo->regulator) {
 		if (!IS_ERR_OR_NULL(p_tdm->regulator_vcc5v))
 			regulator_disable(p_tdm->regulator_vcc5v);
 		if (!IS_ERR_OR_NULL(p_tdm->regulator_vcc3v3))
@@ -2487,7 +2495,7 @@ static int aml_tdm_resume(struct aml_tdm *p_tdm)
 	out_lanes = pop_count(p_tdm->setting.lane_mask_out);
 	in_lanes = pop_count(p_tdm->setting.lane_mask_in);
 
-	if (p_tdm->chipinfo->regulator || (p_tdm->suspend_clk_off && !is_pm_s2idle_mode())) {
+	if (p_tdm->in_suspend) {
 
 		audiobus_write(EE_AUDIO_CLK_GATE_EN0, 0xffffffff);
 		audiobus_update_bits(EE_AUDIO_CLK_GATE_EN1, 0x7, 0x7);
@@ -2515,7 +2523,10 @@ static int aml_tdm_resume(struct aml_tdm *p_tdm)
 		if (out_lanes > 0 && out_lanes <= LANE_MAX3)
 			aml_tdm_set_slot_out(p_tdm->actrl,
 				p_tdm->id, p_tdm->setting.slots, p_tdm->setting.slot_width);
+		p_tdm->in_suspend = 0;
+	}
 
+	if (p_tdm->chipinfo->regulator) {
 		if (!IS_ERR_OR_NULL(p_tdm->regulator_vcc5v))
 			ret = regulator_enable(p_tdm->regulator_vcc5v);
 		if (ret)
