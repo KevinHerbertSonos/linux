@@ -221,6 +221,11 @@ static inline bool product_is_optimo2(void)
 	return strstr(sonos_machine_name, "Optimo2") != 0;
 }
 
+static inline bool product_is_lotus(void)
+{
+	return strstr(sonos_machine_name, "Lotus") != 0;
+}
+
 extern void *sonos_orientation_register_callback(void (*function)(int orient, void *param), void *param);
 extern int sonos_orientation_unregister_callback(void *entry);
 extern void sonos_orientation_change_event(int orient);
