@@ -600,6 +600,8 @@ static struct net_bridge_fdb_entry *fdb_create(struct net_bridge *br,
 		sonos_fdb_create(fdb, &br->fdb_list, source, direct_dest, addr, is_local);
 		fdb->added_by_user = 0;
 		fdb->added_by_external_learn = 0;
+		fdb->offloaded = 0;
+		fdb->is_sticky = 0;
 #else
 		fdb->dst = source;
 		fdb->key.vlan_id = vid;
