@@ -338,12 +338,153 @@ static void meson_mmc_clk_ungate(struct meson_host *host)
 	writel(cfg, host->regs + SD_EMMC_CFG);
 }
 
+<<<<<<< HEAD
 static int meson_mmc_clk_set(struct meson_host *host, unsigned long rate,
 			     bool ddr)
 {
 	struct mmc_host *mmc = host->mmc;
 	int ret;
+=======
+static void meson_mmc_set_phase_delay(struct meson_host *host, u32 mask,
+				      unsigned int phase)
+{
+	u32 val;
+
+	val = readl(host->regs);
+	val &= ~mask;
+	val |= phase << __ffs(mask);
+	writel(val, host->regs);
+}
+
+static void pxp_clk_set(struct meson_host *host, unsigned long rate)
+{
+	u32 clk_src, val;
+	unsigned long src_rate;
+	u32 clk_div;
+
+	if (rate <= 400000) {
+		src_rate = 24000000;
+		clk_src = 0;
+	} else {
+		src_rate = 1000000000;
+		clk_src = (1 << 6);
+	}
+	dev_err(host->dev, "clock reg:0x%x\n", readl(host->regs + SD_EMMC_CLOCK));
+	clk_div = DIV_ROUND_UP(src_rate, rate);
+	pr_info("clk_div:0x%x\n", clk_div);
+	val = readl(host->regs + SD_EMMC_CLOCK);
+	pr_info("val:0x%x\n", val);
+	val &= ~CLK_DIV_MASK;
+	val |= clk_div;
+	val &= ~CLK_SRC_MASK;
+	val |= clk_src;
+	writel(val, host->regs + SD_EMMC_CLOCK);
+	pr_info("clock reg:0x%x, rate:%lu\n", readl(host->regs + SD_EMMC_CLOCK), rate);
+}
+
+static int no_pxp_clk_set(struct meson_host *host, struct mmc_ios *ios,
+						unsigned long rate)
+{
+	int ret = 0;
+	struct clk *src_clk = NULL;
+	struct mmc_host *mmc = host->mmc;
+	u32 cfg = readl(host->regs + SD_EMMC_CFG);
+
+	dev_dbg(host->dev, "[%s]set rate:%lu\n", __func__, rate);
+	if (host->src_clk)
+		clk_disable_unprepare(host->src_clk);
+
+	switch (ios->timing) {
+	case MMC_TIMING_MMC_HS400:
+		if (host->clk[2])
+			src_clk = host->clk[2];
+		else
+			src_clk = host->clk[1];
+		dev_dbg(host->dev, "HS400 set src rate to:%u\n",
+			host->src_clk_rate);
+		ret = clk_set_rate(src_clk, host->src_clk_rate);
+		if (ret) {
+			dev_err(host->dev, "set src err\n");
+				return ret;
+		}
+		cfg |= CFG_AUTO_CLK;
+		break;
+	case MMC_TIMING_MMC_HS:
+	case MMC_TIMING_SD_HS:
+	case MMC_TIMING_MMC_DDR52:
+	case MMC_TIMING_UHS_DDR50:
+	case MMC_TIMING_MMC_HS200:
+	case MMC_TIMING_UHS_SDR12:
+	case MMC_TIMING_UHS_SDR25:
+	case MMC_TIMING_UHS_SDR50:
+	case MMC_TIMING_UHS_SDR104:
+		dev_dbg(host->dev, "[%s]Other mode set src rate to:%u\n",
+				__func__, host->src_clk_rate);
+		ret = clk_set_rate(host->clk[1], host->src_clk_rate);
+		if (ret) {
+			dev_err(host->dev, "set src err\n");
+				return ret;
+		}
+		src_clk = host->clk[1];
+		cfg |= CFG_AUTO_CLK;
+	/* sdio set clk always on default */
+		//if (aml_card_type_sdio(host))
+		//	cfg &= CFG_AUTO_CLK;
+		break;
+	case MMC_TIMING_LEGACY:
+		dev_dbg(host->dev, "[%s]Legacy set rate to:%lu\n",
+				__func__, rate);
+		src_clk = host->clk[0];
+	/* enable always on clock for 400KHZ */
+		cfg &= ~CFG_AUTO_CLK;
+
+	/* switch source clock as Total before clk =0, then disable source clk */
+		if (rate == 0) {
+			ret = clk_set_parent(host->mux[0], src_clk);
+			host->src_clk = NULL;
+			cfg |= CFG_AUTO_CLK;
+			writel(cfg, host->regs + SD_EMMC_CFG);
+			return ret;
+		}
+		break;
+	default:
+		dev_dbg(host->dev, "Check mmc/sd/sdio timing mode\n");
+		WARN_ON(1);
+		break;
+	}
+
+	clk_prepare_enable(src_clk);
+	writel(cfg, host->regs + SD_EMMC_CFG);
+	host->src_clk = src_clk;
+
+	ret = clk_set_parent(host->mux[0], src_clk);
+	if (ret) {
+		dev_err(host->dev, "set parent error\n");
+		return ret;
+	}
+
+	ret = clk_set_rate(host->mmc_clk, rate);
+	if (ret) {
+		dev_err(host->dev, "Unable to set cfg_div_clk to %lu. ret=%d\n",
+			rate, ret);
+		return ret;
+	}
+	host->req_rate = rate;
+	mmc->actual_clock = clk_get_rate(host->mmc_clk);
+
+	dev_dbg(host->dev, "clk rate: %u Hz\n", mmc->actual_clock);
+
+	return ret;
+}
+
+static int meson_mmc_clk_set(struct meson_host *host, struct mmc_ios *ios,
+							bool ddr)
+{
+	struct mmc_host *mmc = host->mmc;
+	int ret = 0;
+>>>>>>> fb5d790e643a2... commit 6911aa72dabe5213cf1f4855f8098e1b2823378d
 	u32 cfg;
+	unsigned long rate = ios->clock;
 
 	/* Same request - bail-out */
 	if (host->ddr == ddr && host->req_rate == rate)
@@ -354,10 +495,13 @@ static int meson_mmc_clk_set(struct meson_host *host, unsigned long rate,
 	host->req_rate = 0;
 	mmc->actual_clock = 0;
 
+<<<<<<< HEAD
 	/* return with clock being stopped */
 	if (!rate)
 		return 0;
 
+=======
+>>>>>>> fb5d790e643a2... commit 6911aa72dabe5213cf1f4855f8098e1b2823378d
 	/* Stop the clock during rate change to avoid glitches */
 	cfg = readl(host->regs + SD_EMMC_CFG);
 	cfg |= CFG_STOP_CLOCK;
@@ -373,6 +517,7 @@ static int meson_mmc_clk_set(struct meson_host *host, unsigned long rate,
 	writel(cfg, host->regs + SD_EMMC_CFG);
 	host->ddr = ddr;
 
+<<<<<<< HEAD
 	ret = clk_set_rate(host->mmc_clk, rate);
 	if (ret) {
 		dev_err(host->dev, "Unable to set cfg_div_clk to %lu. ret=%d\n",
@@ -382,6 +527,12 @@ static int meson_mmc_clk_set(struct meson_host *host, unsigned long rate,
 
 	host->req_rate = rate;
 	mmc->actual_clock = clk_get_rate(host->mmc_clk);
+=======
+	if (host->run_pxp_flag == 0)
+		ret = no_pxp_clk_set(host, ios, rate);
+	else
+		pxp_clk_set(host, rate);
+>>>>>>> fb5d790e643a2... commit 6911aa72dabe5213cf1f4855f8098e1b2823378d
 
 	/* We should report the real output frequency of the controller */
 	if (ddr) {
@@ -550,7 +701,7 @@ static int meson_mmc_resampling_tuning(struct mmc_host *mmc, u32 opcode)
 static int meson_mmc_prepare_ios_clock(struct meson_host *host,
 				       struct mmc_ios *ios)
 {
-	bool ddr;
+	bool ddr = false;
 
 	switch (ios->timing) {
 	case MMC_TIMING_MMC_DDR52:
@@ -563,7 +714,7 @@ static int meson_mmc_prepare_ios_clock(struct meson_host *host,
 		break;
 	}
 
-	return meson_mmc_clk_set(host, ios->clock, ddr);
+	return meson_mmc_clk_set(host, ios, ddr);
 }
 
 static void meson_mmc_check_resampling(struct meson_host *host,
