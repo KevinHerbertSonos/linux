@@ -8859,4 +8859,27 @@ static void meson_hdmitx_unbind(struct device *dev,
 	hdev->drm_hdmitx_id = 0;
 }
 
+static int enabled;
+
+static int set_enabled(const char *val, const struct kernel_param *kp)
+{
+	struct hdmitx_dev *hdev = &hdmitx_device;
+	int rv = param_set_bool(val, kp);
+	printk("%s:%s:%d --> rv = %d\n", __FILE__, __func__, __LINE__, rv);
+
+	if(!rv) {
+		hdev->hwop.force_hdmi_arc(&hdmitx_device, enabled);
+	}
+
+	return 0;
+}
+
+static struct kernel_param_ops enabled_param_ops = {
+	.set = set_enabled,
+	.get = param_get_bool,
+};
+
+module_param_cb(enabled, &enabled_param_ops, &enabled, 0644);
+MODULE_PARM_DESC(enabled, "enabled wakelock when HDMI_ARC present");
+
 /*************DRM connector API end**************/
