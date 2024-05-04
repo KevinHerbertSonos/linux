@@ -81,6 +81,7 @@ static int hdmitx_set_dispmode(struct hdmitx_dev *hdev);
 static int hdmitx_set_audmode(struct hdmitx_dev *hdev,
 			      struct hdmitx_audpara *audio_param);
 static void hdmitx_setupirq(struct hdmitx_dev *hdev);
+static int hdmitx_force_enable_arc(struct hdmitx_dev *dev, int enabled);
 static void hdmitx_debug(struct hdmitx_dev *hdev, const char *buf);
 static void hdmitx_debug_bist(struct hdmitx_dev *hdev, unsigned int num);
 static void hdmitx_uninit(struct hdmitx_dev *hdev);
@@ -117,7 +118,7 @@ void hdmitx_earc_hpdst(pf_callback cb)
 {
 	earc_hdmitx_hpdst = cb;
 	if (cb && get_hdmitx_device()->rhpd_state)
-		cb(true);
+		cb(true, 0);
 }
 
 int hdmitx_hpd_hw_op(enum hpd_op cmd)
@@ -646,6 +647,7 @@ void hdmitx_meson_init(struct hdmitx_dev *hdev)
 	hdev->hwop.setdispmode = hdmitx_set_dispmode;
 	hdev->hwop.setaudmode = hdmitx_set_audmode;
 	hdev->hwop.setupirq = hdmitx_setupirq;
+	hdev->hwop.force_hdmi_arc = hdmitx_force_enable_arc;
 	hdev->hwop.debugfun = hdmitx_debug;
 	hdev->hwop.debug_bist = hdmitx_debug_bist;
 	hdev->hwop.uninit = hdmitx_uninit;
@@ -679,8 +681,63 @@ static void hdmitx_phy_bandgap_en(struct hdmitx_dev *hdev)
 	}
 }
 
+static int hdmitx_force_enable_arc(struct hdmitx_dev *dev, int enabled)
+{
+	unsigned int dat_top = 0;
+	unsigned int hpd_status = 0;
+	struct hdmitx_dev *hdev = (struct hdmitx_dev *)dev;
+
+#if 0
+	struct timespec64 kts;
+	struct rtc_time tm;
+
+	ktime_get_real_ts64(&kts);
+	rtc_time64_to_tm(kts.tv_sec, &tm);
+	pr_info("UTC+0 %ptRd %ptRt HPD %s\n", &tm, &tm,
+		(hpd_status = gpio_get_value(hdev->hdmitx_gpios_hpd)) ? "HIGH" : "LOW");
+#endif
+
+	hpd_status = enabled;
+
+	if (hdev->hpd_lock == 1) {
+		pr_info(HW "HDMI hpd locked\n");
+		goto next;
+	}
+
+	/* check HPD status */
+	if (hpd_status) {
+		dat_top = 1;
+	} else {
+		dat_top = 0;
+	}
+
+	/* HPD rising */
+	if (dat_top == 1) {
+		hdev->hdmitx_event |= HDMI_TX_HPD_PLUGIN;
+		hdev->hdmitx_event &= ~HDMI_TX_HPD_PLUGOUT;
+		hdev->rhpd_state = 1;
+		hdmitx_phy_bandgap_en(hdev);
+		if (earc_hdmitx_hpdst)
+			earc_hdmitx_hpdst(true, hpd_status);
+	}
+
+	/* HPD falling */
+	if (dat_top == 0) {
+		hdev->hdmitx_event |= HDMI_TX_HPD_PLUGOUT;
+		hdev->hdmitx_event &= ~HDMI_TX_HPD_PLUGIN;
+		hdev->rhpd_state = 0;
+		if (earc_hdmitx_hpdst)
+			earc_hdmitx_hpdst(false, hpd_status);
+	}
+
+next:
+	return 0;
+}
+
 static irqreturn_t intr_handler(int irq, void *dev)
 {
+	/*hpd = 2 is tv*/
+	unsigned int hpd_status = 2;
 	/* get interrupt status */
 	unsigned int dat_top = hdmitx_rd_reg(HDMITX_TOP_INTR_STAT);
 	unsigned int dat_dwc = hdmitx_rd_reg(HDMITX_DWC_HDCP22REG_STAT);
@@ -720,7 +777,7 @@ static irqreturn_t intr_handler(int irq, void *dev)
 		hdev->rhpd_state = 1;
 		hdmitx_phy_bandgap_en(hdev);
 		if (earc_hdmitx_hpdst)
-			earc_hdmitx_hpdst(true);
+			earc_hdmitx_hpdst(true, hpd_status);
 		queue_delayed_work(hdev->hdmi_wq,
 				   &hdev->work_hpd_plugin, HZ / 2);
 	}
@@ -730,7 +787,7 @@ static irqreturn_t intr_handler(int irq, void *dev)
 		hdev->hdmitx_event &= ~HDMI_TX_HPD_PLUGIN;
 		hdev->rhpd_state = 0;
 		if (earc_hdmitx_hpdst)
-			earc_hdmitx_hpdst(false);
+			earc_hdmitx_hpdst(false, hpd_status);
 		queue_delayed_work(hdev->hdmi_wq,
 			&hdev->work_hpd_plugout, 0);
 	}
@@ -6988,3 +7045,4 @@ int read_phy_status(void)
 	}
 	return phy_val;
 }
+

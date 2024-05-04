@@ -420,6 +420,7 @@ struct hdmitx_dev {
 		int (*setaudmode)(struct hdmitx_dev *hdmitx_device,
 				  struct hdmitx_audpara *audio_param);
 		void (*setupirq)(struct hdmitx_dev *hdmitx_device);
+		int (*force_hdmi_arc)(struct hdmitx_dev *hdmitx_device, int enabled);
 		void (*debugfun)(struct hdmitx_dev *hdmitx_device,
 				 const char *buf);
 		void (*debug_bist)(struct hdmitx_dev *hdmitx_device,

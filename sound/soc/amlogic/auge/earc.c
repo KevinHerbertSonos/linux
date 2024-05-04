@@ -2529,10 +2529,14 @@ void earc_resume(void)
 	p_earc->resumed = true;
 }
 
-void earc_hdmitx_hpdst(bool st)
+void earc_hdmitx_hpdst(bool st, int enabled)
 {
 	struct earc *p_earc = s_earc;
 	struct snd_kcontrol *kcont;
+
+	if(enabled != 2){
+		set_spdif_to_arc_hpd_status(p_earc->rx_cmdc_map, enabled);
+	}
 
 	if (!p_earc)
 		return;

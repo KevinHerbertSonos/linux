@@ -7,7 +7,7 @@
 #ifndef __HDMI_EARC_H__
 #define __HDMI_EARC_H__
 
-int register_earcrx_callback(void (*callback)(bool st));
+int register_earcrx_callback(void (*callback)(bool st, int enabled));
 void unregister_earcrx_callback(void);
 int register_earctx_callback(void (*callback)(int earc_port, bool st));
 void unregister_earctx_callback(void);

@@ -149,7 +149,7 @@ struct aud_para {
 	u8 i2s_ch_mask;
 };
 
-typedef void (*pf_callback)(bool st);
+typedef void (*pf_callback)(bool st, int enabled);
 
 int get_hpd_state(void);
 int hdmitx_event_notifier_regist(struct notifier_block *nb);
