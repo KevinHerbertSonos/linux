@@ -77,10 +77,10 @@ static inline void reset_hung_task_detector(void) { }
  * handled differently because its value is not boolean, and the lockup
  * detectors are 'suspended' while 'watchdog_thresh' is equal zero.
  */
-#define WATCHDOG_HARDLOCKUP_ENABLED_BIT  0
-#define WATCHDOG_SOFTOCKUP_ENABLED_BIT   1
-#define WATCHDOG_HARDLOCKUP_ENABLED     (1 << WATCHDOG_HARDLOCKUP_ENABLED_BIT)
-#define WATCHDOG_SOFTOCKUP_ENABLED      (1 << WATCHDOG_SOFTOCKUP_ENABLED_BIT)
+#define WATCHDOG_HARDLOCKUP_ENABLED_BIT 0
+#define WATCHDOG_SOFTLOCKUP_ENABLED_BIT 1
+#define WATCHDOG_HARDLOCKUP_ENABLED     BIT(WATCHDOG_HARDLOCKUP_ENABLED_BIT)
+#define WATCHDOG_SOFTLOCKUP_ENABLED     BIT(WATCHDOG_SOFTLOCKUP_ENABLED_BIT)
 
 #if defined(CONFIG_HARDLOCKUP_DETECTOR)
 extern void hardlockup_detector_disable(void);
@@ -89,31 +89,24 @@ extern unsigned int hardlockup_panic;
 static inline void hardlockup_detector_disable(void) {}
 #endif
 
-#if defined(CONFIG_HARDLOCKUP_DETECTOR_PERF)
-extern void hardlockup_detector_perf_stop(void);
-extern void hardlockup_detector_perf_restart(void);
-extern void hardlockup_detector_perf_cleanup(void);
-#else
-static inline void hardlockup_detector_perf_stop(void) { }
-static inline void hardlockup_detector_perf_restart(void) { }
-static inline void hardlockup_detector_perf_cleanup(void) { }
-#endif
-
 #if defined(CONFIG_HAVE_NMI_WATCHDOG) || defined(CONFIG_HARDLOCKUP_DETECTOR)
 # define NMI_WATCHDOG_SYSCTL_PERM	0644
 #else
 # define NMI_WATCHDOG_SYSCTL_PERM	0444
 #endif
 
-#if defined(CONFIG_HARDLOCKUP_DETECTOR_COUNTS_HRTIMER)
+#if defined(CONFIG_NMI_WATCHDOG)
 extern void arch_touch_nmi_watchdog(void);
-extern void watchdog_hardlockup_touch_cpu(unsigned int cpu);
 #else
 static inline void arch_touch_nmi_watchdog(void) {}
-static inline void watchdog_hardlockup_touch_cpu(unsigned int cpu) {}
 #endif
 
-#if defined(CONFIG_HARDLOOKUP_DETECTOR_PERF)
+#if defined(CONFIG_HARDLOCKUP_DETECTOR_COUNTS_HRTIMER)
+void watchdog_hardlockup_touch_cpu(unsigned int cpu);
+void watchdog_hardlockup_check(unsigned int cpu, struct pt_regs *regs);
+#endif
+
+#if defined(CONFIG_HARDLOCKUP_DETECTOR_PERF)
 extern void hardlockup_detector_perf_stop(void);
 extern void hardlockup_detector_perf_restart(void);
 extern void hardlockup_detector_perf_disable(void);

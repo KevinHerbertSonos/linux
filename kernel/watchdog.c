@@ -38,7 +38,7 @@ static DEFINE_MUTEX(watchdog_mutex);
 unsigned long __read_mostly watchdog_enabled;
 int __read_mostly watchdog_user_enabled = 1;
 static int __read_mostly watchdog_hardlockup_user_enabled = WATCHDOG_HARDLOCKUP_DEFAULT;
-static int __read_mostly watchdog_softlookup_user_enabled = 1;
+static int __read_mostly watchdog_softlockup_user_enabled = 1;
 int __read_mostly watchdog_thresh = 10;
 static int __read_mostly watchdog_hardlockup_available;
 
@@ -48,6 +48,11 @@ struct cpumask watchdog_cpumask __read_mostly;
 unsigned long *watchdog_cpumask_bits = cpumask_bits(&watchdog_cpumask);
 
 #ifdef CONFIG_HARDLOCKUP_DETECTOR
+
+# ifdef CONFIG_SMP
+int __read_mostly sysctl_hardlockup_all_cpu_backtrace;
+# endif /* CONFIG_SMP */
+
 /*
  * Should we panic when a soft-lockup or hard-lockup occurs:
  */
@@ -189,15 +194,9 @@ static inline void watchdog_hardlockup_kick(void) { }
  * softlockup watchdog threads start and stop. The arch must select the
  * SOFTLOCKUP_DETECTOR Kconfig.
  */
-void __weak watchdog_hardlockup_enable(unsigned int cpu)
-{
-	hardlockup_detector_perf_enable();
-}
+void __weak watchdog_hardlockup_enable(unsigned int cpu) {}
 
-void __weak watchdog_hardlockup_disable(unsigned int cpu)
-{
-	hardlockup_detector_perf_disable();
-}
+void __weak watchdog_hardlockup_disable(unsigned int cpu) {}
 
 /*
  * Watchdog-detector specific API.
@@ -208,7 +207,7 @@ void __weak watchdog_hardlockup_disable(unsigned int cpu)
  */
 int __weak __init watchdog_hardlockup_probe(void)
 {
-	return hardlockup_detector_perf_init();
+	return -ENODEV;
 }
 
 /**
@@ -248,7 +247,7 @@ static void lockup_detector_update_enable(void)
 	if (watchdog_hardlockup_available && watchdog_hardlockup_user_enabled)
 		watchdog_enabled |= WATCHDOG_HARDLOCKUP_ENABLED;
 	if (watchdog_softlockup_user_enabled)
-		watchdog_enabled |= WATCHDOG_SOFTOCKUP_ENABLED;
+		watchdog_enabled |= WATCHDOG_SOFTLOCKUP_ENABLED;
 }
 
 #ifdef CONFIG_SOFTLOCKUP_DETECTOR
@@ -266,7 +265,6 @@ static DEFINE_PER_CPU(unsigned long, watchdog_touch_ts);
 static DEFINE_PER_CPU(struct hrtimer, watchdog_hrtimer);
 static DEFINE_PER_CPU(bool, softlockup_touch_sync);
 static DEFINE_PER_CPU(bool, soft_watchdog_warn);
-static DEFINE_PER_CPU(unsigned long, soft_lockup_hrtimer_cnt);
 static DEFINE_PER_CPU(struct task_struct *, softlockup_task_ptr_saved);
 
 static unsigned long soft_lockup_nmi_warn;
@@ -443,8 +441,6 @@ static DEFINE_PER_CPU(struct cpu_stop_work, softlockup_stop_work);
  */
 static int softlockup_fn(void *data)
 {
-	__this_cpu_write(soft_lockup_hrtimer_cnt,
-			 __this_cpu_read(hrtimer_interrupts));
 	__touch_watchdog();
 	complete(this_cpu_ptr(&softlockup_completion));
 
@@ -766,12 +762,12 @@ static void proc_watchdog_update(void)
  *
  * caller             | table->data points to      | 'which'
  * -------------------|----------------------------|--------------------------
- * proc_watchdog      | watchdog_user_enabled      | NMI_WATCHDOG_ENABLED |
- *                    |                            | SOFT_WATCHDOG_ENABLED
+ * proc_watchdog      | watchdog_user_enabled      | WATCHDOG_HARDLOCKUP_ENABLED |
+ *                    |                            | WATCHDOG_SOFTLOCKUP_ENABLED
  * -------------------|----------------------------|--------------------------
- * proc_nmi_watchdog  | nmi_watchdog_user_enabled  | NMI_WATCHDOG_ENABLED
+ * proc_nmi_watchdog  | nmi_watchdog_user_enabled  | WATCHDOG_HARDLOCKUP_ENABLED
  * -------------------|----------------------------|--------------------------
- * proc_soft_watchdog | soft_watchdog_user_enabled | SOFT_WATCHDOG_ENABLED
+ * proc_soft_watchdog | soft_watchdog_user_enabled | WATCHDOG_SOFTLOCKUP_ENABLED
  */
 static int proc_watchdog_common(int which, struct ctl_table *table, int write,
 				void __user *buffer, size_t *lenp, loff_t *ppos)
@@ -803,7 +799,7 @@ static int proc_watchdog_common(int which, struct ctl_table *table, int write,
 int proc_watchdog(struct ctl_table *table, int write,
 		  void __user *buffer, size_t *lenp, loff_t *ppos)
 {
-	return proc_watchdog_common(NMI_WATCHDOG_ENABLED|SOFT_WATCHDOG_ENABLED,
+	return proc_watchdog_common(WATCHDOG_HARDLOCKUP_ENABLED | WATCHDOG_SOFTLOCKUP_ENABLED,
 				    table, write, buffer, lenp, ppos);
 }
 
@@ -813,9 +809,9 @@ int proc_watchdog(struct ctl_table *table, int write,
 int proc_nmi_watchdog(struct ctl_table *table, int write,
 		      void __user *buffer, size_t *lenp, loff_t *ppos)
 {
-	if (!nmi_watchdog_available && write)
+	if (!watchdog_hardlockup_available && write)
 		return -ENOTSUPP;
-	return proc_watchdog_common(NMI_WATCHDOG_ENABLED,
+	return proc_watchdog_common(WATCHDOG_HARDLOCKUP_ENABLED,
 				    table, write, buffer, lenp, ppos);
 }
 
@@ -825,7 +821,7 @@ int proc_nmi_watchdog(struct ctl_table *table, int write,
 int proc_soft_watchdog(struct ctl_table *table, int write,
 			void __user *buffer, size_t *lenp, loff_t *ppos)
 {
-	return proc_watchdog_common(SOFT_WATCHDOG_ENABLED,
+	return proc_watchdog_common(WATCHDOG_SOFTLOCKUP_ENABLED,
 				    table, write, buffer, lenp, ppos);
 }
 
@@ -936,6 +932,7 @@ void __init lockup_detector_init(void)
 		     housekeeping_cpumask(HK_FLAG_TIMER));
 
 	if (!watchdog_hardlockup_probe())
-		nmi_watchdog_available = true;
+		watchdog_hardlockup_available = true;
+
 	lockup_detector_setup();
 }
