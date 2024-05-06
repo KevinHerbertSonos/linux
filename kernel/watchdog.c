@@ -103,23 +103,6 @@ void watchdog_hardlockup_touch_cpu(unsigned int cpu)
 	smp_wmb();
 }
 
-static bool is_hardlockup(unsigned int cpu)
-{
-	int hrint = atomic_read(&per_cpu(hrtimer_interrupts, cpu));
-
-	if (per_cpu(hrtimer_interrupts_saved, cpu) == hrint)
-		return true;
-
-	/*
-	 * NOTE: we don't need any fancy atomic_t or READ_ONCE/WRITE_ONCE
-	 * for hrtimer_interrupts_saved. hrtimer_interrupts_saved is
-	 * written/read by a single CPU.
-	 */
-	per_cpu(hrtimer_interrupts_saved, cpu) = hrint;
-
-	return false;
-}
-
 static unsigned long watchdog_hardlockup_kick(void)
 {
 	return atomic_inc_return(raw_cpu_ptr(&hrtimer_interrupts));
