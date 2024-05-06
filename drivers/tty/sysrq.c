@@ -54,8 +54,6 @@
 #include <asm/ptrace.h>
 #include <asm/irq_regs.h>
 
-#include <trace/hooks/sysrqcrash.h>
-
 #ifdef CONFIG_SONOS_SECBOOT
 #include "mdp.h"
 #include "sonos_lock.h"
