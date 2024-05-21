@@ -460,7 +460,8 @@ static irqreturn_t earc_ddr_isr(int irq, void *data)
 		}
 
 		csb_change = earcrx_read_cs_iec958(p_earc->rx_dmac_map);
-		if (csb_change) {
+		// Do not look at CSB during noise periods
+		if (csb_change || p_earc->becoming_noise) {
 			p_earc->CSB_check_cnt = 0;
 			mute = true;	// assume mute bit is asserted while CSB is changing
 		}
