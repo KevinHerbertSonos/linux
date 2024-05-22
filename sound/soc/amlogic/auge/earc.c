@@ -1579,6 +1579,8 @@ static int earc_dai_startup(struct snd_pcm_substream *substream,
 		snd_pcm_hw_constraint_step(substream->runtime, 0,
 						SNDRV_PCM_HW_PARAM_BUFFER_BYTES,
 						IEC_FRAMES_SIZE_BYTES);
+		snd_pcm_hw_constraint_integer(substream->runtime,
+						SNDRV_PCM_HW_PARAM_PERIODS);
 		timer_setup(&p_earc->reset_timer, timer_func, 0);
 		p_earc->CSB_check_cnt = 0;
 	}
