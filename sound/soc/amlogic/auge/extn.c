@@ -259,6 +259,14 @@ static int extn_open(struct snd_pcm_substream *substream)
 			dev_err(dev, "failed to claim from ddr\n");
 			goto err_ddr;
 		}
+
+		ret = aml_audio_request_frddr_irq(p_extn->fddr,
+			dev, extn_ddr_isr, substream);
+		if (ret) {
+			dev_err(dev, "failed to request frddr irq\n");
+			goto err_ddr;
+		}
+
 	} else {
 		p_extn->tddr = aml_audio_register_toddr(dev,
 			extn_ddr_isr, substream);

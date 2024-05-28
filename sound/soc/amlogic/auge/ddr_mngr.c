@@ -1181,7 +1181,7 @@ static struct frddr *register_frddr_l(struct device *dev,
 	irq_handler_t handler, void *data, bool rvd_dst)
 {
 	struct frddr *from;
-	int i, ret;
+	int i;
 
 	for (i = 0; i < DDRMAX; i++) {
 		/* lookup reserved frddr */
@@ -1199,14 +1199,6 @@ static struct frddr *register_frddr_l(struct device *dev,
 		return NULL;
 
 	from = &frddrs[i];
-
-	/* irqs request */
-	ret = request_irq(from->irq, handler,
-		0, dev_name(dev), data);
-	if (ret) {
-		dev_err(dev, "failed to claim irq %u\n", from->irq);
-		return NULL;
-	}
 	from->dev = dev;
 	from->in_use = true;
 	pr_info("frddrs[%d] registered by device %s\n", i, dev_name(dev));
@@ -1297,6 +1289,19 @@ int aml_audio_unregister_frddr(struct device *dev, void *data)
 	mutex_lock(&ddr_mutex);
 	ret = unregister_frddr_l(dev, data);
 	mutex_unlock(&ddr_mutex);
+	return ret;
+}
+
+int aml_audio_request_frddr_irq(struct frddr *from, struct device *dev,
+	irq_handler_t handler, void *data)
+{
+	int ret = -1;
+
+	/* irqs request */
+	ret = request_irq(from->irq, handler, 0, dev_name(dev), data);
+	if (ret)
+		dev_err(dev, "failed to claim frddr irq %u\n", from->irq);
+
 	return ret;
 }
 
