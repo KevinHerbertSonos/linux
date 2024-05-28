@@ -274,6 +274,8 @@ struct ddr_info {
 struct toddr *fetch_toddr_by_src(int toddr_src);
 struct toddr *aml_audio_register_toddr(struct device *dev,
 		irq_handler_t handler, void *data);
+int aml_audio_request_toddr_irq(struct toddr *to, struct device *dev,
+	irq_handler_t handler, void *data);
 int aml_audio_unregister_toddr(struct device *dev, void *data);
 void audio_toddr_irq_enable(struct toddr *to, bool en);
 int aml_toddr_set_buf(struct toddr *to, unsigned int start,
