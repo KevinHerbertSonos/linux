@@ -328,6 +328,8 @@ struct frddr *fetch_frddr_by_src(int frddr_src);
 
 struct frddr *aml_audio_register_frddr(struct device *dev,
 		irq_handler_t handler, void *data, bool rvd_dst);
+int aml_audio_request_frddr_irq(struct frddr *from, struct device *dev,
+	irq_handler_t handler, void *data);
 int aml_audio_unregister_frddr(struct device *dev, void *data);
 int aml_frddr_set_buf(struct frddr *fr, unsigned int start,
 			unsigned int end);

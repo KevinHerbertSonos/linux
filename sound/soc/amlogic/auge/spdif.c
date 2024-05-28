@@ -1241,6 +1241,14 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 			dev_err(dev, "failed to claim from ddr\n");
 			goto err_ddr;
 		}
+
+		ret = aml_audio_request_frddr_irq(p_spdif->fddr,
+			dev, aml_spdif_ddr_isr, substream);
+		if (ret) {
+			dev_err(dev, "failed to request frddr irq\n");
+			goto err_ddr;
+		}
+
 	} else {
 		p_spdif->tddr = aml_audio_register_toddr(dev,
 			aml_spdif_ddr_isr, substream);
@@ -1249,6 +1257,13 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 			/* Clear private data if registration fails. */
 			runtime->private_data = NULL;
 			dev_err(dev, "failed to claim to ddr\n");
+			goto err_ddr;
+		}
+
+		ret = aml_audio_request_toddr_irq(p_spdif->tddr,
+			dev, aml_spdif_ddr_isr, substream);
+		if (ret) {
+			dev_err(dev, "failed to request toddr irq\n");
 			goto err_ddr;
 		}
 
