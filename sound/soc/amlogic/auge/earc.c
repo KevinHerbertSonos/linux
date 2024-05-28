@@ -944,6 +944,14 @@ static int earc_open(struct snd_pcm_substream *substream)
 			dev_err(dev, "failed to claim frddr\n");
 			goto err_ddr;
 		}
+
+		ret = aml_audio_request_frddr_irq(p_earc->fddr,
+			dev, earc_ddr_isr, substream);
+		if (ret) {
+			dev_err(dev, "failed to request frddr irq\n");
+			goto err_ddr;
+		}
+
 		p_earc->earctx_on = true;
 	} else {
 		p_earc->earcrx_pointer = 0;
