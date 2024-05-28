@@ -570,6 +570,13 @@ static int aml_pdm_open(struct snd_pcm_substream *substream)
 		goto err_ddr;
 	}
 
+	ret = aml_audio_request_toddr_irq(p_pdm->tddr,
+		dev, aml_pdm_isr_handler, substream);
+	if (ret) {
+		dev_err(dev, "failed to request toddr irq\n");
+		goto err_ddr;
+	}
+
 	return 0;
 
 err_ddr:

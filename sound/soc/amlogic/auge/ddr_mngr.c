@@ -103,7 +103,7 @@ static struct toddr *register_toddr_l(struct device *dev,
 	irq_handler_t handler, void *data)
 {
 	struct toddr *to;
-	int i, ret;
+	int i;
 
 	/* lookup unused toddr */
 	for (i = 0; i < DDRMAX; i++) {
@@ -116,15 +116,6 @@ static struct toddr *register_toddr_l(struct device *dev,
 		return NULL;
 
 	to = &toddrs[i];
-
-	/* irqs request */
-	ret = request_irq(to->irq, handler,
-		0, dev_name(dev), data);
-	if (ret) {
-		dev_err(dev, "failed to claim irq %u\n", to->irq);
-		return NULL;
-	}
-
 	to->dev = dev;
 	to->in_use = true;
 	pr_debug("toddrs[%d] registered by device %s\n", i, dev_name(dev));
@@ -206,6 +197,20 @@ struct toddr *aml_audio_register_toddr(struct device *dev,
 	to = register_toddr_l(dev, handler, data);
 	mutex_unlock(&ddr_mutex);
 	return to;
+}
+
+int aml_audio_request_toddr_irq(struct toddr *to, struct device *dev,
+	irq_handler_t handler, void *data)
+{
+	int ret = -1;
+
+	/* irqs request */
+	ret = request_irq(to->irq, handler,
+		0, dev_name(dev), data);
+	if (ret)
+		dev_err(dev, "failed to claim irq %u\n", to->irq);
+
+	return ret;
 }
 
 int aml_audio_unregister_toddr(struct device *dev, void *data)

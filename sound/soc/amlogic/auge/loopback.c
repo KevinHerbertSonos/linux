@@ -245,6 +245,12 @@ static int loopback_open(struct snd_pcm_substream *ss)
 		goto err_ddr;
 	}
 
+	ret = aml_audio_request_toddr_irq(p_loopback->tddr, dev, loopback_ddr_isr, ss);
+	if (ret) {
+		dev_err(dev, "failed to request toddr irq\n");
+		goto err_ddr;
+	}
+
 	runtime->private_data = p_loopback;
 
 	return 0;

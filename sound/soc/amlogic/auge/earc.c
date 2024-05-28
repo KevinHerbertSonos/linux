@@ -954,6 +954,14 @@ static int earc_open(struct snd_pcm_substream *substream)
 			dev_err(dev, "failed to claim toddr\n");
 			goto err_ddr;
 		}
+
+		ret = aml_audio_request_toddr_irq(p_earc->tddr,
+			dev, earc_ddr_isr, substream);
+		if (ret) {
+			dev_err(dev, "failed to request toddr irq\n");
+			goto err_ddr;
+		}
+
 	}
 
 	return 0;
@@ -1051,13 +1059,12 @@ static snd_pcm_uframes_t earc_pointer(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct earc *p_earc = runtime->private_data;
-	unsigned int addr, start_addr;
+	unsigned int addr = runtime->dma_addr, start_addr = runtime->dma_addr;
 	snd_pcm_uframes_t frames;
 
-	start_addr = runtime->dma_addr;
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK && p_earc->fddr)
 		addr = aml_frddr_get_position(p_earc->fddr);
-	else
+	else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE && p_earc->tddr)
 		addr = aml_toddr_get_position(p_earc->tddr);
 
 	frames = bytes_to_frames(runtime, addr - start_addr);

@@ -1252,6 +1252,14 @@ static int aml_tdm_open(struct snd_pcm_substream *substream)
 			dev_err(dev, "failed to claim to ddr\n");
 			goto err_ddr;
 		}
+
+		ret = aml_audio_request_toddr_irq(p_tdm->tddr,
+			dev, aml_tdm_ddr_isr, substream);
+		if (ret) {
+			dev_err(dev, "failed to request toddr irq\n");
+			goto err_ddr;
+		}
+
 	}
 
 	return 0;

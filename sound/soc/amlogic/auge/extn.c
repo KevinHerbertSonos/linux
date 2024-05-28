@@ -268,6 +268,13 @@ static int extn_open(struct snd_pcm_substream *substream)
 			goto err_ddr;
 		}
 
+		ret = aml_audio_request_toddr_irq(p_extn->tddr,
+			dev, extn_ddr_isr, substream);
+		if (ret) {
+			dev_err(dev, "failed to request toddr irq\n");
+			goto err_ddr;
+		}
+
 		if (toddr_src_get() == FRHDMIRX) {
 			ret = request_irq(p_extn->irq_frhdmirx,
 					frhdmirx_isr, IRQF_SHARED,
