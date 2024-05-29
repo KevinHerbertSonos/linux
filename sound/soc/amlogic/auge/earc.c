@@ -641,8 +641,10 @@ static irqreturn_t rx_handler(int irq, void *data)
 
 static void reset_start_timer(struct earc *p_earc,int delay)
 {
-	mod_timer(&p_earc->reset_timer, jiffies + msecs_to_jiffies(delay));
-	dev_dbg(p_earc->dev, "reset_start_timer,%d\n", delay);
+	if (!timer_pending(&p_earc->reset_timer)) {
+		mod_timer(&p_earc->reset_timer, jiffies + msecs_to_jiffies(delay));
+		dev_dbg(p_earc->dev, "reset_start_timer,%d\n", delay);
+	}
 }
 
 static void reset_stop_timer(struct earc *p_earc)
