@@ -1428,9 +1428,6 @@ static int verify_namespace_is_imported(const struct load_info *info,
 
 static bool inherit_taint(struct module *mod, struct module *owner)
 {
-#ifdef CONFIG_SONOS_DISABLE_LICENSE_CHECK
-	return true;
-#endif
 	if (!owner || !test_bit(TAINT_PROPRIETARY_MODULE, &owner->taints))
 		return true;
 
@@ -3333,10 +3330,6 @@ static int move_module(struct module *mod, struct load_info *info)
 
 static int check_module_license_and_versions(struct module *mod)
 {
-#ifdef CONFIG_SONOS_DISABLE_LICENSE_CHECK
-	pr_err("%s: license checking disabled\n", __func__);
-	return 0;
-#else
 	int prev_taint = test_taint(TAINT_PROPRIETARY_MODULE);
 	/*
 	 * ndiswrapper is under GPL by itself, but loads proprietary modules.
@@ -3373,7 +3366,6 @@ static int check_module_license_and_versions(struct module *mod)
 	}
 #endif
 	return 0;
-#endif
 }
 
 static void flush_module_icache(const struct module *mod)
