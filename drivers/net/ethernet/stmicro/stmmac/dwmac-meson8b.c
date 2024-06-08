@@ -455,6 +455,7 @@ extern int stmmac_pltfr_suspend(struct device *dev);
 static int aml_dwmac_suspend(struct device *dev)
 {
 	int ret = 0;
+	int mii_lpa = 0;
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct phy_device *phydev = ndev->phydev;
 
@@ -464,13 +465,15 @@ static int aml_dwmac_suspend(struct device *dev)
 		backup_adv = 0;
 		if (phydev->wol_switch_from_user) {
 			if (phydev->link) {
-				if (phydev->speed != SPEED_10) {
-					/*phy is 100M, change to 10M*/
+				mii_lpa = phy_read(phydev, MII_LPA);
+
+				if ((mii_lpa & LPA_10FULL) && phydev->speed != SPEED_10) {
+					/* partner can do 10M, change to 10M*/
 					pr_info("link 100M -> 10M\n");
 					backup_adv = phy_read(phydev, MII_ADVERTISE);
 					phy_write(phydev, MII_ADVERTISE, 0x61);
 					genphy_restart_aneg(phydev);
-					msleep(3000);
+					mdelay(2500);
 				}
 				/*phy is linkup, wol need on*/
 				mac_wol_enable = 1;
