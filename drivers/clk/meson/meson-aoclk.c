@@ -41,6 +41,9 @@ int meson_aoclkc_probe(struct platform_device *pdev)
 	struct device_node *np;
 	struct regmap *regmap;
 	int ret, clkid;
+	int ao_32k_ignore_unused =
+		of_property_read_bool(pdev->dev.of_node,
+				      "ao-32k-ignore-unused");
 
 	data = (struct meson_aoclk_data *) of_device_get_match_data(dev);
 	if (!data)
@@ -79,7 +82,33 @@ int meson_aoclkc_probe(struct platform_device *pdev)
 		if (!data->hw_clks.hws[clkid])
 			continue;
 
-		ret = devm_clk_hw_register(dev, data->hw_clks.hws[clkid]);
+		/*
+		 * Per Amlogic, 32k_by_oscin_pre and 32k_by_oscin_clk
+		 * are required to remain enabled for proper scheduling of
+		 * tasks by FreeRTOS on the m4.  From Linux's perspective,
+		 * however, these clocks appear to be unused.
+		 *
+		 * Linux's default behavior is to disable unused clocks
+		 * after all driver probes have completed.  Add a device
+		 * tree property ao-32k-ignore-unused that allows us to
+		 * specify that related clocks should remain enabled.
+		 */
+		if (ao_32k_ignore_unused) {
+			if (!strcmp("g12a_ao_32k_by_oscin_pre",
+				    data->hw_data->hws[clkid]->init->name)) {
+				((struct clk_init_data *)
+				 data->hw_data->hws[clkid]->init)->flags |=
+							CLK_IGNORE_UNUSED;
+			}
+			if (!strcmp("g12a_ao_32k_by_oscin",
+				    data->hw_data->hws[clkid]->init->name)) {
+				((struct clk_init_data *)
+				 data->hw_data->hws[clkid]->init)->flags |=
+							CLK_IGNORE_UNUSED;
+			}
+		}
+
+		ret = devm_clk_hw_register(dev, data->hw_data->hws[clkid]);
 		if (ret) {
 			dev_err(dev, "Clock registration failed\n");
 			return ret;
