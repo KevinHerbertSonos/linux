@@ -135,5 +135,11 @@ int devm_mbox_controller_register(struct device *dev,
 				  struct mbox_controller *mbox);
 void devm_mbox_controller_unregister(struct device *dev,
 				     struct mbox_controller *mbox);
+#ifdef CONFIG_AMLOGIC_MODIFY
+int aml_mbox_receive_callback(int cmd, void *data, uint32_t size);
+int aml_mbox_receive_client_register(u32 cmd,
+				     void *(*handler)(void *, uint32_t size));
+void aml_mbox_receive_client_unregister(uint32_t cmd);
+#endif
 
 #endif /* __MAILBOX_CONTROLLER_H */

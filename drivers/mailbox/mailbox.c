@@ -23,6 +23,16 @@
 static LIST_HEAD(mbox_cons);
 static DEFINE_MUTEX(con_mutex);
 
+#ifdef CONFIG_AMLOGIC_MODIFY
+static LIST_HEAD(aml_mbox_list);
+static DEFINE_SPINLOCK(aml_mbox_spin);
+struct aml_mbox_client {
+	u32 cmd;
+	void *(*handler)(void *data, uint32_t size);
+	struct list_head node;
+};
+#endif
+
 static int add_to_rbuf(struct mbox_chan *chan, void *mssg)
 {
 	int idx;
@@ -614,3 +624,59 @@ void devm_mbox_controller_unregister(struct device *dev, struct mbox_controller 
 			       devm_mbox_controller_match, mbox));
 }
 EXPORT_SYMBOL_GPL(devm_mbox_controller_unregister);
+
+#ifdef CONFIG_AMLOGIC_MODIFY
+int aml_mbox_receive_client_register(u32 cmd,
+				     void *(*handler)(void *, uint32_t size))
+{
+	struct aml_mbox_client *aml_client;
+	unsigned long flags;
+
+	aml_client = kzalloc(sizeof(*aml_client), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(aml_client))
+		return -ENOMEM;
+	aml_client->cmd = cmd;
+	aml_client->handler = handler;
+	spin_lock_irqsave(&aml_mbox_spin, flags);
+	list_add_tail(&aml_client->node, &aml_mbox_list);
+	spin_unlock_irqrestore(&aml_mbox_spin, flags);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(aml_mbox_receive_client_register);
+
+void aml_mbox_receive_client_unregister(uint32_t cmd)
+{
+	struct aml_mbox_client *aml_client;
+	unsigned long flags;
+
+	spin_lock_irqsave(&aml_mbox_spin, flags);
+	list_for_each_entry(aml_client, &mbox_cons, node) {
+		if (aml_client->cmd == cmd) {
+			list_del(&aml_client->node);
+			kfree(aml_client);
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&aml_mbox_spin, flags);
+}
+EXPORT_SYMBOL_GPL(aml_mbox_receive_client_unregister);
+
+int aml_mbox_receive_callback(int cmd, void *data, uint32_t size)
+{
+	struct aml_mbox_client *aml_client;
+	unsigned long flags;
+
+	spin_lock_irqsave(&aml_mbox_spin, flags);
+	list_for_each_entry(aml_client, &aml_mbox_list, node) {
+		if (aml_client->cmd == cmd) {
+			if (aml_client->handler)
+				aml_client->handler(data, size);
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&aml_mbox_spin, flags);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(aml_mbox_receive_callback);
+#endif
