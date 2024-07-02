@@ -182,16 +182,9 @@
 		};
 	};
 
-	mfh: mfh {
-		compatible = "amlogic, mfh";
-		#address-cells = <2>;
-		#size-cells = <2>;
-		memory-region-configed = <0>;
-		power-domain-configed = <0>;
-		clock-configed = <0>;
-		mfh-cnt = <1>;
-		mfh-addr-offset = <0x40000>;
-		mfh-name = "mfha","mfhb";
+	bl40: bl40 {
+		compatible = "amlogic, bl40-bootup";
+		status = "disabled";
 	};
 
 	amlogic_unifykey: unifykey{

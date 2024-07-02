@@ -13,6 +13,7 @@
 #define CHANNEL_LOW_PRIORITY	"cpu_to_scp_low"
 #define CHANNEL_HIGH_PRIORITY	"cpu_to_scp_high"
 
+extern struct device *the_scpi_device;
 extern u32 num_scp_chans;
 extern u32 send_listen_chans;
 

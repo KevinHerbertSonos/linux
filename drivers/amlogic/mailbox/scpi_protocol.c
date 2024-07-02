@@ -133,7 +133,7 @@ static int high_priority_cmds[] = {
 
 static int bl4_cmds[] = {
 	SCPI_CMD_BL4_SEND,
-	SCPI_CMD_BL4_LISTEN,
+	SCPI_CMD_BL4_GET,
 };
 
 enum c_chan_t {
@@ -574,7 +574,9 @@ static int scpi_execute_cmd(struct scpi_data_buf *scpi_buf)
 							  data->tx_size);
 			else if (high_priority &&
 				 (num_scp_chans != CHANNEL_MAX))
-				data->cmd = data->tx_size;
+				data->cmd = PACK_SCPI_CMD(data->cmd,
+							  scpi_buf->client_id,
+							  data->tx_size);
 			else
 				return -EINVAL;
 		} else {
@@ -591,7 +593,6 @@ static int scpi_execute_cmd(struct scpi_data_buf *scpi_buf)
 					c_chan = C_AOCPU_PL;
 					txsize = data->tx_size + MBOX_PL_HEAD_SIZE;
 				}
-
 				scpi_buf->channel = SCPI_AOCPU;
 				if (scpi_buf->async != ASYNC_CMD_TAG &&
 				    scpi_buf->async != SYNC_CMD_TAG)
@@ -1179,14 +1180,14 @@ int scpi_unlock_bl40(void)
 }
 EXPORT_SYMBOL(scpi_unlock_bl40);
 
-int scpi_send_bl40(unsigned int cmd, struct bl40_msg_buf *bl40_buf)
+int scpi_send_bl40(unsigned int cmd, void *data, uint32_t size)
 {
 	struct scpi_data_buf sdata;
 	struct mhu_data_buf mdata;
 
 	SCPI_SETUP_DBUF_SIZE(sdata, mdata, SCPI_CL_NONE,
-			     cmd, bl40_buf->buf, bl40_buf->size,
-			     bl40_buf->buf, sizeof(bl40_buf->buf));
+			     cmd, data, size,
+			     data, size);
 	return scpi_execute_cmd(&sdata);
 }
 

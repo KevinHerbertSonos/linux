@@ -7,6 +7,8 @@
 #define _SCPI_PROTOCOL_H_
 #include <linux/types.h>
 
+#define BL40_BUF_SIZE	256
+
 enum scpi_client_id {
 	SCPI_CL_NONE,
 	SCPI_CL_CLOCKS,
@@ -81,8 +83,8 @@ enum scpi_std_cmd {
 	SCPI_CMD_GET_CEC_AS_MSG		= 0xBC,
 	SCPI_CMD_BL4_WAIT_UNLOCK	= 0xD6,
 	SCPI_CMD_BL4_SEND		= 0xD7,
-	SCPI_CMD_BL4_LISTEN		= 0xD8,
 	SCPI_CMD_LEDS_STATE		= 0xF7,
+	SCPI_CMD_BL4_GET		= 0xD8,
 	SCPI_CMD_PM_FREEZE		= 0xF9,
 	SCPI_CMD_COUNT
 };
@@ -113,7 +115,7 @@ struct scpi_dvfs_info {
 
 struct bl40_msg_buf {
 	int size;
-	char buf[512];
+	char buf[BL40_BUF_SIZE];
 } __packed;
 
 struct hifi4syslog {
@@ -146,7 +148,7 @@ u32 scpi_set_ethernet_wol(u32 flag);
 int scpi_get_cpuinfo(enum scpi_get_pfm_type type, u32 *freq, u32 *vol);
 int scpi_init_dsp_cfg0(u32 id, u32 addr, u32 cfg0);
 int scpi_unlock_bl40(void);
-int scpi_send_bl40(unsigned int cmd, struct bl40_msg_buf *bl40_buf);
+int scpi_send_bl40(unsigned int cmd, void *data, uint32_t size);
 
 enum scpi_chan {
 	SCPI_DSPA = 0, /* to dspa */

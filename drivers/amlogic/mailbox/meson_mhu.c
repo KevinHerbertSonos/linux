@@ -77,8 +77,13 @@ u32 isr_m4;
 #define RX_PAYLOAD(chan)	((chan) * PAYLOAD_OFFSET)
 #define TX_PAYLOAD(chan)	((chan) * PAYLOAD_OFFSET + PAYLOAD_MAX_SIZE)
 
-void bl40_rx_callback(struct mbox_client *cl, void *msg)
+void mbox_receive_callback(struct mbox_client *cl, void *msg)
 {
+	struct mhu_data_buf *data = (struct mhu_data_buf *)msg;
+
+	pr_debug("call %s\n", __func__);
+	aml_mbox_receive_callback(data->cmd, data->rx_buf,
+				  data->rx_size);
 }
 
 static irqreturn_t mbox_handler(int irq, void *p)
@@ -125,10 +130,10 @@ static irqreturn_t mbox_handler(int irq, void *p)
 			 * idx = 1 & to scp chans = 2 mailbox no to m4
 			 * mailbox chan low high all to m3, no need get size
 			 */
-				if (idx && num_scp_chans != CHANNEL_MAX)
-					data->rx_size =
-					readl(mbox_base + RX_STATUS(idx));
-
+				if (idx && num_scp_chans != CHANNEL_MAX) {
+					data->rx_size = status >> 20;
+					data->cmd = status & 0xff;
+				}
 				memcpy_fromio(data->rx_buf,
 					      payload + RX_PAYLOAD(idx),
 					      data->rx_size);
@@ -313,7 +318,7 @@ static int mhu_probe(struct platform_device *pdev)
 		cl = devm_kzalloc(dev, sizeof(struct mbox_client),
 				  GFP_KERNEL);
 		cl->dev = dev;
-		cl->rx_callback = bl40_rx_callback;
+		cl->rx_callback = mbox_receive_callback;
 		l[idx].cl = cl;
 		chan =  &ctlr->channels[idx];
 		chan->data = devm_kzalloc(dev,

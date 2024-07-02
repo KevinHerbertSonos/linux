@@ -1,0 +1,14 @@
+#
+# Amlogic firmware configuration
+#
+menu "AMLOGIC firmware boot"
+
+config AMLOGIC_FIRMWARE
+	tristate "firmware bootup support"
+	default n
+	help
+		This option enables meson firmware driver which is
+		used to boot up and control m4. Enable it, if want
+		to use bl40_boot util to start up m4 or send data to m4.
+
+endmenu
