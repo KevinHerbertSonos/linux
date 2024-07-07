@@ -79,6 +79,11 @@ struct hdmitx_color_attr dv_ll_color_attr_list[] = {
 	{COLORSPACE_RESERVED, COLORDEPTH_RESERVED}
 };
 
+struct hdmitx_color_attr rgb_8bit_color_attr_list[] = {
+	{COLORSPACE_RGB444, 8}, //"rgb,8bit"
+	{COLORSPACE_RESERVED, COLORDEPTH_RESERVED}
+};
+
 /* this is prior selected list for 8k */
 struct hdmitx_color_attr color_8k_attr_list[] = {
 	{COLORSPACE_YUV420, 8}, //"420,8bit"
@@ -220,6 +225,9 @@ static struct hdmitx_color_attr *meson_hdmitx_get_candidate_attr_list
 	} else {
 		attr_list = other_color_attr_list;
 	}
+
+	/* Always return as rgb,8bit */
+	attr_list = rgb_8bit_color_attr_list;
 
 	return attr_list;
 }
