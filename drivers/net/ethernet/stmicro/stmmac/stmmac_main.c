@@ -4172,6 +4172,84 @@ static int stmmac_dma_cap_show(struct seq_file *seq, void *v)
 }
 DEFINE_SHOW_ATTRIBUTE(stmmac_dma_cap);
 
+/* Use network device events to rename debugfs file entries.
+ */
+static int stmmac_device_event(struct notifier_block *unused,
+			       unsigned long event, void *ptr)
+{
+	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+	struct stmmac_priv *priv = netdev_priv(dev);
+
+	if (dev->netdev_ops != &stmmac_netdev_ops)
+		goto done;
+
+	switch (event) {
+	case NETDEV_CHANGENAME:
+		if (priv->dbgfs_dir)
+			priv->dbgfs_dir = debugfs_rename(stmmac_fs_dir,
+							 priv->dbgfs_dir,
+							 stmmac_fs_dir,
+							 dev->name);
+		break;
+	}
+done:
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block stmmac_notifier = {
+	.notifier_call = stmmac_device_event,
+};
+
+
+static unsigned long riwt_val = 1;
+
+static int riwt_show(struct seq_file *seq, void *v)
+{
+	seq_printf(seq, "%d\n", (int)riwt_val);
+
+	return 0;
+}
+
+static int riwt_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, riwt_show, file_inode(filp)->i_private);
+}
+
+static ssize_t riwt_write(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos)
+{
+	struct seq_file *seq = file->private_data;
+	struct net_device *dev = seq->private;
+	struct stmmac_priv *priv = netdev_priv(dev);
+	int ret;
+
+	if (count <= 1)
+		return -EINVAL;
+
+	ret = kstrtoul_from_user(ubuf, count, 10, &riwt_val);
+	if (ret)
+		return ret;
+
+	if (riwt_val == 0) {
+		priv->use_riwt = 0;
+	} else if (riwt_val == 1) {
+		priv->use_riwt = 1;
+	}
+	stmmac_global_err(priv);
+
+	*ppos += count;
+
+	return count;
+}
+
+static const struct file_operations riwt_fops = {
+		.owner   = THIS_MODULE,
+		.open    = riwt_open,
+		.read    = seq_read,
+		.write   = riwt_write,
+		.llseek  = seq_lseek,
+		.release = single_release,
+};
+
 static void stmmac_init_fs(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
@@ -4186,6 +4264,10 @@ static void stmmac_init_fs(struct net_device *dev)
 	/* Entry to report the DMA HW features */
 	debugfs_create_file("dma_cap", 0444, priv->dbgfs_dir, dev,
 			    &stmmac_dma_cap_fops);
+
+	debugfs_create_file("riwt", 0666, priv->dbgfs_dir, dev, &riwt_fops);
+
+	rtnl_unlock();
 }
 
 static void stmmac_exit_fs(struct net_device *dev)
