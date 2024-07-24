@@ -466,6 +466,13 @@ config SONOS_LINEIN
         help
           Support for Sonos line-in driver
 
+config SONOS_CABLE_GPIO_DETECT
+        tristate "Sonos GPIO cable detection"
+        depends on SONOS
+        default n
+        help
+          Support for Sonos GPIO cable detection driver
+
 config SONOS_BUTTONS
         tristate "Sonos Buttons"
         depends on SONOS
