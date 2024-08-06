@@ -473,7 +473,7 @@ static int aml_dwmac_suspend(struct device *dev)
 					backup_adv = phy_read(phydev, MII_ADVERTISE);
 					phy_write(phydev, MII_ADVERTISE, 0x61);
 					genphy_restart_aneg(phydev);
-					mdelay(2500);
+					msleep(2500);
 				}
 				/*phy is linkup, wol need on*/
 				mac_wol_enable = 1;
@@ -527,6 +527,7 @@ static int aml_dwmac_resume(struct device *dev)
 		if (backup_adv && phydev) {
 			phy_write(phydev, MII_ADVERTISE, backup_adv);
 			genphy_restart_aneg(phydev);
+			msleep(2500);
 			backup_adv = 0;
 		}
 
