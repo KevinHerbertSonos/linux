@@ -9,6 +9,9 @@
 
 #define BL40_BUF_SIZE	256
 
+#define SCPI_ACK_OK     0x1
+#define SCPI_ACK_FAIL   0x2
+
 enum scpi_client_id {
 	SCPI_CL_NONE,
 	SCPI_CL_CLOCKS,
