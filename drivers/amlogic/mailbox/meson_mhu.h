@@ -16,6 +16,7 @@
 extern struct device *the_scpi_device;
 extern u32 num_scp_chans;
 extern u32 send_listen_chans;
+extern u32 isr_send;
 
 int __init aml_mhu_init(void);
 void aml_mhu_exit(void);
