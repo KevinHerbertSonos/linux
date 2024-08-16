@@ -3,6 +3,8 @@
  * Copyright (c) 2019 Amlogic, Inc. All rights reserved.
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/err.h>
 #include <linux/export.h>
 #include <linux/kernel.h>
@@ -26,8 +28,6 @@
 #define MBSIZE_SHIFT			16
 #define MBSIZE_MASK			0x1ff
 #define MBCMD_MASK			0xffff
-#define ACK_OK				0x1
-#define ACK_FAIL			0x2
 
 struct device *mhu_device;
 struct device *mhu_fifo_device;
@@ -396,7 +396,7 @@ int send_scpi_cmd(struct scpi_data_buf *scpi_buf,
 	case C_DSPA_FIFO:
 	case C_DSPB_FIFO:
 		status = *(u32 *)(data->rx_buf);
-		if (status == ACK_OK) {
+		if (status == SCPI_ACK_OK) {
 			if (rx_buf)
 				memcpy(rx_buf, (data->rx_buf) + MBOX_HEAD_SIZE,
 					(data->rx_size - MBOX_HEAD_SIZE));
@@ -408,7 +408,7 @@ int send_scpi_cmd(struct scpi_data_buf *scpi_buf,
 	case C_AOCPU_FIFO:
 	case C_AOCPU_PL:
 		status = *(u32 *)(data->rx_buf);
-		if (status == ACK_OK) {
+		if (status == SCPI_ACK_OK) {
 			*(u32 *)(rx_buf) = SCPI_SUCCESS;
 			if (c_chan == C_AOCPU_PL)
 				plhead_len = MBOX_PL_HEAD_SIZE;
@@ -434,10 +434,10 @@ int send_scpi_cmd(struct scpi_data_buf *scpi_buf,
 			status = *(u32 *)(data->rx_buf);
 		} else {
 			plhead_len = MBOX_RESERVE_LEN;
-			status = ACK_OK;
+			status = SCPI_ACK_OK;
 		}
 
-		if (status == ACK_OK) {
+		if (status == SCPI_ACK_OK) {
 			/*need to check*/
 			memcpy(rx_buf, (data->rx_buf) + plhead_len,
 			       (data->rx_size - plhead_len));
@@ -450,6 +450,17 @@ int send_scpi_cmd(struct scpi_data_buf *scpi_buf,
 	break;
 	case C_AOCPU_OLD:
 		status = *(u32 *)(data->rx_buf); /* read first word */
+		/*  This mask returns non-zero only for the send-to-M4 channel which
+		 *	expects an ACK flag in the first word of the rx buffer after
+		 *	sending data. If this transaction is on that channel, check if the
+		 *	ACK was returned.
+		 */
+		if (BIT(chan_idx) & isr_send) {
+			if ((status & 0xFF) == SCPI_ACK_OK) // check first byte
+				status = SCPI_SUCCESS;
+			else
+				status = SCPI_ERR_DEVICE;
+		}
 	break;
 	}
 
@@ -1190,6 +1201,7 @@ int scpi_send_bl40(unsigned int cmd, void *data, uint32_t size)
 			     data, size);
 	return scpi_execute_cmd(&sdata);
 }
+EXPORT_SYMBOL(scpi_send_bl40);
 
 /* scpi send data api
  * use for send data to dsp/aocpu/secpu/cm3/cm4
