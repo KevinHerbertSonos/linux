@@ -269,6 +269,14 @@ config SONOS_LEDCTL_RPMSG
         help
           Support for Sonos LED control on platforms with access via rpmsg
 
+config SONOS_SERIAL_LEDCTL
+       tristate "Sonos Serial LED control driver"
+       default n
+       help
+         Support for Sonos Serial LED control module
+
+         The serial_ledctl module communicates with the S767 M4 coprocessor to control serial LEDs.
+
 config SONOS_ADP8863
         tristate "Sonos ADP8863"
         select SONOS_LEDCTL
