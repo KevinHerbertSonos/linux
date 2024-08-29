@@ -210,6 +210,7 @@ struct earc {
 	unsigned int prev_irq_cnt;
 	int earcrx_pointer;
 	u8 rx_latency;
+	int rx_state;
 	unsigned int CSB_check_cnt;
 };
 
@@ -692,19 +693,34 @@ static irqreturn_t earc_rx_isr(int irq, void *data)
 	if (p_earc->rx_status0 & INT_EARCRX_CMDC_DISC1)
 		dev_info(p_earc->dev, "EARCRX_CMDC_DISC1\n");
 	if (p_earc->rx_status0 & INT_EARCRX_CMDC_EARC) {
-		earcrx_cmdc_set_latency(p_earc->rx_cmdc_map, &p_earc->rx_latency);
 		earcrx_cmdc_set_cds(p_earc->rx_cmdc_map, p_earc->rx_cds_data);
 		earcrx_update_attend_event(p_earc,
 					   true, true);
-
+		p_earc->rx_state = 0;
 		dev_info(p_earc->dev, "EARCRX_CMDC_EARC\n");
 	}
 
 	if (p_earc->rx_status0 & INT_EARCRX_CMDC_LOSTHB)
 		dev_info(p_earc->dev, "EARCRX_CMDC_LOSTHB\n");
 
-	if (p_earc->rx_status0 & INT_EARCRX_CMDC_STATUS_CH)
-		dev_dbg(p_earc->dev, "EARCRX_CMDC_STATUS_CH\n");
+	if (p_earc->rx_status0 & INT_EARCRX_CMDC_STATUS_CH) {
+		int state = earcrx_cmdc_get_rx_stat_bits(p_earc->rx_cmdc_map);
+
+		dev_dbg(p_earc->dev,
+			"EARCRX_CMDC_STATUS_CH rx state: 0x%x, last state: 0x%x\n",
+			state, p_earc->rx_state);
+
+		/*
+		 * Check if CAP_CHNG bit[3] has been cleared.
+		 * If it was set in the previous rx state and is
+		 * now cleared, announce the latency to eARC TX.
+		 */
+		if (p_earc->rx_state & (0x1 << CAP_CHNG) && !(state & (0x1 << CAP_CHNG))) {
+			earcrx_cmdc_set_latency(p_earc->rx_cmdc_map,
+				&p_earc->rx_latency);
+		}
+		p_earc->rx_state = state;
+	}
 
 	if (p_earc->rx_dmac_clk_on) {
 		if (p_earc->rx_status1 & INT_EARCRX_ANA_RST_C_EARCRX_DIV2_HOLD_SET)
