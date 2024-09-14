@@ -749,7 +749,65 @@ static void meson_mmc_desc_chain_transfer(struct mmc_host *mmc, u32 cmd_cfg)
 	writel(start, host->regs + SD_EMMC_START);
 }
 
-static void meson_mmc_start_cmd(struct mmc_host *mmc, struct mmc_command *cmd)
+static void meson_mmc_desc_bounce_buf_transfer(struct mmc_host *mmc, u32 cmd_cfg,
+					  struct mmc_command *cmd)
+{
+	struct meson_host *host = mmc_priv(mmc);
+	struct sd_emmc_desc *desc = host->descs;
+	struct mmc_data *data = host->cmd->data;
+	u32 start, data_len;
+
+	if (data->flags & MMC_DATA_WRITE)
+		cmd_cfg |= CMD_CFG_DATA_WR;
+
+	if (data->blocks > 1) {
+		cmd_cfg |= CMD_CFG_BLOCK_MODE;
+		meson_mmc_set_blksz(mmc, data->blksz);
+		data_len = data->blocks;
+	} else {
+		data_len = data->blksz;
+	}
+
+	if (mmc_op_multi(cmd->opcode) && cmd->mrq->sbc) {
+		desc->cmd_cfg = 0;
+		desc->cmd_cfg |= FIELD_PREP(CMD_CFG_CMD_INDEX_MASK,
+					      MMC_SET_BLOCK_COUNT);
+		desc->cmd_cfg |= FIELD_PREP(CMD_CFG_TIMEOUT_MASK, 0xc);
+		desc->cmd_cfg |= CMD_CFG_OWNER;
+		desc->cmd_cfg |= CMD_CFG_RESP_NUM;
+		desc->cmd_arg = cmd->mrq->sbc->arg;
+		desc->cmd_resp = 0;
+		desc->cmd_data = 0;
+		desc++;
+	}
+
+	desc->cmd_cfg = cmd_cfg;
+	desc->cmd_cfg |= FIELD_PREP(CMD_CFG_LENGTH_MASK, data_len);
+	desc->cmd_arg = host->cmd->arg;
+	desc->cmd_resp = 0;
+	desc->cmd_data = host->bounce_dma_addr;
+
+	if (mmc_op_multi(cmd->opcode) && !cmd->mrq->sbc) {
+		desc++;
+		desc->cmd_cfg = 0;
+		desc->cmd_cfg |= FIELD_PREP(CMD_CFG_CMD_INDEX_MASK,
+				   MMC_STOP_TRANSMISSION);
+		desc->cmd_cfg |= FIELD_PREP(CMD_CFG_TIMEOUT_MASK, 0xc);
+		desc->cmd_cfg |= CMD_CFG_OWNER;
+		desc->cmd_cfg |= CMD_CFG_RESP_NUM;
+		desc->cmd_cfg |= CMD_CFG_R1B;
+		desc->cmd_arg = 0;
+		desc->cmd_resp = 0;
+		desc->cmd_data = 0;
+	}
+
+	desc->cmd_cfg |= CMD_CFG_END_OF_CHAIN;
+	dma_wmb(); /* ensure descriptor is written before kicked */
+	start = host->descs_dma_addr | START_DESC_BUSY;
+	writel(start, host->regs + SD_EMMC_START);
+}
+
+static int aml_cmd_invalid(struct mmc_host *mmc, struct mmc_request *mrq)
 {
 	struct meson_host *host = mmc_priv(mmc);
 	struct mmc_data *data = cmd->data;
@@ -798,6 +856,13 @@ static void meson_mmc_start_cmd(struct mmc_host *mmc, struct mmc_command *cmd)
 		}
 
 		cmd_data = host->bounce_dma_addr & CMD_DATA_MASK;
+		if (host->dram_access_quirk) {
+			meson_mmc_quirk_transfer(mmc, cmd_cfg, cmd);
+			return;
+		} else {
+			meson_mmc_desc_bounce_buf_transfer(mmc, cmd_cfg, cmd);
+			return;
+		}
 	} else {
 		/* Set timeout according to the setting value in ext_csd */
 		cmd_cfg |= FIELD_PREP(CMD_CFG_TIMEOUT_MASK,
