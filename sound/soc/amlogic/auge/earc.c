@@ -202,7 +202,6 @@ struct earc {
 	int suspend_clk_off;
 	bool resumed;
 	bool becoming_noise;
-	char *tmp_buf;
 	struct timer_list reset_timer;
 	int err_cnt;
 	struct timer_list timer;
@@ -1022,20 +1021,12 @@ static int earc_close(struct snd_pcm_substream *substream)
 static int earc_hw_params(struct snd_pcm_substream *substream,
 			 struct snd_pcm_hw_params *hw_params)
 {
-	struct snd_pcm_runtime *runtime = substream->runtime;
-	struct earc *p_earc = runtime->private_data;
-
-	p_earc->tmp_buf = kmalloc(params_buffer_bytes(hw_params), GFP_KERNEL);
 	return snd_pcm_lib_malloc_pages(substream,
 			params_buffer_bytes(hw_params));
 }
 
 static int earc_hw_free(struct snd_pcm_substream *substream)
 {
-	struct snd_pcm_runtime *runtime = substream->runtime;
-	struct earc *p_earc = runtime->private_data;
-
-	kfree(p_earc->tmp_buf);
 	snd_pcm_lib_free_pages(substream);
 
 	return 0;
@@ -1142,8 +1133,7 @@ static int aml_read_copy(struct snd_pcm_substream *substream,
 	struct earc *p_earc = runtime->private_data;
 
 	if (p_earc->becoming_noise || p_earc->rx_cs_mute) {
-		memset(p_earc->tmp_buf, 0, bytes);
-		if (copy_to_user((void __user *)buf, p_earc->tmp_buf, bytes))
+		if (clear_user((void __user *)buf, bytes))
 			return -EFAULT;
 		return 0;
 	}
