@@ -1973,6 +1973,15 @@ int earcrx_get_freq(struct snd_kcontrol *kcontrol,
 	if (p_earc->rx_dmac_clk_on) {
 		coding_type = earcrx_get_cs_fmt(p_earc->rx_dmac_map, type);
 		freq = earcrx_get_cs_freq(p_earc->rx_dmac_map, coding_type);
+
+		// Log warning w/ context if calculated rate is not a supported rate
+		if (!(snd_pcm_rate_to_rate_bit(freq) | EARC_RATES)) {
+			int csb[6];
+			int channels = earcrx_get_cs_channels(p_earc->rx_dmac_map, coding_type);
+			earcrx_get_cs_iec958(csb);
+			dev_warn_ratelimited(component->dev, "reporting invalid freq %u ch %u (%*ph)\n",
+					     freq, channels, 8, csb);
+		}
 	}
 	spin_unlock_irqrestore(&p_earc->rx_lock, flags);
 
