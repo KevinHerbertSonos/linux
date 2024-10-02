@@ -714,10 +714,9 @@ void sonos_netdev_change(struct net_bridge *br, struct net_device *dev,
 		struct net_bridge_port *p = pl->port;
 
 		/* No STP for leaf nodes, so no need to toggle */
-		//if ((p != NULL) && (p->br != NULL) && !(p->is_leaf)) {
 		if ((p != NULL) &&
 				(p->br != NULL) &&
-				(p->br->dev != NULL) &&
+				(virt_addr_valid(p->br->dev)) &&
 				(p->br->dev->name[0] == 'b') &&
 				(p->br->dev->name[1] == 'r') &&
 				!(p->is_leaf)) {
