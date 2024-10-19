@@ -1003,6 +1003,40 @@ void sonos_pass_frame_up(struct net_bridge *br, struct sk_buff *skb)
 {
 	struct net_device *indev;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 99)
+	if (atomic_read(&br->ip_convert_entry_count) != 0) {
+		struct iphdr *iph = NULL;
+		struct udphdr *udph = NULL;
+		if (eth_hdr(skb)->h_proto == htons(ETH_P_IP)) {
+			int total_offset = 0;
+			skb_reset_network_header(skb);
+
+			total_offset += sizeof(struct iphdr);
+			if (pskb_may_pull(skb, total_offset)) {
+				iph = ip_hdr(skb);
+				if (iph->protocol == IPPROTO_UDP) {
+					skb_set_transport_header(skb, (iph->ihl * 4));
+					total_offset += (iph->ihl * 4 - sizeof(struct iphdr) + sizeof(struct udphdr));
+					if (pskb_may_pull(skb, total_offset)) {
+						unsigned int ip_dest;
+						udph = udp_hdr(skb);
+						ip_dest = htonl(sonos_find_ip_convert_dest_ip(br, ntohs(udph->dest), ntohl(iph->saddr)));
+						if (ip_dest != 0) {
+							__wsum csum;
+							memcpy(&iph->daddr, &ip_dest, sizeof(iph->daddr));
+							udph->check = 0;
+							csum = csum_partial(skb_transport_header(skb), ntohs(udph->len), 0);
+							udph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, ntohs(udph->len),
+											IPPROTO_UDP, csum);
+							iph->check = 0;
+							iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
+						}
+					}
+				}
+			}
+		}
+	}
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 99) */
 	br->statistics.rx_packets++;
 	br->statistics.rx_bytes += skb->len;
 

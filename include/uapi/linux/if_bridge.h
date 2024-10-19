@@ -64,6 +64,9 @@
 #define BRCTL_ADD_UPLINK 34
 #define BRCTL_SET_BRIDGE_FORWARDING_STATE 99
 #define BRCTL_GET_STATS 35
+#define BRCTL_ADD_IP_CONVERT_ENTRY 36
+#define BRCTL_DEL_IP_CONVERT_ENTRY 37
+#define BRCTL_GET_IP_CONVERT_ENTRIES 38
 
 #define BR_STATE_DISABLED 0
 #define BR_STATE_LISTENING 1
@@ -146,6 +149,13 @@ struct __br_stats {
 	__u32 rx_bc_hit;
 
 	struct __br_bcmc_hit bcmc_history[BCMC_HIST_SIZE];
+};
+
+struct __ip_convert_entry {
+	unsigned short port;
+	unsigned short use_count;
+	unsigned int src_ip;
+	unsigned int dest_ip;
 };
 
 /* protocol numbers for packets carrying tunneled ethernet frames; this is

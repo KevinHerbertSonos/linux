@@ -19,6 +19,9 @@
 #include <linux/if_vlan.h>
 #include <linux/rhashtable.h>
 #include <linux/refcount.h>
+#if defined(CONFIG_SONOS)
+#include <linux/version.h>
+#endif
 
 #define BR_HASH_BITS 8
 #define BR_HASH_SIZE (1 << BR_HASH_BITS)
@@ -629,6 +632,15 @@ struct net_bridge_stats {
 	unsigned int    bcmc_index;
 	struct net_bridge_bcmc_hit bcmc_history[BR_BCMC_HIST_SIZE];
 };
+
+struct net_bridge_ip_convert_entry {
+	struct rcu_head rcu;
+	struct hlist_node node;
+	unsigned short port;
+	unsigned int src_ip;
+	unsigned int dest_ip;
+	atomic_t use_count;
+};
 #endif /* CONFIG_SONOS */
 
 struct net_bridge {
@@ -755,6 +767,11 @@ struct net_bridge {
 	unsigned long			dupip_start;
 #endif
 	struct net_bridge_stats		br_stats;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 99)
+	struct hlist_head		ip_convert_list;
+	spinlock_t			ip_convert_lock;
+	atomic_t			ip_convert_entry_count;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 99) */
 #endif /* CONFIG_SONOS */
 };
 

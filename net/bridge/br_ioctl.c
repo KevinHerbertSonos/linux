@@ -95,6 +95,43 @@ static int get_fdb_entries(struct net_bridge *br, void __user *userbuf,
 	return num;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 99)
+static int sonos_get_ip_convert_entries(struct net_bridge *br, void __user *userbuf, unsigned long num)
+{
+	struct __ip_convert_entry *buf, *to_entry;
+	struct net_bridge_ip_convert_entry *from_entry;
+	int copied_num = 0;
+	buf = (struct __ip_convert_entry *)kmalloc(num*sizeof(*buf), GFP_USER);
+	if (!buf) {
+		return -ENOMEM;
+	}
+	memset(buf, 0, num*sizeof(*buf));
+	to_entry = buf;
+
+	rcu_read_lock();
+	hlist_for_each_entry_rcu(from_entry, &br->ip_convert_list, node) {
+		to_entry->port = from_entry->port;
+		to_entry->use_count = atomic_read(&from_entry->use_count);
+		to_entry->src_ip = from_entry->src_ip;
+		to_entry->dest_ip = from_entry->dest_ip;
+		copied_num++;
+		to_entry++;
+		if (copied_num >= num) {
+			break;
+		}
+	}
+	rcu_read_unlock();
+	if (copied_num > 0) {
+		if (copy_to_user(userbuf, buf, copied_num*sizeof(struct __ip_convert_entry))) {
+			copied_num = -EFAULT;
+		}
+	}
+	kfree(buf);
+
+	return copied_num;
+}
+#endif
+
 /* called with RTNL */
 static int add_del_if(struct net_bridge *br, int ifindex, int isadd)
 {
@@ -403,6 +440,14 @@ int br_dev_siocdevprivate(struct net_device *dev, struct ifreq *rq,
 
 	case BRCTL_GET_STATS:
 		return sonos_get_stats(br, (void __user *)args[1]);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 99)
+	case BRCTL_ADD_IP_CONVERT_ENTRY:
+		return sonos_add_ip_convert_entry(br, args[1], args[2], args[3]);
+	case BRCTL_DEL_IP_CONVERT_ENTRY:
+		return sonos_del_ip_convert_entry(br, args[1], args[2]);
+	case BRCTL_GET_IP_CONVERT_ENTRIES:
+		return sonos_get_ip_convert_entries(br, (void __user *)args[1], args[2]);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 99) */
 #endif
 	}
 
