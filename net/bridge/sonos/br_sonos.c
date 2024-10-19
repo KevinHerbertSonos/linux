@@ -59,6 +59,9 @@ void sonos_del_br(struct net_bridge *br)
 	list_for_each_entry_safe(p, n, &br->leaf_list, list) {
 		br_sonos_del_nbp(p);
 	}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 99)
+	sonos_cleanup_ip_convert_entry(br);
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
 	cancel_delayed_work_sync(&br->gc_work);
@@ -104,6 +107,11 @@ static void sonos_init_bridge_dev(struct net_device *dev)
 	br->ageing_time = 60 * HZ;
 	br->mcast_ageing_time = 60 * HZ;
 	INIT_LIST_HEAD(&br->age_list);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 99)
+	INIT_HLIST_HEAD(&br->ip_convert_list);
+	spin_lock_init(&br->ip_convert_lock);
+	atomic_set(&br->ip_convert_entry_count, 0);
+#endif
 
 	br_stp_timer_init(br);
 	br_stats_init(br);
@@ -700,6 +708,98 @@ exit:
 
 	return ret;
 }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 99)
+struct net_bridge_ip_convert_entry *sonos_find_ip_convert_entry(struct net_bridge *br, unsigned short port,
+							    unsigned int src_ip)
+{
+	struct net_bridge_ip_convert_entry *entry = NULL;
+	hlist_for_each_entry_rcu(entry, &br->ip_convert_list, node) {
+		if (entry->port == port && entry->src_ip == src_ip) {
+			break;
+		}
+	}
+	return entry;
+}
+
+unsigned int sonos_find_ip_convert_dest_ip(struct net_bridge *br, unsigned short port, unsigned int src_ip)
+{
+	int addr = 0;
+	struct net_bridge_ip_convert_entry *entry = NULL;
+	rcu_read_lock();
+	entry = sonos_find_ip_convert_entry(br, port, src_ip);
+	if (entry) {
+		addr = entry->dest_ip;
+	}
+	rcu_read_unlock();
+	return addr;
+}
+
+int sonos_add_ip_convert_entry(struct net_bridge *br, unsigned short port,
+				unsigned int src_ip, unsigned int dest_ip)
+{
+	struct net_bridge_ip_convert_entry *entry;
+
+	rcu_read_lock();
+	entry = sonos_find_ip_convert_entry(br, port, src_ip);
+	spin_lock_bh(&br->ip_convert_lock);
+	if (!entry) {
+		entry = kmalloc(sizeof(*entry), GFP_ATOMIC);
+		if (entry) {
+			memset(entry, 0, sizeof(*entry));
+			atomic_inc(&br->ip_convert_entry_count);
+			entry->port = port;
+			entry->src_ip = src_ip;
+			entry->dest_ip = dest_ip;
+			hlist_add_head_rcu(&entry->node, &br->ip_convert_list);
+		} else {
+			spin_unlock_bh(&br->ip_convert_lock);
+			rcu_read_unlock();
+			printk("%s: failed to allocate memory\n", __func__);
+			return -ENOMEM;
+		}
+	} else {
+		/* Update addr field if the entry exists */
+		entry->dest_ip = dest_ip;
+	}
+	atomic_inc(&entry->use_count);
+	spin_unlock_bh(&br->ip_convert_lock);
+	rcu_read_unlock();
+	return 0;
+}
+
+int sonos_del_ip_convert_entry(struct net_bridge *br, unsigned short port, unsigned int src_ip)
+{
+	struct net_bridge_ip_convert_entry *entry;
+
+	rcu_read_lock();
+	spin_lock_bh(&br->ip_convert_lock);
+	entry = sonos_find_ip_convert_entry(br, port, src_ip);
+	if (entry && atomic_dec_and_test(&entry->use_count)) {
+		atomic_dec(&br->ip_convert_entry_count);
+		hlist_del_rcu(&entry->node);
+		kfree_rcu(entry, rcu);
+	}
+	spin_unlock_bh(&br->ip_convert_lock);
+	rcu_read_unlock();
+	return 0;
+}
+
+int sonos_cleanup_ip_convert_entry(struct net_bridge *br)
+{
+	struct net_bridge_ip_convert_entry *entry;
+
+	rcu_read_lock();
+	spin_lock_bh(&br->ip_convert_lock);
+	hlist_for_each_entry_rcu(entry, &br->ip_convert_list, node) {
+		hlist_del_rcu(&entry->node);
+		kfree_rcu(entry, rcu);
+	}
+	spin_unlock_bh(&br->ip_convert_lock);
+	rcu_read_unlock();
+	return 0;
+}
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 99) */
 
 void sonos_netdev_change(struct net_bridge *br, struct net_device *dev,
 			 struct net_bridge_port_list_node *pl)

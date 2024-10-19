@@ -75,6 +75,20 @@ extern int sonos_mod_port_dev(struct net_bridge *br, struct net_device *dev,
 
 extern int sonos_brctl_wrapper(struct net_bridge *br, unsigned long args[]);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 99)
+extern struct net_bridge_ip_convert_entry *sonos_find_ip_convert_entry(struct net_bridge *br, unsigned short port, unsigned int src_ip);
+
+extern unsigned int sonos_find_ip_convert_dest_ip(struct net_bridge *br, unsigned short port, unsigned int src_ip);
+
+extern int sonos_add_ip_convert_entry(struct net_bridge *br, unsigned short port,
+				      unsigned int src_ip, unsigned int dest_ip);
+
+extern int sonos_del_ip_convert_entry(struct net_bridge *br, unsigned short port,
+				      unsigned int src_ip);
+
+extern int sonos_cleanup_ip_convert_entry(struct net_bridge *br);
+#endif
+
 extern void sonos_netdev_change(struct net_bridge *br, struct net_device *dev,
 				struct net_bridge_port_list_node *pl);
 
