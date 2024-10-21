@@ -147,6 +147,8 @@ void earcrx_cmdc_arc_connect(struct regmap *cmdc_map, bool init)
 				 0x1 << 26 | /* arc_terminated */
 				 0x0 << 25   /* arc_enable */
 				);
+
+	mmio_update_bits(cmdc_map, EARC_RX_CMDC_VSM_CTRL4, 0xfffff << 12, 0xaa << 12);
 }
 
 void set_spdif_to_arc_hpd_status(struct regmap *cmdc_map, int st)
