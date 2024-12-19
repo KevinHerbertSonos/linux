@@ -41,7 +41,14 @@ void br_init_port(struct net_bridge_port *p)
 #endif
 	p->port_id = br_make_port_id(p->priority, p->port_no);
 	br_become_designated_port(p);
+#if defined(CONFIG_SONOS) /* SONOS SWPBL-235146 */
+	if (!p->br->uplink_mode && p->br->stp_enabled == BR_NO_STP)
+		br_set_state(p, BR_STATE_FORWARDING);
+	else
+		br_set_state(p, BR_STATE_BLOCKING);
+#else
 	br_set_state(p, BR_STATE_BLOCKING);
+#endif
 	p->topology_change_ack = 0;
 	p->config_pending = 0;
 #if defined(CONFIG_SONOS) /* SONOS SWPBL-70338 */
