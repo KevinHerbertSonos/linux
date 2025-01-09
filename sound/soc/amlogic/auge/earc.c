@@ -51,6 +51,9 @@
 
 #define EARCRX_DEFAULT_LATENCY 0
 
+/* Minimum time (in ms) to wait before unmuting after a format change */
+#define EARCRX_UNMUTE_DELAY_MS 100
+
 /*
  * IEC958 controller(mixer) functions
  *
@@ -211,6 +214,11 @@ struct earc {
 	u8 rx_latency;
 	int rx_state;
 	unsigned int CSB_check_cnt;
+
+	/* control rx unmute work */
+	struct delayed_work rx_unmute_work;
+	bool unmute_scheduled;
+	spinlock_t rx_unmute;  /* spinlock for synchronizing unmute work */
 };
 
 static struct earc *s_earc;
@@ -419,6 +427,23 @@ static void earcrx_fast_reset(struct snd_pcm_substream *substream)
 	pr_info("earcrx_finish %s\n", __func__);
 }
 
+static void rx_unmute_work_func(struct work_struct *p_work)
+{
+	struct earc *p_earc = container_of(to_delayed_work(p_work),
+			struct earc, rx_unmute_work);
+	unsigned long flags;
+
+	spin_lock_irqsave(&p_earc->rx_unmute, flags);
+	if (p_earc->unmute_scheduled) {
+		p_earc->rx_cs_mute = false;
+		mmio_update_bits(p_earc->rx_dmac_map,
+				EARCRX_ERR_CORRECT_CTRL0,
+				0x3,
+				0x0); /* EARCRX_ERR_CORRECT_CTRL0 force mode disable */
+	}
+	spin_unlock_irqrestore(&p_earc->rx_unmute, flags);
+}
+
 static irqreturn_t earc_ddr_isr(int irq, void *data)
 {
 	struct snd_pcm_substream *substream =
@@ -443,6 +468,7 @@ static irqreturn_t earc_ddr_isr(int irq, void *data)
 		char buf_val, buf_val1;
 		bool csb_change;
 		bool mute = false;
+		unsigned long flags;
 
 		buf_val = *hwbuf; // Z preamble
 		buf_val1 = *(hwbuf + 4); // Y preamble
@@ -482,17 +508,34 @@ static irqreturn_t earc_ddr_isr(int irq, void *data)
 			}
 		}
 
-		if (p_earc->rx_cs_mute != mute) {
-			dev_dbg(p_earc->dev, "mute change %d\n", mute);
-			p_earc->rx_cs_mute = mute;
-			if (!mute) {
-				mmio_update_bits(p_earc->rx_dmac_map,
-				EARCRX_ERR_CORRECT_CTRL0,
-				0x3,
-				0x0); /* EARCRX_ERR_CORRECT_CTRL0 force mode disable */
+		spin_lock_irqsave(&p_earc->rx_unmute, flags);
+		if (mute) {
+			/*
+			 * Cancel any pending unmute work blindly when mute is triggered.
+			 * Note: In rare cases, cancel_delayed_work() may not cancel the work
+			 * if the callback function is already running. During such cases, the
+			 * ISR sets mute, but the work callback function may still unmute before
+			 * it exits. To address this, a spinlock is introduced to ensure proper
+			 * synchronization between canceling delayed work and any already scheduled
+			 * unmute work.
+			 */
+			p_earc->unmute_scheduled = false;
+			cancel_delayed_work(&p_earc->rx_unmute_work);
+
+			p_earc->rx_cs_mute = true;
+		} else {
+			/* Schedule unmute work only if it is muted and no unmute work is pending */
+			if (p_earc->rx_cs_mute) {
+				if (!delayed_work_pending(&p_earc->rx_unmute_work)) {
+					schedule_delayed_work(&p_earc->rx_unmute_work,
+							msecs_to_jiffies(EARCRX_UNMUTE_DELAY_MS));
+					p_earc->unmute_scheduled = true;
+				}
 			}
 		}
+		spin_unlock_irqrestore(&p_earc->rx_unmute, flags);
 	}
+
 	snd_pcm_period_elapsed(substream);
 
 	return IRQ_HANDLED;
@@ -3313,6 +3356,7 @@ static int earc_platform_probe(struct platform_device *pdev)
 		INIT_WORK(&p_earc->work, earc_work_func);
 		INIT_WORK(&p_earc->rx_dmac_int_work, valid_auto_work_func);
 		INIT_DELAYED_WORK(&p_earc->rx_format_change_work, rx_format_work_func);
+		INIT_DELAYED_WORK(&p_earc->rx_unmute_work, rx_unmute_work_func);
 	}
 
 	if (!IS_ERR(p_earc->rx_top_map))
