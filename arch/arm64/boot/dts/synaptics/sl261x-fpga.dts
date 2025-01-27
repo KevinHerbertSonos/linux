@@ -1,0 +1,94 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2024 Synaptics Incorporated
+ *
+ * Author: Jisheng Zhang <jszhang@kernel.org>
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+#include "sl261x.dtsi"
+
+/ {
+	model = "Synaptics SL261X FPGA";
+	compatible = "syna,sl261x-fpga", "syna,sl261x";
+
+	chosen {
+		bootargs = "maxcpus=1 earlycon";
+		stdout-path = "serial0:57600n8";
+		linux,initrd-start = <0x08000000>;
+		linux,initrd-end = <0x0805a9ec>;
+	};
+
+	memory {
+		device_type = "memory";
+		reg = <0 0x1000000 0 0x3f000000>;
+	};
+};
+
+&pinctrl {
+	mdio_pmux: mdio-pmux {
+		groups = "GPIO31", "GPIO32";
+		function = "rgmii";
+	};
+
+	eth0_pmux: eth0-pmux {
+		groups = "GPIO33", "GPIO34", "GPIO37", "GPIO38", "GPIO41", "GPIO43", "GPIO45";
+		function = "rmii1";
+	};
+
+	sd0_pmux: sd0-pmux {
+		groups = "GPIO12", "GPIO22", "GPIO46", "GPIO47";
+		function = "sdio1";
+	};
+};
+
+&sm_pinctrl {
+	eth_phy0_pmux: eth_phy0-pmux {
+		groups = "SM_GPIO0";
+		function = "gpio";
+	};
+};
+
+&uart0 {
+	status = "okay";
+};
+
+&ethernet0 {
+	status = "okay";
+	pinctrl-0 = <&eth0_pmux>, <&mdio_pmux>, <&eth_phy0_pmux>;
+	pinctrl-names = "default";
+	phy-handle = <&ethernet_phy0>;
+	phy-mode = "rmii";
+	snps,clk-csr = <0>;
+	snps,reset-gpio = <&portc 0 GPIO_ACTIVE_LOW>;
+	snps,reset-delays-us = <0 10000 50000>;
+
+	mdio {
+		compatible = "snps,dwmac-mdio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		ethernet_phy0: ethernet-phy@0 {
+			reg = <0>;
+			max-speed = <100>;
+		};
+	};
+};
+
+&sdhci0 {
+	status = "okay";
+	no-1-8-v;
+};
+
+&sdhci1 {
+	status = "okay";
+	pinctrl-0 = <&sd0_pmux>;
+	pinctrl-names = "default";
+	broken-cd;
+	no-mmc;
+	no-sdio;
+	no-1-8-v;
+};
