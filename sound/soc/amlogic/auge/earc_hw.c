@@ -151,6 +151,25 @@ void earcrx_cmdc_arc_connect(struct regmap *cmdc_map, bool init)
 	mmio_update_bits(cmdc_map, EARC_RX_CMDC_VSM_CTRL4, 0xfffff << 12, 0xaa << 12);
 }
 
+void earcrx_cmdc_earc_mode(struct regmap *cmdc_map, bool enable)
+{
+	if (enable) {
+		mmio_update_bits(cmdc_map,
+				 EARC_RX_CMDC_VSM_CTRL0,
+				 0x1 << 31 | 0x7 << 28,
+				 0x1 << 31 | 0x1 << 28);
+		mmio_update_bits(cmdc_map,
+				 EARC_RX_CMDC_VSM_CTRL0,
+				 0xf << 28,
+				 0);
+	} else {
+		mmio_update_bits(cmdc_map,
+				 EARC_RX_CMDC_VSM_CTRL0,
+				 0x1 << 31 | 0x7 << 28,
+				 0x1 << 31 | 0x6 << 28);
+	}
+}
+
 void set_spdif_to_arc_hpd_status(struct regmap *cmdc_map, int st)
 {
 	//int val;

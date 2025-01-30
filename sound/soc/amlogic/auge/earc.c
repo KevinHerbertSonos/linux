@@ -189,6 +189,7 @@ struct earc {
 	unsigned int rx_status0;
 	unsigned int rx_status1;
 	bool tx_earc_mode;
+	bool rx_earc_mode;
 	bool tx_reset_hpd;
 	int tx_state;
 	u8 tx_latency;
@@ -214,6 +215,9 @@ struct earc {
 	u8 rx_latency;
 	int rx_state;
 	unsigned int CSB_check_cnt;
+	bool earcrx_timeout;
+	bool earcrx_songle_st;
+	struct work_struct rx_send_uevent;
 
 	/* control rx unmute work */
 	struct delayed_work rx_unmute_work;
@@ -555,11 +559,19 @@ struct snd_kcontrol *snd_ctl_find_name(struct snd_card *card, char *name)
 	return NULL;
 }
 
-static void earcrx_update_attend_event(struct earc *p_earc,
-				       bool is_earc, bool state)
+static void earcrx_notify_alsactl_event(struct earc *p_earc, char *name)
 {
 	struct snd_kcontrol *kcont;
 
+	dev_info(p_earc->dev, "HDMITX notify ALSA event: %s\n", name);
+	kcont = snd_ctl_find_name(p_earc->snd_card, name);
+	snd_ctl_notify(p_earc->snd_card, SNDRV_CTL_EVENT_MASK_VALUE,
+		&kcont->id);
+}
+
+static void earcrx_update_attend_event(struct earc *p_earc,
+				       bool is_earc, bool state)
+{
 	if (state) {
 		unsigned long flags;
 
@@ -588,10 +600,10 @@ static void earcrx_update_attend_event(struct earc *p_earc,
 		extcon_set_state_sync(p_earc->rx_edev,
 			EXTCON_EARCRX_ATNDTYP_EARC, state);
 	}
-	dev_info(p_earc->dev, "HDMITX notify ALSA of rx event\n");
-	kcont = snd_ctl_find_name(p_earc->snd_card, "eARC_RX attended type");
-	snd_ctl_notify(p_earc->snd_card, SNDRV_CTL_EVENT_MASK_VALUE,
-		&kcont->id);
+
+	if (!(!is_earc && state) && !p_earc->earcrx_songle_st)
+		earcrx_notify_alsactl_event(p_earc, "eARC_RX link state");
+
 }
 
 static void earcrx_pll_reset(struct earc *p_earc)
@@ -712,6 +724,7 @@ static irqreturn_t earc_rx_isr(int irq, void *data)
 	struct earc *p_earc = (struct earc *)data;
 
 	if (p_earc->rx_status0 & INT_EARCRX_CMDC_TIMEOUT) {
+		p_earc->earcrx_timeout = true;
 		earcrx_update_attend_event(p_earc,
 					   false, false);
 
@@ -719,12 +732,14 @@ static irqreturn_t earc_rx_isr(int irq, void *data)
 	}
 
 	if (p_earc->rx_status0 & INT_EARCRX_CMDC_IDLE2) {
+		p_earc->earcrx_timeout = true;
 		earcrx_update_attend_event(p_earc,
 					   false, true);
 
 		dev_info(p_earc->dev, "EARCRX_CMDC_IDLE2\n");
 	}
 	if (p_earc->rx_status0 & INT_EARCRX_CMDC_IDLE1) {
+		p_earc->earcrx_timeout = false;
 		earcrx_update_attend_event(p_earc,
 					   false, false);
 
@@ -735,6 +750,7 @@ static irqreturn_t earc_rx_isr(int irq, void *data)
 	if (p_earc->rx_status0 & INT_EARCRX_CMDC_DISC1)
 		dev_info(p_earc->dev, "EARCRX_CMDC_DISC1\n");
 	if (p_earc->rx_status0 & INT_EARCRX_CMDC_EARC) {
+		p_earc->earcrx_timeout = false;
 		earcrx_cmdc_set_cds(p_earc->rx_cmdc_map, p_earc->rx_cds_data);
 		earcrx_update_attend_event(p_earc,
 					   true, true);
@@ -1702,6 +1718,13 @@ static const char *const attended_type[] = {
 	"eARC"
 };
 
+static const char *const sonos_earcrx_link_states[] = {
+	"ARC_OffeARC",
+	"DISCONNECT",
+	"eARC",
+	"ARC"
+};
+
 static int ss_prepare(struct snd_pcm_substream *substream,
 			void *pfrddr,
 			int samesource_sel,
@@ -1797,6 +1820,49 @@ static int earcrx_set_attend_type(struct snd_kcontrol *kcontrol,
 		return 0;
 
 	/* only support set cmdc from idle to ARC */
+
+	return 0;
+}
+
+const struct soc_enum sonos_earcrx_link_states_enum =
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(sonos_earcrx_link_states),
+			sonos_earcrx_link_states);
+
+static int sonos_earcrx_get_link_state(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct earc *p_earc = dev_get_drvdata(component->dev);
+	enum attend_type type;
+	enum sonos_hdmi_earc_link state = HDMI_EARC_LINK_DISABLED;
+
+	if (!p_earc || IS_ERR(p_earc->rx_cmdc_map))
+		return 0;
+	type = earcrx_cmdc_get_attended_type(p_earc->rx_cmdc_map);
+
+	switch (type) {
+	case ATNDTYP_DISCNCT:
+		state = HDMI_EARC_LINK_OFFLINE;
+		break;
+	case ATNDTYP_ARC:
+		if (p_earc->earcrx_timeout)
+			state = HDMI_EARC_LINK_TIMEOUT;
+		else if (!p_earc->rx_earc_mode)
+			state = HDMI_EARC_LINK_DISABLED;
+		break;
+	case ATNDTYP_EARC:
+		state = HDMI_EARC_LINK_ONLINE;
+		break;
+	default:
+		break;
+	}
+
+	if (p_earc->earcrx_songle_st && !p_earc->rx_earc_mode)
+		state = HDMI_EARC_LINK_DISABLED;
+	else if (p_earc->earcrx_songle_st && p_earc->rx_earc_mode)
+		state = HDMI_EARC_LINK_OFFLINE;
+
+	ucontrol->value.integer.value[0] = state;
 
 	return 0;
 }
@@ -2342,6 +2408,45 @@ int earctx_earc_mode_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+int earcrx_earc_mode_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct earc *p_earc = dev_get_drvdata(component->dev);
+	int earc_mode = ucontrol->value.integer.value[0];
+
+	if (!p_earc || IS_ERR(p_earc->rx_cmdc_map) || p_earc->rx_earc_mode == earc_mode)
+		return 0;
+
+	p_earc->earcrx_timeout = false;
+	p_earc->rx_earc_mode = earc_mode;
+
+	if (p_earc->earcrx_songle_st) {
+		earcrx_notify_alsactl_event(p_earc, "eARC_RX link state");
+		return 0;
+	}
+
+	earcrx_cmdc_earc_mode(p_earc->rx_cmdc_map, earc_mode);
+
+	earcrx_notify_alsactl_event(p_earc, "eARC_RX link state");
+
+	return 0;
+}
+
+int earcrx_earc_mode_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct earc *p_earc = dev_get_drvdata(component->dev);
+
+	if (!p_earc)
+		return 0;
+
+	ucontrol->value.integer.value[0] = p_earc->rx_earc_mode;
+
+	return 0;
+}
+
 static int earcrx_get_iec958(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
@@ -2649,6 +2754,11 @@ static const struct snd_kcontrol_new earc_controls[] = {
 		     earctx_get_attend_type,
 		     earctx_set_attend_type),
 
+	SOC_ENUM_EXT("eARC_RX link state",
+		     sonos_earcrx_link_states_enum,
+		     sonos_earcrx_get_link_state,
+		     NULL),
+
 	SOC_SINGLE_EXT("eARC_RX Latency",
 			  0, 0, 255, 0,
 			  earcrx_get_latency,
@@ -2703,6 +2813,11 @@ static const struct snd_kcontrol_new earc_controls[] = {
 			    0,
 			    earctx_earc_mode_get,
 			    earctx_earc_mode_put),
+
+	SOC_SINGLE_BOOL_EXT("eARC_RX eARC Mode",
+			    0,
+			    earcrx_earc_mode_get,
+			    earcrx_earc_mode_put),
 
 	SOC_SINGLE_EXT("eARC_RX Audio Sample Frequency",
 		       0, 0, 384000, 0,
@@ -2966,11 +3081,22 @@ void earc_resume(void)
 	p_earc->resumed = true;
 }
 
+static void send_rx_uevent_work_func(struct work_struct *p_work)
+{
+	struct earc *p_earc = container_of(p_work, struct earc, rx_send_uevent);
+	enum attend_type type = earcrx_cmdc_get_attended_type(p_earc->rx_cmdc_map);
+
+	if (type == ATNDTYP_ARC)
+		earcrx_update_attend_event(p_earc, false, true);
+}
+
 void earc_hdmitx_hpdst(bool st, int enabled)
 {
 	struct earc *p_earc = s_earc;
+	p_earc->earcrx_songle_st = false;
 
 	if(enabled != 2){
+		p_earc->earcrx_songle_st = true;
 		set_spdif_to_arc_hpd_status(p_earc->rx_cmdc_map, enabled);
 	}
 
@@ -3001,6 +3127,20 @@ void earc_hdmitx_hpdst(bool st, int enabled)
 	earcrx_cmdc_arc_connect(p_earc->rx_cmdc_map, st);
 
 	earcrx_cmdc_hpd_detect(p_earc->rx_cmdc_map, st);
+
+	/*
+	 * Some TVs, such as Samsung, toggle the HPD signal when eARC is disabled
+	 * to fall back to ARC. This can result in no audio because eARC discovery
+	 * has already been disabled at this point.
+	 *
+	 * This scheduled work ensures that if `rx_earc_mode` is not active, it
+	 * updates the external connection state to restore audio as ARC is
+	 * connected. The `rx_earc_mode` flag is unset only when HPD toggles
+	 * during the fallback process. Scheduled work is used to avoid calling
+	 * functions from atomic context.
+	 */
+	if (st && !p_earc->rx_earc_mode)
+		schedule_work(&p_earc->rx_send_uevent);
 }
 
 static int earcrx_cmdc_setup(struct earc *p_earc)
@@ -3329,14 +3469,17 @@ static int earc_platform_probe(struct platform_device *pdev)
 		return ret;
 	}
 	p_earc->tx_earc_mode = true;
+	p_earc->rx_earc_mode = true;
 	p_earc->tx_ui_flag = 1;
 	p_earc->rx_latency = EARCRX_DEFAULT_LATENCY;
 	s_earc = p_earc;
+	p_earc->earcrx_timeout = false;
 
 	/* RX */
 	if (!IS_ERR(p_earc->rx_top_map)) {
 		earcrx_extcon_register(p_earc);
 		earcrx_cmdc_setup(p_earc);
+		INIT_WORK(&p_earc->rx_send_uevent, send_rx_uevent_work_func);
 	}
 
 	/* TX */
