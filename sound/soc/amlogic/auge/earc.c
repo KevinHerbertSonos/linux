@@ -29,6 +29,7 @@
 #include <linux/amlogic/iomap.h>
 #include <linux/clk-provider.h>
 #include <linux/amlogic/clk_measure.h>
+#include <linux/sonos_asound.h>
 
 #include <linux/amlogic/media/sound/hdmi_earc.h>
 #include "resample.h"
