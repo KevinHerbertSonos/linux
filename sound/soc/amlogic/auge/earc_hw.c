@@ -1666,6 +1666,15 @@ void earcrx_cmdc_set_latency(struct regmap *cmdc_map, u8 *latency)
 			    0x1);
 }
 
+void earcrx_cmdc_get_tx_latency(struct regmap *cmdc_map, u8 *latency)
+{
+	earcrx_cmdc_get_reg(cmdc_map,
+			    STAT_CTRL_DEV_ID,
+			    ERX_LATENCY_REQ_REG,
+			    latency,
+			    1);
+}
+
 void earcrx_cmdc_get_cds(struct regmap *cmdc_map, u8 *cds)
 {
 	earcrx_cmdc_get_reg(cmdc_map,

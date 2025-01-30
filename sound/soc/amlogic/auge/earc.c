@@ -218,6 +218,7 @@ struct earc {
 	bool earcrx_timeout;
 	bool earcrx_songle_st;
 	struct work_struct rx_send_uevent;
+	u8 tx_latency_request;
 
 	/* control rx unmute work */
 	struct delayed_work rx_unmute_work;
@@ -762,6 +763,8 @@ static irqreturn_t earc_rx_isr(int irq, void *data)
 		dev_info(p_earc->dev, "EARCRX_CMDC_LOSTHB\n");
 
 	if (p_earc->rx_status0 & INT_EARCRX_CMDC_STATUS_CH) {
+		u8 tx_latency = 0;
+
 		int state = earcrx_cmdc_get_rx_stat_bits(p_earc->rx_cmdc_map);
 
 		dev_dbg(p_earc->dev,
@@ -778,6 +781,15 @@ static irqreturn_t earc_rx_isr(int irq, void *data)
 				&p_earc->rx_latency);
 		}
 		p_earc->rx_state = state;
+
+		/* Retrieve the eARC TX latency value indicated to the eARC RX */
+		earcrx_cmdc_get_tx_latency(p_earc->rx_cmdc_map, &tx_latency);
+
+		/* Check if the latency differs from the previously noted latency */
+		if (tx_latency != p_earc->tx_latency_request) {
+			earcrx_notify_alsactl_event(p_earc, "eARC_RX Latency Request");
+			p_earc->tx_latency_request = tx_latency;
+		}
 	}
 
 	if (p_earc->rx_dmac_clk_on) {
@@ -1977,6 +1989,28 @@ static int earcrx_set_latency(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int earcrx_get_tx_latency(struct snd_kcontrol *kcontrol,
+			      struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct earc *p_earc = dev_get_drvdata(component->dev);
+	enum cmdc_st state;
+	u8  val = 0;
+
+	if (!p_earc || IS_ERR(p_earc->rx_cmdc_map))
+		return 0;
+
+	state = earcrx_cmdc_get_state(p_earc->rx_cmdc_map);
+	if (state != CMDC_ST_EARC)
+		return 0;
+
+	earcrx_cmdc_get_tx_latency(p_earc->rx_cmdc_map, &val);
+
+	ucontrol->value.integer.value[0] = val;
+
+	return 0;
+}
+
 static int earcrx_get_cds(struct snd_kcontrol *kcontrol,
 			  struct snd_ctl_elem_value *ucontrol)
 {
@@ -2768,6 +2802,11 @@ static const struct snd_kcontrol_new earc_controls[] = {
 			  1,
 			  earctx_get_latency,
 			  earctx_set_latency),
+
+	SOC_SINGLE_EXT("eARC_RX Latency Request",
+			  0, 0, 255, 0,
+			  earcrx_get_tx_latency,
+			  NULL),
 
 	SND_SOC_BYTES_EXT("eARC_RX CDS",
 			  CDS_MAX_BYTES,
