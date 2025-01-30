@@ -327,6 +327,7 @@ void earctx_enable(struct regmap *top_map,
 bool get_earctx_enable(struct regmap *cmdc_map, struct regmap *dmac_map);
 void earcrx_cmdc_get_latency(struct regmap *cmdc_map, u8 *latency);
 void earcrx_cmdc_set_latency(struct regmap *cmdc_map, u8 *latency);
+void earcrx_cmdc_get_tx_latency(struct regmap *cmdc_map, u8 *latency);
 void earcrx_cmdc_get_cds(struct regmap *cmdc_map, u8 *cds);
 void earcrx_cmdc_set_cds(struct regmap *cmdc_map, u8 *cds);
 
