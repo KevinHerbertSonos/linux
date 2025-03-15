@@ -479,7 +479,11 @@ static int validate_ioctl_arg(unsigned int cmd, union ion_ioctl_arg *arg)
 	return 0;
 }
 
+#ifdef CONFIG_AMLOGIC_MODIFY
+long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+#else
 static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+#endif
 {
 	int ret = 0;
 	union ion_ioctl_arg data;
@@ -533,6 +537,11 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	return ret;
 }
 
+#ifdef CONFIG_AMLOGIC_MODIFY
+EXPORT_SYMBOL_GPL(ion_ioctl);
+#endif
+
+#ifndef CONFIG_AMLOGIC_MODIFY
 static const struct file_operations ion_fops = {
 	.owner          = THIS_MODULE,
 	.unlocked_ioctl = ion_ioctl,
@@ -540,6 +549,7 @@ static const struct file_operations ion_fops = {
 	.compat_ioctl	= ion_ioctl,
 #endif
 };
+#endif
 
 static int debug_shrink_set(void *data, u64 val)
 {
@@ -576,7 +586,67 @@ static int debug_shrink_get(void *data, u64 *val)
 DEFINE_SIMPLE_ATTRIBUTE(debug_shrink_fops, debug_shrink_get,
 			debug_shrink_set, "%llu\n");
 
-void ion_device_add_heap(struct ion_heap *heap)
+static int ion_assign_heap_id(struct ion_heap *heap, struct ion_device *dev)
+{
+	int id_bit = -EINVAL;
+	int start_bit = -1, end_bit = -1;
+
+	switch (heap->type) {
+	case ION_HEAP_TYPE_SYSTEM:
+		id_bit = __ffs(ION_HEAP_SYSTEM);
+		break;
+	case ION_HEAP_TYPE_SYSTEM_CONTIG:
+		id_bit = __ffs(ION_HEAP_SYSTEM_CONTIG);
+		break;
+	case ION_HEAP_TYPE_CHUNK:
+		id_bit = __ffs(ION_HEAP_CHUNK);
+		break;
+	case ION_HEAP_TYPE_CARVEOUT:
+		start_bit = __ffs(ION_HEAP_CARVEOUT_START);
+		end_bit = __ffs(ION_HEAP_CARVEOUT_END);
+		break;
+	case ION_HEAP_TYPE_DMA:
+		start_bit = __ffs(ION_HEAP_DMA_START);
+		end_bit = __ffs(ION_HEAP_DMA_END);
+		break;
+	case ION_HEAP_TYPE_CUSTOM ... ION_HEAP_TYPE_MAX:
+		start_bit = __ffs(ION_HEAP_CUSTOM_START);
+		end_bit = __ffs(ION_HEAP_CUSTOM_END);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	/* For carveout, dma & custom heaps, we first let the heaps choose their
+	 * own IDs. This allows the old behaviour of knowing the heap ids
+	 * of these type of heaps  in advance in user space. If a heap with
+	 * that ID already exists, it is an error.
+	 *
+	 * If the heap hasn't picked an id by itself, then we assign it
+	 * one.
+	 */
+	if (id_bit < 0) {
+		if (heap->id) {
+			id_bit = __ffs(heap->id);
+			if (id_bit < start_bit || id_bit > end_bit)
+				return -EINVAL;
+		} else {
+			id_bit = find_next_zero_bit(dev->heap_ids, end_bit + 1,
+						    start_bit);
+			if (id_bit > end_bit)
+				return -ENOSPC;
+		}
+	}
+
+	if (test_and_set_bit(id_bit, dev->heap_ids))
+		return -EEXIST;
+	heap->id = id_bit;
+	dev->heap_cnt++;
+
+	return 0;
+}
+
+int __ion_device_add_heap(struct ion_heap *heap, struct module *owner)
 {
 	struct ion_device *dev = internal_dev;
 	int ret;
@@ -651,6 +721,7 @@ static int ion_device_create(void)
 	if (!idev)
 		return -ENOMEM;
 
+#ifndef CONFIG_AMLOGIC_MODIFY
 	idev->dev.minor = MISC_DYNAMIC_MINOR;
 	idev->dev.name = "ion";
 	idev->dev.fops = &ion_fops;
@@ -658,8 +729,14 @@ static int ion_device_create(void)
 	ret = misc_register(&idev->dev);
 	if (ret) {
 		pr_err("ion: failed to register misc device.\n");
-		kfree(idev);
-		return ret;
+		goto err_reg;
+	}
+#endif
+
+	ret = ion_init_sysfs();
+	if (ret) {
+		pr_err("ion: failed to add sysfs attributes.\n");
+		goto err_sysfs;
 	}
 
 	idev->debug_root = debugfs_create_dir("ion", NULL);
@@ -667,5 +744,14 @@ static int ion_device_create(void)
 	plist_head_init(&idev->heaps);
 	internal_dev = idev;
 	return 0;
+
+err_sysfs:
+	misc_deregister(&idev->dev);
+#ifndef CONFIG_AMLOGIC_MODIFY
+err_reg:
+	kfree(idev);
+#endif
+
+	return ret;
 }
 subsys_initcall(ion_device_create);

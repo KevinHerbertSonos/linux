@@ -172,12 +172,34 @@ void ion_device_add_heap(struct ion_heap *heap);
  * some helpers for common operations on buffers using the sg_table
  * and vaddr fields
  */
-void *ion_heap_map_kernel(struct ion_heap *heap, struct ion_buffer *buffer);
-void ion_heap_unmap_kernel(struct ion_heap *heap, struct ion_buffer *buffer);
-int ion_heap_map_user(struct ion_heap *heap, struct ion_buffer *buffer,
-		      struct vm_area_struct *vma);
-int ion_heap_buffer_zero(struct ion_buffer *buffer);
-int ion_heap_pages_zero(struct page *page, size_t size, pgprot_t pgprot);
+struct ion_dma_buf_attachment {
+	struct device *dev;
+	struct sg_table *table;
+	struct list_head list;
+	bool mapped:1;
+};
+
+#ifdef CONFIG_ION
+
+#ifdef CONFIG_AMLOGIC_MODIFY
+long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
+#endif
+
+/**
+ * __ion_device_add_heap - adds a heap to the ion device
+ *
+ * @heap:               the heap to add
+ *
+ * Returns 0 on success, negative error otherwise.
+ */
+int __ion_device_add_heap(struct ion_heap *heap, struct module *owner);
+
+/**
+ * ion_device_remove_heap - removes a heap from ion device
+ *
+ * @heap:		pointer to the heap to be removed
+ */
+void ion_device_remove_heap(struct ion_heap *heap);
 
 /**
  * ion_heap_init_shrinker
@@ -300,4 +322,144 @@ void ion_page_pool_free(struct ion_page_pool *pool, struct page *page);
 int ion_page_pool_shrink(struct ion_page_pool *pool, gfp_t gfp_mask,
 			 int nr_to_scan);
 
-#endif /* _ION_H */
+/* ion_buffer_zero - zeroes out an ion buffer respecting the ION_FLAGs.
+ *
+ * @buffer:		ion_buffer to zero
+ *
+ * Returns 0 on success, negative error otherwise.
+ */
+int ion_buffer_zero(struct ion_buffer *buffer);
+
+/**
+ * ion_buffer_prep_noncached - flush cache before non-cached mapping
+ *
+ * @buffer:		ion_buffer to flush
+ *
+ * The memory allocated by the heap could be in the CPU cache. To map
+ * this memory as non-cached, we need to flush the associated cache
+ * first. Without the flush, it is possible for stale dirty cache lines
+ * to be evicted after the ION client started writing into this buffer,
+ * leading to data corruption.
+ */
+void ion_buffer_prep_noncached(struct ion_buffer *buffer);
+
+/**
+ * ion_alloc - Allocates an ion buffer of given size from given heap
+ *
+ * @len:               size of the buffer to be allocated.
+ * @heap_id_mask:      a bitwise maks of heap ids to allocate from
+ * @flags:             ION_BUFFER_XXXX flags for the new buffer.
+ *
+ * The function exports a dma_buf object for the new ion buffer internally
+ * and returns that to the caller. So, the buffer is ready to be used by other
+ * drivers immediately. Returns ERR_PTR in case of failure.
+ */
+struct dma_buf *ion_alloc(size_t len, unsigned int heap_id_mask,
+			  unsigned int flags);
+
+/**
+ * ion_free - Releases the ion buffer.
+ *
+ * @buffer:             ion buffer to be released
+ */
+int ion_free(struct ion_buffer *buffer);
+
+#ifdef CONFIG_AMLOGIC_ION
+int meson_ion_cma_heap_match(const char *name);
+void meson_ion_cma_heap_id_set(unsigned int id);
+struct device *meson_ion_get_dev(void);
+#endif
+
+/**
+ * ion_query_heaps_kernel - Returns information about available heaps to
+ * in-kernel clients.
+ *
+ * @hdata:             pointer to array of struct ion_heap_data.
+ * @size:             size of @hdata array.
+ *
+ * Returns the number of available heaps and populates @hdata with information
+ * regarding the same. When invoked with @size as 0, the function with return
+ * the number of available heaps without modifying @hdata. When the number of
+ * available heaps is higher than @size, @size is returned instead of the
+ * actual number of available heaps.
+ */
+
+size_t ion_query_heaps_kernel(struct ion_heap_data *hdata, size_t size);
+#else
+
+static inline int __ion_device_add_heap(struct ion_heap *heap,
+				      struct module *owner)
+{
+	return -ENODEV;
+}
+
+static inline int ion_heap_init_shrinker(struct ion_heap *heap)
+{
+	return -ENODEV;
+}
+
+static inline int ion_heap_init_deferred_free(struct ion_heap *heap)
+{
+	return -ENODEV;
+}
+
+static inline void ion_heap_freelist_add(struct ion_heap *heap,
+					 struct ion_buffer *buffer) {}
+
+static inline size_t ion_heap_freelist_drain(struct ion_heap *heap, size_t size)
+{
+	return -ENODEV;
+}
+
+static inline size_t ion_heap_freelist_shrink(struct ion_heap *heap,
+					      size_t size)
+{
+	return -ENODEV;
+}
+
+static inline size_t ion_heap_freelist_size(struct ion_heap *heap)
+{
+	return -ENODEV;
+}
+
+static inline void *ion_heap_map_kernel(struct ion_heap *heap,
+					struct ion_buffer *buffer)
+{
+	return ERR_PTR(-ENODEV);
+}
+
+static inline void ion_heap_unmap_kernel(struct ion_heap *heap,
+					 struct ion_buffer *buffer) {}
+
+static inline int ion_heap_map_user(struct ion_heap *heap,
+				    struct ion_buffer *buffer,
+				    struct vm_area_struct *vma)
+{
+	return -ENODEV;
+}
+
+static inline int ion_buffer_zero(struct ion_buffer *buffer)
+{
+	return -EINVAL;
+}
+
+static inline void ion_buffer_prep_noncached(struct ion_buffer *buffer) {}
+
+static inline struct dma_buf *ion_alloc(size_t len, unsigned int heap_id_mask,
+					unsigned int flags)
+{
+	return ERR_PTR(-ENOMEM);
+}
+
+static inline int ion_free(struct ion_buffer *buffer)
+{
+	return 0;
+}
+
+static inline size_t ion_query_heaps_kernel(struct ion_heap_data *hdata,
+					 size_t size)
+{
+	return 0;
+}
+#endif /* CONFIG_ION */
+#endif /* _ION_KERNEL_H */

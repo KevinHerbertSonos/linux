@@ -76,6 +76,11 @@ struct usb_host_endpoint {
 	int extralen;
 	int enabled;
 	int streams;
+#ifdef CONFIG_AMLOGIC_USB
+	struct work_struct work;
+	struct xhci_hcd *xhci;
+	struct usb_device *udev;
+#endif
 };
 
 /* host-side wrapper for one interface setting's parsed descriptors */
@@ -708,6 +713,14 @@ struct usb_device {
 	unsigned lpm_disable_count;
 
 	u16 hub_delay;
+#ifdef CONFIG_AMLOGIC_USB
+	struct delayed_work		portstatus_work;
+#endif
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
+	ANDROID_KABI_RESERVE(3);
+	ANDROID_KABI_RESERVE(4);
 };
 #define	to_usb_device(d) container_of(d, struct usb_device, dev)
 
@@ -945,6 +958,23 @@ static inline int usb_make_path(struct usb_device *dev, char *buf, size_t size)
 	.match_flags = USB_DEVICE_ID_MATCH_DEVICE, \
 	.idVendor = (vend), \
 	.idProduct = (prod)
+
+#ifdef CONFIG_AMLOGIC_USB
+#define USB_CHIP(chip, version) \
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE, \
+	.chip_id = (chip), \
+	.version_id = (version)
+
+struct usb_chip_id {
+	/* which fields to match against? */
+	__u16		match_flags;
+
+	/* Used for product specific matches; range is inclusive */
+	__u16		chip_id;
+	__u16		version_id;
+};
+
+#endif
 /**
  * USB_DEVICE_VER - describe a specific usb device with a version range
  * @vend: the 16 bit USB Vendor ID
@@ -1582,6 +1612,20 @@ struct urb {
 	int error_count;		/* (return) number of ISO errors */
 	void *context;			/* (in) context for completion */
 	usb_complete_t complete;	/* (in) completion routine */
+#ifdef CONFIG_AMLOGIC_USB
+	int need_event_data;
+	int need_event_data_flag;
+	u8 need_div;
+	void *tmp_buf;
+	dma_addr_t tmp_dma;
+	u64 dst_dma[6];
+	u64 dst_buf[6];
+#endif
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
+	ANDROID_KABI_RESERVE(3);
+	ANDROID_KABI_RESERVE(4);
+
 	struct usb_iso_packet_descriptor iso_frame_desc[0];
 					/* (in) ISO ONLY */
 };

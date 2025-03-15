@@ -16,6 +16,7 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/mmc.h>
+#include <linux/mmc/emmc_partitions.h>
 
 #include "core.h"
 #include "card.h"
@@ -403,6 +404,10 @@ static int mmc_decode_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			ext_csd[EXT_CSD_SEC_CNT + 2] << 16 |
 			ext_csd[EXT_CSD_SEC_CNT + 3] << 24;
 
+#ifdef CONFIG_AMLOGIC_MODIFY
+		card->host->capacity = card->ext_csd.sectors;
+#endif
+
 		/* Cards with density > 2GiB are sector addressed */
 		if (card->ext_csd.sectors > (2u * 1024 * 1024 * 1024) / 512)
 			mmc_card_set_blockaddr(card);
@@ -446,7 +451,7 @@ static int mmc_decode_ext_csd(struct mmc_card *card, u8 *ext_csd)
 				part_size = ext_csd[EXT_CSD_BOOT_MULT] << 17;
 				mmc_part_add(card, part_size,
 					EXT_CSD_PART_CONFIG_ACC_BOOT0 + idx,
-					"boot%d", idx, true,
+					"boot%d", idx, false,
 					MMC_BLK_DATA_AREA_BOOT);
 			}
 		}
@@ -1186,6 +1191,9 @@ static int mmc_select_hs400(struct mmc_card *card)
 
 	if (host->ops->hs400_prepare_ddr)
 		host->ops->hs400_prepare_ddr(host);
+#ifdef CONFIG_AMLOGIC_MODIFY
+	aml_read_tuning_para(host);
+#endif
 
 	/* Switch card to DDR */
 	err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
@@ -1637,6 +1645,10 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		mmc_set_bus_mode(host, MMC_BUSMODE_PUSHPULL);
 	}
 
+#ifdef CONFIG_AMLOGIC_MODIFY
+	host->first_init_flag = 0;
+#endif
+
 	if (!oldcard) {
 		/*
 		 * Fetch CSD from card.
@@ -2036,6 +2048,7 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 	if (mmc_card_suspended(host->card))
 		goto out;
 
+	aml_disable_mmc_cqe(host->card);
 	err = mmc_flush_cache(host->card);
 	if (err)
 		goto out;

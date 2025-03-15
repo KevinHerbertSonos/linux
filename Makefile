@@ -482,6 +482,18 @@ KBUILD_CFLAGS   := -Wall -Wundef -Werror=strict-prototypes -Wno-trigraphs \
 		   -Werror=implicit-function-declaration -Werror=implicit-int \
 		   -Werror=return-type -Wno-format-security \
 		   -std=gnu89
+ifndef CONFIG_KASAN
+KBUILD_CFLAGS	+= -Werror
+endif
+
+ifdef CONFIG_AMLOGIC_MODIFY
+ifndef CONFIG_DYNAMIC_DEBUG
+# re-define of __func__, __file__ to save rodata size
+AMLOGIC_KFLAGS 	:= -U__FILE__ -D__FILE__='"$(subst $(srctree)/,,$(<))"'
+export AMLOGIC_KFLAGS
+endif
+endif
+
 KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
@@ -492,6 +504,16 @@ export KBUILD_LDS_MODULE := $(srctree)/scripts/module-common.lds
 KBUILD_LDFLAGS :=
 GCC_PLUGINS_CFLAGS :=
 CLANG_FLAGS :=
+
+# customer directory support
+mesondefconfig := $(wildcard $(srctree)/arch/$(SRCARCH)/configs/*defconfig)
+mesondefconfig := $(notdir $(mesondefconfig))
+
+mesondtb := $(wildcard $(srctree)/arch/$(SRCARCH)/boot/dts/amlogic/*.dts)
+mesondtb := $(notdir $(mesondtb))
+mesondtb := $(mesondtb:%.dts=%.dtb)
+
+export mesondefconfig mesondtb
 
 export ARCH SRCARCH CONFIG_SHELL BASH HOSTCC KBUILD_HOSTCFLAGS CROSS_COMPILE LD CC
 export CPP AR NM STRIP OBJCOPY OBJDUMP OBJSIZE READELF PAHOLE LEX YACC AWK INSTALLKERNEL
@@ -522,6 +544,11 @@ PHONY += scripts_basic
 scripts_basic:
 	$(Q)$(MAKE) $(build)=scripts/basic
 	$(Q)rm -f .tmp_quiet_recordmcount
+	$(Q)if [ -d $(srctree)/.git/hooks ]; then \
+		cp $(srctree)/scripts/amlogic/pre-commit $(srctree)/.git/hooks/; \
+		chmod +x $(srctree)/.git/hooks/pre-commit; \
+	fi
+#$(Q)mkdir -p $(srctree)/.git/hooks
 
 PHONY += outputmakefile
 # Before starting out-of-tree build, make sure the source tree is clean.
@@ -585,7 +612,6 @@ export KBUILD_DEFCONFIG KBUILD_KCONFIG CC_VERSION_TEXT
 
 config: outputmakefile scripts_basic FORCE
 	$(Q)$(MAKE) $(build)=scripts/kconfig $@
-
 %config: outputmakefile scripts_basic FORCE
 	$(Q)$(MAKE) $(build)=scripts/kconfig $@
 
@@ -625,6 +651,9 @@ endif
 ifeq ($(MAKECMDGOALS),)
   KBUILD_MODULES := 1
 endif
+
+KBUILD_MODPOST_WARN := 1
+export KBUILD_MODPOST_WARN
 
 export KBUILD_MODULES KBUILD_BUILTIN
 
@@ -743,18 +772,22 @@ KBUILD_CFLAGS += $(call cc-option,-fno-reorder-blocks,) \
                  $(call cc-option,-fno-partial-inlining)
 endif
 
+ifndef CONFIG_KASAN
 ifneq ($(CONFIG_FRAME_WARN),0)
 KBUILD_CFLAGS += $(call cc-option,-Wframe-larger-than=${CONFIG_FRAME_WARN})
 endif
+endif
 
+ifndef CONFIG_AMLOGIC_STACKPROTECTOR
 stackp-flags-$(CONFIG_CC_HAS_STACKPROTECTOR_NONE) := -fno-stack-protector
 stackp-flags-$(CONFIG_STACKPROTECTOR)             := -fstack-protector
 stackp-flags-$(CONFIG_STACKPROTECTOR_STRONG)      := -fstack-protector-strong
+endif
 
 KBUILD_CFLAGS += $(stackp-flags-y)
 
 ifdef CONFIG_CC_IS_CLANG
-KBUILD_CPPFLAGS += -Qunused-arguments
+#KBUILD_CPPFLAGS += -Wunused-parameter
 KBUILD_CFLAGS += -Wno-format-invalid-specifier
 KBUILD_CFLAGS += -Wno-gnu
 # Quiet clang warning: comparison of unsigned expression < 0 is always false
@@ -762,7 +795,7 @@ KBUILD_CFLAGS += -Wno-tautological-compare
 # CLANG uses a _MergedGlobals as optimization, but this breaks modpost, as the
 # source of a reference will be _MergedGlobals and not on of the whitelisted names.
 # See modpost pattern 2
-KBUILD_CFLAGS += -mno-global-merge
+#KBUILD_CFLAGS += -mno-global-merge
 else
 
 # Warn about unmarked fall-throughs in switch statement.
@@ -778,6 +811,11 @@ KBUILD_CFLAGS += $(call cc-disable-warning, unused-but-set-variable)
 KBUILD_CFLAGS += $(call cc-disable-warning, unused-const-variable)
 ifdef CONFIG_FRAME_POINTER
 KBUILD_CFLAGS	+= -fno-omit-frame-pointer -fno-optimize-sibling-calls
+ifdef CONFIG_AMLOGIC_VMAP
+ifdef CONFIG_ARM64
+KBUILD_CFLAGS	+= -mno-omit-leaf-frame-pointer
+endif
+endif
 else
 # Some targets (ARM with Thumb2, for example), can't be built with frame
 # pointers.  For those, we don't have FUNCTION_TRACER automatically
@@ -862,6 +900,58 @@ endif
 
 ifdef CONFIG_LIVEPATCH
 KBUILD_CFLAGS += $(call cc-option, -flive-patching=inline-clone)
+endif
+
+ifdef CONFIG_SHADOW_CALL_STACK
+CC_FLAGS_SCS	:= -fsanitize=shadow-call-stack
+KBUILD_CFLAGS	+= $(CC_FLAGS_SCS)
+export CC_FLAGS_SCS
+endif
+
+ifdef CONFIG_AMLOGIC_LTO_CLANG
+ifdef CONFIG_THINLTO
+CC_FLAGS_LTO_CLANG := -flto=thin $(call cc-option, -fsplit-lto-unit)
+KBUILD_LDFLAGS	+= --thinlto-cache-dir=.thinlto-cache
+else
+CC_FLAGS_LTO_CLANG := -flto
+endif
+CC_FLAGS_LTO_CLANG += -fvisibility=default
+
+# Limit inlining across translation units to reduce binary size
+LD_FLAGS_LTO_CLANG := -mllvm -import-instr-limit=5
+
+KBUILD_LDFLAGS += $(LD_FLAGS_LTO_CLANG)
+KBUILD_LDFLAGS_MODULE += $(LD_FLAGS_LTO_CLANG)
+
+KBUILD_LDS_MODULE += scripts/module-lto.lds
+endif
+
+ifdef CONFIG_LTO
+CC_FLAGS_LTO	:= $(CC_FLAGS_LTO_CLANG)
+KBUILD_CFLAGS	+= $(CC_FLAGS_LTO)
+export CC_FLAGS_LTO
+endif
+
+ifdef CONFIG_AMLOGIC_CFI_CLANG
+CC_FLAGS_CFI	:= -fsanitize=cfi \
+		   -fno-sanitize-cfi-canonical-jump-tables \
+		   -fno-sanitize-blacklist
+
+ifdef CONFIG_MODULES
+CC_FLAGS_CFI	+= -fsanitize-cfi-cross-dso
+endif
+
+ifdef CONFIG_AMLOGIC_CFI_PERMISSIVE
+CC_FLAGS_CFI	+= -fsanitize-recover=cfi \
+		   -fno-sanitize-trap=cfi
+else
+CC_FLAGS_CFI	+= -ftrap-function=__ubsan_handle_cfi_check_fail_abort
+endif
+
+# If LTO flags are filtered out, we must also filter out CFI.
+CC_FLAGS_LTO	+= $(CC_FLAGS_CFI)
+KBUILD_CFLAGS	+= $(CC_FLAGS_CFI)
+export CC_FLAGS_CFI
 endif
 
 # arch Makefile may override CC so keep this after arch Makefile is included
@@ -1266,12 +1356,26 @@ endif
 
 ifneq ($(dtstree),)
 
+ifdef CONFIG_AMLOGIC_MODIFY
+%.dtb: include/config/kernel.release scripts_dtc
+	$(if $(filter $@,$(mesondtb)),\
+	$(Q)$(MAKE) $(build)=$(dtstree) $(dtstree)/amlogic/$@,\
+	$(Q)$(MAKE) $(build)=customer/$(dtstree) customer/$(dtstree)/$@)
+else
 %.dtb: include/config/kernel.release scripts_dtc
 	$(Q)$(MAKE) $(build)=$(dtstree) $(dtstree)/$@
+endif
 
 PHONY += dtbs dtbs_install dtbs_check
 dtbs: include/config/kernel.release scripts_dtc
+ifdef CONFIG_AMLOGIC_MODIFY
+	$(Q)$(MAKE) $(build)=$(dtstree)/amlogic
+ifeq ($(srctree)/customer, $(wildcard $(srctree)/customer))
+	$(Q)$(MAKE) $(build)=customer/$(dtstree)
+endif
+else
 	$(Q)$(MAKE) $(build)=$(dtstree)
+endif
 
 ifneq ($(filter dtbs_check, $(MAKECMDGOALS)),)
 dtbs: dt_binding_check
@@ -1471,7 +1575,7 @@ distclean: mrproper
 # Brief documentation of the typical targets used
 # ---------------------------------------------------------------------------
 
-boards := $(wildcard $(srctree)/arch/$(SRCARCH)/configs/*_defconfig)
+boards := $(wildcard $(srctree)/arch/$(SRCARCH)/configs/*_defconfig $(srctree)/customer/arch/$(SRCARCH)/configs/*_defconfig)
 boards := $(sort $(notdir $(boards)))
 board-dirs := $(dir $(wildcard $(srctree)/arch/$(SRCARCH)/configs/*/*_defconfig))
 board-dirs := $(sort $(notdir $(board-dirs:/=)))

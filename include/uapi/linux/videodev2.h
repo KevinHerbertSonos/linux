@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: ((GPL-2.0+ WITH Linux-syscall-note) OR BSD-3-Clause) */
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *  Video for Linux Two header file
  *
@@ -691,6 +691,12 @@ struct v4l2_pix_format {
 #define V4L2_PIX_FMT_HEVC     v4l2_fourcc('H', 'E', 'V', 'C') /* HEVC aka H.265 */
 #define V4L2_PIX_FMT_FWHT     v4l2_fourcc('F', 'W', 'H', 'T') /* Fast Walsh Hadamard Transform (vicodec) */
 #define V4L2_PIX_FMT_FWHT_STATELESS     v4l2_fourcc('S', 'F', 'W', 'H') /* Stateless FWHT (vicodec) */
+/* CONFIG_AMLOGIC_MODIFY START */
+#define V4L2_PIX_FMT_AV1      v4l2_fourcc('A', 'V', '1', '0') /* av1 */
+#define V4L2_PIX_FMT_AVS      v4l2_fourcc('A', 'V', 'S', '0') /* avs */
+#define V4L2_PIX_FMT_AVS2     v4l2_fourcc('A', 'V', 'S', '2') /* avs2 */
+#define V4L2_PIX_FMT_AVS3     v4l2_fourcc('A', 'V', 'S', '3') /* avs3 */
+/* CONFIG_AMLOGIC_MODIFY END */
 
 /*  Vendor-specific formats   */
 #define V4L2_PIX_FMT_CPIA1    v4l2_fourcc('C', 'P', 'I', 'A') /* cpia1 YUV */

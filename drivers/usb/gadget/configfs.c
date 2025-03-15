@@ -10,6 +10,60 @@
 #include "u_f.h"
 #include "u_os_desc.h"
 
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+#include <linux/platform_device.h>
+#include <linux/kdev_t.h>
+#include <linux/usb/ch9.h>
+
+#ifdef CONFIG_USB_CONFIGFS_F_ACC
+extern int acc_ctrlrequest(struct usb_composite_dev *cdev,
+				const struct usb_ctrlrequest *ctrl);
+void acc_disconnect(void);
+#endif
+static struct class *android_class;
+static struct device *android_device;
+static int index;
+static int gadget_index;
+
+#ifdef CONFIG_AMLOGIC_USB
+static struct gadget_info *gi_backup;
+#endif
+
+struct device *create_function_device(char *name)
+{
+	if (android_device && !IS_ERR(android_device))
+		return device_create(android_class, android_device,
+			MKDEV(0, index++), NULL, name);
+	else
+		return ERR_PTR(-EINVAL);
+}
+EXPORT_SYMBOL_GPL(create_function_device);
+#endif
+
+#ifdef CONFIG_AMLOGIC_USB
+struct gadget_lock {
+	struct wakeup_source *wakesrc;
+	bool held;
+};
+
+static struct gadget_lock Gadget_Lock;
+
+static void gadget_hold(struct gadget_lock *lock)
+{
+	if (!lock->held) {
+		__pm_stay_awake(lock->wakesrc);
+		lock->held = true;
+	}
+}
+
+static void gadget_drop(struct gadget_lock *lock)
+{
+	if (lock->held) {
+		__pm_relax(lock->wakesrc);
+		lock->held = false;
+	}
+}
+#endif
 int check_user_usb_string(const char *name,
 		struct usb_gadget_strings *stringtab_dev)
 {
@@ -1265,9 +1319,11 @@ static int configfs_composite_bind(struct usb_gadget *gadget,
 	gi->unbind = 0;
 	cdev->gadget = gadget;
 	set_gadget_data(gadget, cdev);
+
 	ret = composite_dev_prepare(composite, cdev);
 	if (ret)
 		return ret;
+
 	/* and now the gadget bind */
 	ret = -EINVAL;
 
@@ -1388,8 +1444,68 @@ err_purge_funcs:
 	purge_configs_funcs(gi);
 err_comp_cleanup:
 	composite_dev_cleanup(cdev);
+
 	return ret;
 }
+
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+static void android_work(struct work_struct *data)
+{
+	struct gadget_info *gi = container_of(data, struct gadget_info, work);
+	struct usb_composite_dev *cdev = &gi->cdev;
+	char *disconnected[2] = { "USB_STATE=DISCONNECTED", NULL };
+	char *connected[2]    = { "USB_STATE=CONNECTED", NULL };
+	char *configured[2]   = { "USB_STATE=CONFIGURED", NULL };
+	/* 0-connected 1-configured 2-disconnected*/
+	bool status[3] = { false, false, false };
+	unsigned long flags;
+	bool uevent_sent = false;
+
+	spin_lock_irqsave(&cdev->lock, flags);
+	if (cdev->config)
+		status[1] = true;
+
+	if (gi->connected != gi->sw_connected) {
+		if (gi->connected)
+			status[0] = true;
+		else
+			status[2] = true;
+		gi->sw_connected = gi->connected;
+	}
+	spin_unlock_irqrestore(&cdev->lock, flags);
+
+	if (status[0]) {
+		kobject_uevent_env(&gi->dev->kobj, KOBJ_CHANGE, connected);
+		pr_info("%s: sent uevent %s\n", __func__, connected[0]);
+		uevent_sent = true;
+	}
+
+	if (status[1]) {
+		kobject_uevent_env(&gi->dev->kobj, KOBJ_CHANGE, configured);
+		pr_info("%s: sent uevent %s\n", __func__, configured[0]);
+		uevent_sent = true;
+#ifdef CONFIG_AMLOGIC_USB
+		if (Gadget_Lock.wakesrc)
+			gadget_hold(&Gadget_Lock);
+#endif
+	}
+
+	if (status[2]) {
+		kobject_uevent_env(&gi->dev->kobj, KOBJ_CHANGE, disconnected);
+		pr_info("%s: sent uevent %s\n", __func__, disconnected[0]);
+		uevent_sent = true;
+#ifdef CONFIG_AMLOGIC_USB
+		if (Gadget_Lock.wakesrc)
+			gadget_drop(&Gadget_Lock);
+#endif
+	}
+
+	if (!uevent_sent) {
+		pr_debug("%s: did not send uevent (%d %d %p)\n", __func__,
+			gi->connected, gi->sw_connected, cdev->config);
+	}
+}
+#endif
 
 static void configfs_composite_unbind(struct usb_gadget *gadget)
 {
@@ -1410,6 +1526,7 @@ static void configfs_composite_unbind(struct usb_gadget *gadget)
 	purge_configs_funcs(gi);
 	composite_dev_cleanup(cdev);
 	usb_ep_autoconfig_reset(cdev->gadget);
+
 	spin_lock_irqsave(&gi->spinlock, flags);
 	cdev->gadget = NULL;
 	cdev->deactivations = 0;
@@ -1580,6 +1697,13 @@ static struct config_group *gadgets_make(
 	if (!gi->composite.gadget_driver.function)
 		goto err;
 
+	if (android_device_create(gi) < 0)
+		goto err;
+
+#ifdef CONFIG_AMLOGIC_USB
+	gi_backup = gi;
+#endif
+
 	return &gi->group;
 err:
 	kfree(gi);
@@ -1621,6 +1745,53 @@ void unregister_gadget_item(struct config_item *item)
 }
 EXPORT_SYMBOL_GPL(unregister_gadget_item);
 
+#ifdef CONFIG_AMLOGIC_USB
+int crg_otg_write_UDC(const char *udc_name)
+{
+	struct gadget_info *gi = gi_backup;
+	char *name;
+	int ret;
+	size_t len;
+
+	if (!gi)
+		return -ENOMEM;
+	len = strlen(udc_name);
+
+	name = kstrdup(udc_name, GFP_KERNEL);
+	if (!name)
+		return -ENOMEM;
+	if (name[len - 1] == '\n')
+		name[len - 1] = '\0';
+
+	mutex_lock(&gi->lock);
+
+	if (!strlen(name) || strcmp(name, "none") == 0) {
+		ret = unregister_gadget(gi);
+		if (ret)
+			goto err;
+		kfree(name);
+	} else {
+		if (gi->composite.gadget_driver.udc_name) {
+			ret = -EBUSY;
+			goto err;
+		}
+		gi->composite.gadget_driver.udc_name = name;
+		ret = usb_gadget_probe_driver(&gi->composite.gadget_driver);
+		if (ret) {
+			gi->composite.gadget_driver.udc_name = NULL;
+			goto err;
+		}
+	}
+	mutex_unlock(&gi->lock);
+	return 0;
+err:
+	kfree(name);
+	mutex_unlock(&gi->lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(crg_otg_write_UDC);
+#endif
+
 static int __init gadget_cfs_init(void)
 {
 	int ret;
@@ -1628,6 +1799,19 @@ static int __init gadget_cfs_init(void)
 	config_group_init(&gadget_subsys.su_group);
 
 	ret = configfs_register_subsystem(&gadget_subsys);
+
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+	android_class = class_create(THIS_MODULE, "android_usb");
+	if (IS_ERR(android_class))
+		return PTR_ERR(android_class);
+#endif
+
+#ifdef CONFIG_AMLOGIC_USB
+	Gadget_Lock.wakesrc = wakeup_source_register(NULL, "gadget-connect");
+	if (!Gadget_Lock.wakesrc)
+		pr_info("----register  gadget-connect wakeup source  failed\n");
+#endif
+
 	return ret;
 }
 module_init(gadget_cfs_init);
@@ -1635,5 +1819,13 @@ module_init(gadget_cfs_init);
 static void __exit gadget_cfs_exit(void)
 {
 	configfs_unregister_subsystem(&gadget_subsys);
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+	if (!IS_ERR(android_class))
+		class_destroy(android_class);
+#endif
+
+#ifdef CONFIG_AMLOGIC_USB
+	wakeup_source_unregister(Gadget_Lock.wakesrc);
+#endif
 }
 module_exit(gadget_cfs_exit);

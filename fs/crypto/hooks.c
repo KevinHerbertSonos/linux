@@ -126,6 +126,43 @@ int __fscrypt_prepare_symlink(struct inode *dir, unsigned int len,
 			      unsigned int max_len,
 			      struct fscrypt_str *disk_link)
 {
+#if defined(CONFIG_AMLOGIC_MODIFY) && defined(CONFIG_AMLOGIC_RDK)
+	int ret = fscrypt_get_encryption_info(dir, true);
+
+	if (fscrypt_check_accessibility(dir))
+		return -EPERM;
+	return ret;
+#else
+	return fscrypt_get_encryption_info(dir, true);
+#endif
+}
+EXPORT_SYMBOL_GPL(__fscrypt_prepare_readdir);
+
+int __fscrypt_prepare_setattr(struct dentry *dentry, struct iattr *attr)
+{
+	if (attr->ia_valid & ATTR_SIZE)
+		return fscrypt_require_key(d_inode(dentry));
+	return 0;
+}
+EXPORT_SYMBOL_GPL(__fscrypt_prepare_setattr);
+
+/**
+ * fscrypt_prepare_setflags() - prepare to change flags with FS_IOC_SETFLAGS
+ * @inode: the inode on which flags are being changed
+ * @oldflags: the old flags
+ * @flags: the new flags
+ *
+ * The caller should be holding i_rwsem for write.
+ *
+ * Return: 0 on success; -errno if the flags change isn't allowed or if
+ *	   another error occurs.
+ */
+int fscrypt_prepare_setflags(struct inode *inode,
+			     unsigned int oldflags, unsigned int flags)
+{
+	struct fscrypt_info *ci;
+	struct key *key;
+	struct fscrypt_master_key *mk;
 	int err;
 
 	/*

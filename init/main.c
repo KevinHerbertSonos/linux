@@ -94,6 +94,9 @@
 #include <linux/rodata_test.h>
 #include <linux/jump_label.h>
 #include <linux/mem_encrypt.h>
+#ifdef CONFIG_AMLOGIC_PAGE_TRACE
+#include <linux/amlogic/page_trace.h>
+#endif
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -557,6 +560,10 @@ static void __init mm_init(void)
 	init_debug_pagealloc();
 	report_meminit();
 	mem_init();
+#ifdef CONFIG_AMLOGIC_PAGE_TRACE
+	/* allocate memory before first page allocated */
+	page_trace_mem_init();
+#endif
 	kmem_cache_init();
 	kmemleak_init();
 	pgtable_init();
@@ -691,6 +698,13 @@ asmlinkage __visible void __init start_kernel(void)
 	 */
 	random_init(command_line);
 	boot_init_stack_canary();
+#if defined(CONFIG_AMLOGIC_MODIFY) && defined(CONFIG_KASAN)
+	/*
+	 * if kasan opened, vmap fault will happen before vmap
+	 * init, so move thread_stack_cache_init here
+	 */
+	thread_stack_cache_init();
+#endif
 
 	perf_event_init();
 	profile_init();
@@ -751,7 +765,9 @@ asmlinkage __visible void __init start_kernel(void)
 	if (efi_enabled(EFI_RUNTIME_SERVICES))
 		efi_enter_virtual_mode();
 #endif
+#if !defined(CONFIG_AMLOGIC_MODIFY) || !defined(CONFIG_KASAN)
 	thread_stack_cache_init();
+#endif
 	cred_init();
 	fork_init();
 	proc_caches_init();
@@ -1224,3 +1240,6 @@ static noinline void __init kernel_init_freeable(void)
 
 	integrity_load_keys();
 }
+
+int ignore_a_flag;
+core_param(ignore_a_flag, ignore_a_flag, int, 0644);

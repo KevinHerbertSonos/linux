@@ -365,6 +365,10 @@ struct module {
 	const s32 *crcs;
 	unsigned int num_syms;
 
+#ifdef CONFIG_AMLOGIC_CFI_CLANG
+	cfi_check_fn cfi_check;
+#endif
+
 	/* Kernel parameters. */
 #ifdef CONFIG_SYSFS
 	struct mutex param_lock;

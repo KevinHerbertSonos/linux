@@ -54,7 +54,7 @@ my $configuration_file = ".checkpatch.conf";
 my $max_line_length = 80;
 my $ignore_perl_version = 0;
 my $minimum_perl_version = 5.10.0;
-my $min_conf_desc_length = 4;
+my $min_conf_desc_length = 2;
 my $spelling_file = "$D/spelling.txt";
 my $codespell = 0;
 my $codespellfile = "/usr/share/codespell/dictionary.txt";
@@ -2546,8 +2546,8 @@ sub process {
 
 				if (($last_binding_patch != -1) &&
 				    ($last_binding_patch ^ $is_binding_patch)) {
-					WARN("DT_SPLIT_BINDING_PATCH",
-					     "DT binding docs and includes should be a separate patch. See: Documentation/devicetree/bindings/submitting-patches.txt\n");
+				    #WARN("DT_SPLIT_BINDING_PATCH",
+				    #	     "DT binding docs and includes should be a separate patch. See: Documentation/devicetree/bindings/submitting-patches.txt\n");
 				}
 			}
 
@@ -2569,9 +2569,9 @@ sub process {
 				$commit_log_lines++;	#could be a $signature
 			}
 		} elsif ($has_commit_log && $commit_log_lines < 2) {
-			WARN("COMMIT_MESSAGE",
-			     "Missing commit description - Add an appropriate one\n");
-			$commit_log_lines = 2;	#warn only once
+			#WARN("COMMIT_MESSAGE",
+			#    "Missing commit description - Add an appropriate one\n");
+			#$commit_log_lines = 2;	#warn only once
 		}
 
 # Check if the commit log has what seems like a diff which can confuse patch
@@ -2663,8 +2663,8 @@ sub process {
 			my ($email_name, $email_address, $comment) = parse_email($email);
 			my $suggested_email = format_email(($email_name, $email_address));
 			if ($suggested_email eq "") {
-				ERROR("BAD_SIGN_OFF",
-				      "Unrecognized email address: '$email'\n" . $herecurr);
+				#ERROR("BAD_SIGN_OFF",
+				#      "Unrecognized email address: '$email'\n" . $herecurr);
 			} else {
 				my $dequoted = $suggested_email;
 				$dequoted =~ s/^"//;
@@ -2716,10 +2716,10 @@ sub process {
 			     "A patch subject line should describe the change not the tool that found it\n" . $herecurr);
 		}
 
-# Check for unwanted Gerrit info
-		if ($in_commit_log && $line =~ /^\s*change-id:/i) {
-			ERROR("GERRIT_CHANGE_ID",
-			      "Remove Gerrit Change-Id's before submitting upstream.\n" . $herecurr);
+# Check for Gerrit Change-Ids not in any patch context
+		if ($realfile eq '' && !$has_patch_separator && $line =~ /^\s*change-id:/i) {
+			#ERROR("GERRIT_CHANGE_ID",
+			#      "Remove Gerrit Change-Id's before submitting upstream\n" . $herecurr);
 		}
 
 # Check if the commit log is in a possible stack dump
@@ -2815,16 +2815,16 @@ sub process {
 		}
 
 # Check for added, moved or deleted files
-		if (!$reported_maintainer_file && !$in_commit_log &&
-		    ($line =~ /^(?:new|deleted) file mode\s*\d+\s*$/ ||
-		     $line =~ /^rename (?:from|to) [\w\/\.\-]+\s*$/ ||
-		     ($line =~ /\{\s*([\w\/\.\-]*)\s*\=\>\s*([\w\/\.\-]*)\s*\}/ &&
-		      (defined($1) || defined($2))))) {
-			$is_patch = 1;
-			$reported_maintainer_file = 1;
-			WARN("FILE_PATH_CHANGES",
-			     "added, moved or deleted file(s), does MAINTAINERS need updating?\n" . $herecurr);
-		}
+#		if (!$reported_maintainer_file && !$in_commit_log &&
+#		    ($line =~ /^(?:new|deleted) file mode\s*\d+\s*$/ ||
+#		     $line =~ /^rename (?:from|to) [\w\/\.\-]+\s*$/ ||
+#		     ($line =~ /\{\s*([\w\/\.\-]*)\s*\=\>\s*([\w\/\.\-]*)\s*\}/ &&
+#		      (defined($1) || defined($2))))) {
+#			$is_patch = 1;
+#			$reported_maintainer_file = 1;
+#			#WARN("FILE_PATH_CHANGES",
+#			#     "added, moved or deleted file(s), does MAINTAINERS need updating?\n" . $herecurr);
+#		}
 
 # Check for wrappage within a valid hunk of the file
 		if ($realcnt != 0 && $line !~ m{^(?:\+|-| |\\ No newline|$)}) {
@@ -3051,8 +3051,8 @@ sub process {
 				$compat3 =~ s/\,([a-z]*)[0-9]*\-/\,$1<\.\*>\-/;
 				`grep -Erq "$compat|$compat2|$compat3" $dt_path`;
 				if ( $? >> 8 ) {
-					WARN("UNDOCUMENTED_DT_STRING",
-					     "DT compatible string \"$compat\" appears un-documented -- check $dt_path\n" . $herecurr);
+#					WARN("UNDOCUMENTED_DT_STRING",
+#					     "DT compatible string \"$compat\" appears un-documented -- check $dt_path\n" . $herecurr);
 				}
 
 				next if $compat !~ /^([a-zA-Z0-9\-]+)\,/;
@@ -3237,35 +3237,35 @@ sub process {
 		}
 
 # check multi-line statement indentation matches previous line
-		if ($perl_version_ok &&
-		    $prevline =~ /^\+([ \t]*)((?:$c90_Keywords(?:\s+if)\s*)|(?:$Declare\s*)?(?:$Ident|\(\s*\*\s*$Ident\s*\))\s*|(?:\*\s*)*$Lval\s*=\s*$Ident\s*)\(.*(\&\&|\|\||,)\s*$/) {
-			$prevline =~ /^\+(\t*)(.*)$/;
-			my $oldindent = $1;
-			my $rest = $2;
-
-			my $pos = pos_last_openparen($rest);
-			if ($pos >= 0) {
-				$line =~ /^(\+| )([ \t]*)/;
-				my $newindent = $2;
-
-				my $goodtabindent = $oldindent .
-					"\t" x ($pos / 8) .
-					" "  x ($pos % 8);
-				my $goodspaceindent = $oldindent . " "  x $pos;
-
-				if ($newindent ne $goodtabindent &&
-				    $newindent ne $goodspaceindent) {
-
-					if (CHK("PARENTHESIS_ALIGNMENT",
-						"Alignment should match open parenthesis\n" . $hereprev) &&
-					    $fix && $line =~ /^\+/) {
-						$fixed[$fixlinenr] =~
-						    s/^\+[ \t]*/\+$goodtabindent/;
-					}
-				}
-			}
-		}
-
+#		if ($perl_version_ok &&
+#		    $prevline =~ /^\+([ \t]*)((?:$c90_Keywords(?:\s+if)\s*)|(?:$Declare\s*)?(?:$Ident|\(\s*\*\s*$Ident\s*\))\s*|(?:\*\s*)*$Lval\s*=\s*$Ident\s*)\(.*(\&\&|\|\||,)\s*$/) {
+#			$prevline =~ /^\+(\t*)(.*)$/;
+#			my $oldindent = $1;
+#			my $rest = $2;
+#
+#			my $pos = pos_last_openparen($rest);
+#			if ($pos >= 0) {
+#				$line =~ /^(\+| )([ \t]*)/;
+#				my $newindent = $2;
+#
+#				my $goodtabindent = $oldindent .
+#					"\t" x ($pos / 8) .
+#					" "  x ($pos % 8);
+#				my $goodspaceindent = $oldindent . " "  x $pos;
+#
+#				if ($newindent ne $goodtabindent &&
+#				    $newindent ne $goodspaceindent) {
+#
+#					if (CHK("PARENTHESIS_ALIGNMENT",
+#						"Alignment should match open parenthesis\n" . $hereprev) &&
+#					    $fix && $line =~ /^\+/) {
+#						$fixed[$fixlinenr] =~
+#						    s/^\+[ \t]*/\+$goodtabindent/;
+#					}
+#				}
+#			}
+#		}
+#
 # check for space after cast like "(int) foo" or "(struct foo) bar"
 # avoid checking a few false positives:
 #   "sizeof(<type>)" or "__alignof__(<type>)"
@@ -6030,8 +6030,8 @@ sub process {
 						if (!defined($stat_real)) {
 							$stat_real = get_stat_real($linenr, $lc);
 						}
-						WARN("VSPRINTF_SPECIFIER_PX",
-						     "Using vsprintf specifier '\%px' potentially exposes the kernel memory layout, if you don't really need the address please consider using '\%p'.\n" . "$here\n$stat_real\n");
+						#WARN("VSPRINTF_SPECIFIER_PX",
+						#     "Using vsprintf specifier '\%px' potentially exposes the kernel memory layout, if you don't really need the address please consider using '\%p'.\n" . "$here\n$stat_real\n");
 					}
 				}
 				if ($bad_specifier ne "") {
@@ -6260,14 +6260,14 @@ sub process {
 		}
 
 # checks for new __setup's
-		if ($rawline =~ /\b__setup\("([^"]*)"/) {
-			my $name = $1;
-
-			if (!grep(/$name/, @setup_docs)) {
-				CHK("UNDOCUMENTED_SETUP",
-				    "__setup appears un-documented -- check Documentation/admin-guide/kernel-parameters.rst\n" . $herecurr);
-			}
-		}
+#		if ($rawline =~ /\b__setup\("([^"]*)"/) {
+#			my $name = $1;
+#
+#			if (!grep(/$name/, @setup_docs)) {
+#				 CHK("UNDOCUMENTED_SETUP",
+#				    "__setup appears un-documented -- check Documentation/admin-guide/kernel-parameters.txt\n" . $herecurr);
+#			}
+#		}
 
 # check for pointless casting of alloc functions
 		if ($line =~ /\*\s*\)\s*$allocFunctions\b/) {

@@ -1374,6 +1374,7 @@ static int cpufreq_online(unsigned int cpu)
 	}
 
 	down_write(&policy->rwsem);
+
 	/*
 	 * affected cpus must always be the one, which are online. We aren't
 	 * managing offline cpus here.

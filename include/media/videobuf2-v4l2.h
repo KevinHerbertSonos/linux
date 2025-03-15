@@ -47,6 +47,12 @@ struct vb2_v4l2_buffer {
 	__u32			sequence;
 	__s32			request_fd;
 	struct vb2_plane	planes[VB2_MAX_PLANES];
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_DEC
+	__u32			private;
+	ulong                   meta_ptr;
+#endif
+
+	ANDROID_KABI_RESERVE(1);
 };
 
 /*

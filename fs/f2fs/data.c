@@ -2629,6 +2629,26 @@ static int f2fs_write_begin(struct file *file, struct address_space *mapping,
 	block_t blkaddr = NULL_ADDR;
 	int err = 0;
 
+#ifdef CONFIG_AMLOGIC_VMAP
+	trace_android_fs_datawrite_wrap(inode, pos, len);
+#else
+	/*
+	 * Should avoid quota operations which can make deadlock:
+	 * kswapd -> f2fs_evict_inode -> dquot_drop ->
+	 *   f2fs_dquot_commit -> f2fs_write_begin ->
+	 *   d_obtain_alias -> __d_alloc -> kmem_cache_alloc(GFP_KERNEL)
+	 */
+	if (trace_android_fs_datawrite_start_enabled() && !IS_NOQUOTA(inode)) {
+		char *path, pathbuf[MAX_TRACE_PATHBUF_LEN];
+
+		path = android_fstrace_get_pathname(pathbuf,
+						    MAX_TRACE_PATHBUF_LEN,
+						    inode);
+		trace_android_fs_datawrite_start(inode, pos, len,
+						 current->pid, path,
+						 current->comm);
+	}
+#endif
 	trace_f2fs_write_begin(inode, pos, len, flags);
 
 	if (!f2fs_is_checkpoint_ready(sbi)) {
@@ -2854,6 +2874,36 @@ static ssize_t f2fs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	do_opu = allow_outplace_dio(inode, iocb, iter);
 
 	trace_f2fs_direct_IO_enter(inode, offset, count, rw);
+
+#ifdef CONFIG_AMLOGIC_VMAP
+	if (rw == READ)
+		trace_android_fs_dataread_wrap(inode, offset, count);
+	if (rw == WRITE)
+		trace_android_fs_datawrite_wrap(inode, offset, count);
+#else
+	if (trace_android_fs_dataread_start_enabled() &&
+	    (rw == READ)) {
+		char *path, pathbuf[MAX_TRACE_PATHBUF_LEN];
+
+		path = android_fstrace_get_pathname(pathbuf,
+						    MAX_TRACE_PATHBUF_LEN,
+						    inode);
+		trace_android_fs_dataread_start(inode, offset,
+						count, current->pid, path,
+						current->comm);
+	}
+	if (trace_android_fs_datawrite_start_enabled() &&
+	    (rw == WRITE)) {
+		char *path, pathbuf[MAX_TRACE_PATHBUF_LEN];
+
+		path = android_fstrace_get_pathname(pathbuf,
+						    MAX_TRACE_PATHBUF_LEN,
+						    inode);
+		trace_android_fs_datawrite_start(inode, offset, count,
+						 current->pid, path,
+						 current->comm);
+	}
+#endif
 
 	if (rw == WRITE && whint_mode == WHINT_MODE_OFF)
 		iocb->ki_hint = WRITE_LIFE_NOT_SET;

@@ -450,10 +450,54 @@ struct fscrypt_mode {
 	bool needs_essiv;
 };
 
-static inline bool
-fscrypt_mode_supports_direct_key(const struct fscrypt_mode *mode)
+extern struct fscrypt_mode fscrypt_modes[];
+
+int fscrypt_prepare_key(struct fscrypt_prepared_key *prep_key,
+			const u8 *raw_key, unsigned int raw_key_size,
+			bool is_hw_wrapped, const struct fscrypt_info *ci);
+
+void fscrypt_destroy_prepared_key(struct fscrypt_prepared_key *prep_key);
+
+int fscrypt_set_per_file_enc_key(struct fscrypt_info *ci, const u8 *raw_key);
+
+int fscrypt_derive_dirhash_key(struct fscrypt_info *ci,
+			       const struct fscrypt_master_key *mk);
+
+void fscrypt_hash_inode_number(struct fscrypt_info *ci,
+			       const struct fscrypt_master_key *mk);
+
+#if defined(CONFIG_AMLOGIC_MODIFY) && defined(CONFIG_AMLOGIC_RDK)
+int fscrypt_check_accessibility(struct inode *inode);
+#endif
+int fscrypt_get_encryption_info(struct inode *inode, bool allow_unsupported);
+
+/**
+ * fscrypt_require_key() - require an inode's encryption key
+ * @inode: the inode we need the key for
+ *
+ * If the inode is encrypted, set up its encryption key if not already done.
+ * Then require that the key be present and return -ENOKEY otherwise.
+ *
+ * No locks are needed, and the key will live as long as the struct inode --- so
+ * it won't go away from under you.
+ *
+ * Return: 0 on success, -ENOKEY if the key is missing, or another -errno code
+ * if a problem occurred while setting up the encryption key.
+ */
+static inline int fscrypt_require_key(struct inode *inode)
 {
-	return mode->ivsize >= offsetofend(union fscrypt_iv, nonce);
+	if (IS_ENCRYPTED(inode)) {
+		int err = fscrypt_get_encryption_info(inode, false);
+		if (err)
+			return err;
+		if (!fscrypt_has_encryption_key(inode))
+			return -ENOKEY;
+#if defined(CONFIG_AMLOGIC_MODIFY) && defined(CONFIG_AMLOGIC_RDK)
+		if (fscrypt_check_accessibility(inode))
+			return -EPERM;
+#endif
+	}
+	return 0;
 }
 
 extern struct crypto_skcipher *

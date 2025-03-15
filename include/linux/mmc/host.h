@@ -281,6 +281,9 @@ struct mmc_host {
 	u32			ocr_avail_sdio;	/* SDIO-specific OCR */
 	u32			ocr_avail_sd;	/* SD-specific OCR */
 	u32			ocr_avail_mmc;	/* MMC-specific OCR */
+#ifdef CONFIG_AMLOGIC_MODIFY
+	u8                      first_init_flag;
+#endif
 	u32			max_current_330;
 	u32			max_current_300;
 	u32			max_current_180;
@@ -380,6 +383,9 @@ struct mmc_host {
 	unsigned int		max_blk_size;	/* maximum size of one mmc block */
 	unsigned int		max_blk_count;	/* maximum number of blocks in one req */
 	unsigned int		max_busy_timeout; /* max busy timeout in ms */
+#ifdef CONFIG_AMLOGIC_MODIFY
+	unsigned int        capacity;
+#endif
 
 	/* private data */
 	spinlock_t		lock;		/* lock for claim and bus ops */
@@ -589,5 +595,9 @@ static inline enum dma_data_direction mmc_get_dma_dir(struct mmc_data *data)
 
 int mmc_send_tuning(struct mmc_host *host, u32 opcode, int *cmd_error);
 int mmc_abort_tuning(struct mmc_host *host, u32 opcode);
+
+#ifdef CONFIG_AMLOGIC_MODIFY
+int aml_read_tuning_para(struct mmc_host *mmc);
+#endif
 
 #endif /* LINUX_MMC_HOST_H */

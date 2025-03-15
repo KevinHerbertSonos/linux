@@ -443,7 +443,120 @@ static int f2fs_check_quota_options(struct f2fs_sb_info *sbi)
 }
 #endif
 
-static int parse_options(struct super_block *sb, char *options)
+static int f2fs_set_test_dummy_encryption(struct super_block *sb,
+					  const char *opt,
+					  const substring_t *arg,
+					  bool is_remount)
+{
+	struct f2fs_sb_info *sbi = F2FS_SB(sb);
+#ifdef CONFIG_FS_ENCRYPTION
+	int err;
+
+	if (!f2fs_sb_has_encrypt(sbi)) {
+		f2fs_err(sbi, "Encrypt feature is off");
+		return -EINVAL;
+	}
+
+	/*
+	 * This mount option is just for testing, and it's not worthwhile to
+	 * implement the extra complexity (e.g. RCU protection) that would be
+	 * needed to allow it to be set or changed during remount.  We do allow
+	 * it to be specified during remount, but only if there is no change.
+	 */
+	if (is_remount && !F2FS_OPTION(sbi).dummy_enc_policy.policy) {
+		f2fs_warn(sbi, "Can't set test_dummy_encryption on remount");
+		return -EINVAL;
+	}
+	err = fscrypt_set_test_dummy_encryption(
+		sb, arg->from, &F2FS_OPTION(sbi).dummy_enc_policy);
+	if (err) {
+		if (err == -EEXIST)
+			f2fs_warn(sbi,
+				  "Can't change test_dummy_encryption on remount");
+		else if (err == -EINVAL)
+			f2fs_warn(sbi, "Value of option \"%s\" is unrecognized",
+				  opt);
+		else
+			f2fs_warn(sbi, "Error processing option \"%s\" [%d]",
+				  opt, err);
+		return -EINVAL;
+	}
+	f2fs_warn(sbi, "Test dummy encryption mode enabled");
+#else
+	f2fs_warn(sbi, "Test dummy encryption mount option ignored");
+#endif
+	return 0;
+}
+
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+#ifdef CONFIG_F2FS_FS_LZ4
+static int f2fs_set_lz4hc_level(struct f2fs_sb_info *sbi, const char *str)
+{
+#ifdef CONFIG_F2FS_FS_LZ4HC
+	unsigned int level;
+#endif
+
+	if (strlen(str) == 3) {
+		F2FS_OPTION(sbi).compress_level = 0;
+		return 0;
+	}
+
+#ifdef CONFIG_F2FS_FS_LZ4HC
+	str += 3;
+
+	if (str[0] != ':') {
+		f2fs_info(sbi, "wrong format, e.g. <alg_name>:<compr_level>");
+		return -EINVAL;
+	}
+	if (kstrtouint(str + 1, 10, &level))
+		return -EINVAL;
+
+	if (level < LZ4HC_MIN_CLEVEL || level > LZ4HC_MAX_CLEVEL) {
+		f2fs_info(sbi, "invalid lz4hc compress level: %d", level);
+		return -EINVAL;
+	}
+
+	F2FS_OPTION(sbi).compress_level = level;
+	return 0;
+#else
+	f2fs_info(sbi, "kernel doesn't support lz4hc compression");
+	return -EINVAL;
+#endif
+}
+#endif
+
+#ifdef CONFIG_F2FS_FS_ZSTD
+static int f2fs_set_zstd_level(struct f2fs_sb_info *sbi, const char *str)
+{
+	unsigned int level;
+	int len = 4;
+
+	if (strlen(str) == len) {
+		F2FS_OPTION(sbi).compress_level = 0;
+		return 0;
+	}
+
+	str += len;
+
+	if (str[0] != ':') {
+		f2fs_info(sbi, "wrong format, e.g. <alg_name>:<compr_level>");
+		return -EINVAL;
+	}
+	if (kstrtouint(str + 1, 10, &level))
+		return -EINVAL;
+
+	if (!level || level > zstd_max_clevel()) {
+		f2fs_info(sbi, "invalid zstd compress level: %d", level);
+		return -EINVAL;
+	}
+
+	F2FS_OPTION(sbi).compress_level = level;
+	return 0;
+}
+#endif
+#endif
+
+static int parse_options(struct super_block *sb, char *options, bool is_remount)
 {
 	struct f2fs_sb_info *sbi = F2FS_SB(sb);
 	substring_t args[MAX_OPT_ARGS];

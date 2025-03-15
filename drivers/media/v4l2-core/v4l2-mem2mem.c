@@ -266,10 +266,9 @@ static void v4l2_m2m_try_run(struct v4l2_m2m_dev *m2m_dev)
 	m2m_dev->curr_ctx = list_first_entry(&m2m_dev->job_queue,
 				   struct v4l2_m2m_ctx, queue);
 	m2m_dev->curr_ctx->job_flags |= TRANS_RUNNING;
-	spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags);
-
 	dprintk("Running job on m2m_ctx: %p\n", m2m_dev->curr_ctx);
 	m2m_dev->m2m_ops->device_run(m2m_dev->curr_ctx->priv);
+	spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags);
 }
 
 /*
@@ -442,6 +441,73 @@ void v4l2_m2m_job_finish(struct v4l2_m2m_dev *m2m_dev,
 	schedule_work(&m2m_dev->job_work);
 }
 EXPORT_SYMBOL(v4l2_m2m_job_finish);
+
+void v4l2_m2m_buf_done_and_job_finish(struct v4l2_m2m_dev *m2m_dev,
+				      struct v4l2_m2m_ctx *m2m_ctx,
+				      enum vb2_buffer_state state)
+{
+	struct vb2_v4l2_buffer *src_buf, *dst_buf;
+	bool schedule_next = false;
+	unsigned long flags;
+
+	spin_lock_irqsave(&m2m_dev->job_spinlock, flags);
+	src_buf = v4l2_m2m_src_buf_remove(m2m_ctx);
+	dst_buf = v4l2_m2m_next_dst_buf(m2m_ctx);
+
+	if (WARN_ON(!src_buf || !dst_buf))
+		goto unlock;
+	v4l2_m2m_buf_done(src_buf, state);
+	dst_buf->is_held = src_buf->flags & V4L2_BUF_FLAG_M2M_HOLD_CAPTURE_BUF;
+	if (!dst_buf->is_held) {
+		v4l2_m2m_dst_buf_remove(m2m_ctx);
+		v4l2_m2m_buf_done(dst_buf, state);
+	}
+	schedule_next = _v4l2_m2m_job_finish(m2m_dev, m2m_ctx);
+unlock:
+	spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags);
+
+	if (schedule_next)
+		v4l2_m2m_schedule_next_job(m2m_dev, m2m_ctx);
+}
+EXPORT_SYMBOL(v4l2_m2m_buf_done_and_job_finish);
+
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_DEC
+void v4l2_m2m_job_pause(struct v4l2_m2m_dev *m2m_dev,
+			struct v4l2_m2m_ctx *m2m_ctx)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&m2m_dev->job_spinlock, flags);
+	if (!m2m_dev->curr_ctx || m2m_dev->curr_ctx != m2m_ctx) {
+		spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags);
+		dprintk("Called by an instance not currently running\n");
+		return;
+	}
+
+	list_del(&m2m_dev->curr_ctx->queue);
+	m2m_dev->curr_ctx->job_flags &= ~(TRANS_QUEUED | TRANS_RUNNING);
+	m2m_dev->curr_ctx->job_flags |= TRANS_ABORT;
+	wake_up(&m2m_dev->curr_ctx->finished);
+	m2m_dev->curr_ctx = NULL;
+
+	spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags);
+}
+EXPORT_SYMBOL(v4l2_m2m_job_pause);
+
+void v4l2_m2m_job_resume(struct v4l2_m2m_dev *m2m_dev,
+			 struct v4l2_m2m_ctx *m2m_ctx)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&m2m_dev->job_spinlock, flags);
+	m2m_ctx->job_flags &= ~TRANS_ABORT;
+	spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags);
+
+	v4l2_m2m_try_schedule(m2m_ctx);
+	v4l2_m2m_try_run(m2m_dev);
+}
+EXPORT_SYMBOL(v4l2_m2m_job_resume);
+#endif
 
 int v4l2_m2m_reqbufs(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
 		     struct v4l2_requestbuffers *reqbufs)

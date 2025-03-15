@@ -759,9 +759,11 @@ static void restore_bytes(struct kmem_cache *s, char *message, u8 data,
 	memset(from, data, to - from);
 }
 
-static int check_bytes_and_report(struct kmem_cache *s, struct page *page,
-			u8 *object, char *what,
-			u8 *start, unsigned int value, unsigned int bytes)
+static int notrace check_bytes_and_report(struct kmem_cache *s,
+					  struct page *page, u8 *object,
+					  char *what, u8 *start,
+					  unsigned int value,
+					  unsigned int bytes)
 {
 	u8 *fault;
 	u8 *end;
@@ -1537,7 +1539,9 @@ static inline struct page *alloc_slab_page(struct kmem_cache *s,
 		__free_pages(page, order);
 		page = NULL;
 	}
-
+#ifdef CONFIG_AMLOGIC_SLAB_TRACE
+	slab_trace_add_page(page, order, s, flags);
+#endif
 	return page;
 }
 
@@ -1765,6 +1769,9 @@ static void __free_slab(struct kmem_cache *s, struct page *page)
 	if (current->reclaim_state)
 		current->reclaim_state->reclaimed_slab += pages;
 	uncharge_slab_page(page, order, s);
+#ifdef CONFIG_AMLOGIC_SLAB_TRACE
+	slab_trace_remove_page(page, order, s);
+#endif
 	__free_pages(page, order);
 }
 
@@ -2647,6 +2654,9 @@ load_freelist:
 	VM_BUG_ON(!c->page->frozen);
 	c->freelist = get_freepointer(s, freelist);
 	c->tid = next_tid(c->tid);
+#ifdef CONFIG_AMLOGIC_SLAB_TRACE
+	slab_trace_mark_object(freelist, addr, s);
+#endif
 	return freelist;
 
 new_slab:
@@ -2675,6 +2685,9 @@ new_slab:
 		goto new_slab;	/* Slab failed checks. Next slab needed */
 
 	deactivate_slab(s, page, get_freepointer(s, freelist), c);
+#ifdef CONFIG_AMLOGIC_SLAB_TRACE
+	slab_trace_mark_object(freelist, addr, s);
+#endif
 	return freelist;
 }
 
@@ -2801,6 +2814,9 @@ redo:
 		}
 		prefetch_freepointer(s, next_object);
 		stat(s, ALLOC_FASTPATH);
+	#ifdef CONFIG_AMLOGIC_SLAB_TRACE
+		slab_trace_mark_object(object, addr, s);
+	#endif
 	}
 
 	maybe_wipe_obj_freeptr(s, object);
@@ -3029,6 +3045,10 @@ redo:
 	/* Same with comment on barrier() in slab_alloc_node() */
 	barrier();
 
+#ifdef CONFIG_AMLOGIC_SLAB_TRACE
+	slab_trace_remove_object(head, s);
+#endif
+
 	if (likely(page == c->page)) {
 		void **freelist = READ_ONCE(c->freelist);
 
@@ -3123,6 +3143,9 @@ int build_detached_freelist(struct kmem_cache *s, size_t size,
 		if (unlikely(!PageSlab(page))) {
 			BUG_ON(!PageCompound(page));
 			kfree_hook(object);
+		#ifdef CONFIG_AMLOGIC_SLAB_TRACE
+			slab_trace_remove_page(page, compound_order(page), s);
+		#endif
 			__free_pages(page, compound_order(page));
 			p[size] = NULL; /* mark object processed */
 			return size;
@@ -3334,6 +3357,9 @@ static inline unsigned int slab_order(unsigned int size,
 
 static inline int calculate_order(unsigned int size)
 {
+#ifdef CONFIG_AMLOGIC_MEMORY_EXTEND
+	return get_order(size);
+#else
 	unsigned int order;
 	unsigned int min_objects;
 	unsigned int max_objects;
@@ -3381,6 +3407,7 @@ static inline int calculate_order(unsigned int size)
 	if (order < MAX_ORDER)
 		return order;
 	return -ENOSYS;
+#endif
 }
 
 static void
@@ -3681,6 +3708,13 @@ static int calculate_sizes(struct kmem_cache *s, int forced_order)
 	return !!oo_objects(s->oo);
 }
 
+#ifdef CONFIG_AMLOGIC_SLAB_TRACE
+int get_cache_max_order(struct kmem_cache *s)
+{
+	return oo_order(s->oo);
+}
+#endif
+
 static int kmem_cache_open(struct kmem_cache *s, slab_flags_t flags)
 {
 	s->flags = kmem_cache_flags(s->size, flags, s->name, s->ctor);
@@ -3853,6 +3887,25 @@ static int __init setup_slub_min_objects(char *str)
 
 __setup("slub_min_objects=", setup_slub_min_objects);
 
+#ifdef CONFIG_AMLOGIC_MEMORY_EXTEND
+static void aml_slub_free_large(struct page *page, const void *obj)
+{
+	unsigned int nr_pages, i;
+
+	if (page) {
+		__ClearPageHead(page);
+		ClearPageOwnerPriv1(page);
+		nr_pages = page->index;
+		pr_debug("%s, page:%p, pages:%d, obj:%p\n",
+			__func__, page_address(page), nr_pages, obj);
+		for (i = 0; i < nr_pages; i++)  {
+			__free_pages(page, 0);
+			page++;
+		}
+	}
+}
+#endif
+
 void *__kmalloc(size_t size, gfp_t flags)
 {
 	struct kmem_cache *s;
@@ -3996,6 +4049,15 @@ size_t __ksize(const void *object)
 
 	if (unlikely(!PageSlab(page))) {
 		WARN_ON(!PageCompound(page));
+
+	#ifdef CONFIG_AMLOGIC_MEMORY_EXTEND
+		if (unlikely(PageOwnerPriv1(page))) {
+			pr_debug("%s, obj:%p, page:%p, index:%ld, size:%ld\n",
+				__func__, object, page_address(page),
+				page->index, PAGE_SIZE * page->index);
+			return PAGE_SIZE * page->index;
+		}
+	#endif
 		return page_size(page);
 	}
 
@@ -4016,11 +4078,29 @@ void kfree(const void *x)
 	page = virt_to_head_page(x);
 	if (unlikely(!PageSlab(page))) {
 		unsigned int order = compound_order(page);
+	#ifdef CONFIG_AMLOGIC_MEMORY_EXTEND
+		unsigned int nr_pages;
+	#endif /* CONFIG_AMLOGIC_MEMORY_EXTEND */
 
 		BUG_ON(!PageCompound(page));
 		kfree_hook(object);
+	#ifdef CONFIG_AMLOGIC_MEMORY_EXTEND
+		if (page->index)
+			nr_pages = page->index;
+		else
+			nr_pages = 1 << order;
+		mod_node_page_state(page_pgdat(page), NR_SLAB_UNRECLAIMABLE,
+			-(nr_pages));
+		mod_node_page_state(page_pgdat(page), NR_SLAB_UNRECLAIMABLE_O,
+			-(nr_pages));
+		if (unlikely(PageOwnerPriv1(page))) {
+			aml_slub_free_large(page, x);
+			return;
+		}
+	#else
 		mod_node_page_state(page_pgdat(page), NR_SLAB_UNRECLAIMABLE,
 				    -(1 << order));
+	#endif /* CONFIG_AMLOGIC_MEMORY_EXTEND */
 		__free_pages(page, order);
 		return;
 	}
@@ -4321,6 +4401,9 @@ void __init kmem_cache_init(void)
 	/* Now we can use the kmem_cache to allocate kmalloc slabs */
 	setup_kmalloc_cache_index_table();
 	create_kmalloc_caches(0);
+#ifdef CONFIG_AMLOGIC_SLAB_TRACE
+	slab_trace_init();
+#endif
 
 	/* Setup random freelists for each cache */
 	init_freelist_randomization();

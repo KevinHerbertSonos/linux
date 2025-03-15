@@ -179,6 +179,29 @@ static inline bool should_force_cow_break(struct vm_area_struct *vma, unsigned i
 	return is_cow_mapping(vma->vm_flags) && (flags & FOLL_GET);
 }
 
+#ifdef CONFIG_AMLOGIC_PIN_LOCKED_FILE
+static int sysctrl_shrink_unevictable = 1;
+static struct ctl_table shrink_unevictable[] = {
+	{
+		.procname	= "shrink_unevictable",
+		.data		= &sysctrl_shrink_unevictable,
+		.maxlen		= sizeof(sysctrl_shrink_unevictable),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+		},
+	{ }
+};
+
+static int __init aml_gup_init(void)
+{
+	register_sysctl("vm", shrink_unevictable);
+	return 0;
+}
+fs_initcall(aml_gup_init);
+#endif
+
 static struct page *follow_page_pte(struct vm_area_struct *vma,
 		unsigned long address, pmd_t *pmd, unsigned int flags,
 		struct dev_pagemap **pgmap)
@@ -187,6 +210,9 @@ static struct page *follow_page_pte(struct vm_area_struct *vma,
 	struct page *page;
 	spinlock_t *ptl;
 	pte_t *ptep, pte;
+#ifdef CONFIG_AMLOGIC_PIN_LOCKED_FILE
+	struct address_space *mapping;
+#endif
 
 retry:
 	if (unlikely(pmd_bad(*pmd)))
@@ -293,6 +319,19 @@ retry:
 		 * when it attempts to reclaim the page.
 		 */
 		if (page->mapping && trylock_page(page)) {
+		#ifdef CONFIG_AMLOGIC_PIN_LOCKED_FILE
+			mapping = page_mapping(page);
+			if (mapping &&
+			    test_bit(AS_LOCK_MAPPING, &mapping->flags) &&
+			    sysctrl_shrink_unevictable) {
+				unlock_page(page);
+			} else {
+				/* same as #else */
+				lru_add_drain();
+				mlock_vma_page(page);
+				unlock_page(page);
+			}
+		#else
 			lru_add_drain();  /* push cached pages to LRU */
 			/*
 			 * Because we lock page here, and migration is
@@ -302,6 +341,7 @@ retry:
 			 */
 			mlock_vma_page(page);
 			unlock_page(page);
+		#endif
 		}
 	}
 out:

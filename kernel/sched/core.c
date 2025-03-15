@@ -23,6 +23,20 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
+#undef CREATE_TRACE_POINTS
+#include <trace/hooks/dtask.h>
+
+#undef CREATE_TRACE_POINTS
+#include <trace/hooks/sched.h>
+
+#ifdef CONFIG_AMLOGIC_DEBUG_FTRACE_PSTORE
+#include <linux/amlogic/debug_ftrace_ramoops.h>
+#endif
+
+#ifdef CONFIG_AMLOGIC_FREERTOS
+#include <linux/amlogic/aml_cma.h>
+#endif
+
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
  * associated with them) to allow external modules to probe them.
@@ -4176,7 +4190,16 @@ static void __sched notrace __schedule(bool preempt)
 		++*switch_count;
 
 		trace_sched_switch(preempt, prev, next);
+#ifdef CONFIG_AMLOGIC_DEBUG_FTRACE_PSTORE
+		do {
+			unsigned long next_comm;
 
+			if (ramoops_io_en) {
+				strlcpy((char *)&next_comm, next->comm, sizeof(next_comm));
+				pstore_ftrace_sched_switch(next->pid, next_comm);
+			}
+		} while (0);
+#endif
 		/* Also unlocks the rq: */
 		rq = context_switch(rq, prev, next, &rf);
 	} else {
@@ -6517,6 +6540,9 @@ int sched_cpu_activate(unsigned int cpu)
 	}
 	rq_unlock_irqrestore(rq, &rf);
 
+#ifdef CONFIG_AMLOGIC_FREERTOS
+	aml_wakeup_cma_task(cpu);
+#endif
 	return 0;
 }
 

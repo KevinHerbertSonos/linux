@@ -410,6 +410,13 @@ config SPI_MESON_SPICC
 	  This enables master mode support for the SPICC (SPI communication
 	  controller) available in Amlogic Meson SoCs.
 
+config SPI_MESON_SPICC_V2
+	tristate "Amlogic Meson SPICC controller(v2)"
+	depends on ARCH_MESON || COMPILE_TEST
+	help
+	  This enables master mode support for the SPICC (SPI communication
+	  controller) available in Amlogic Meson SoCs.
+
 config SPI_MESON_SPIFC
 	tristate "Amlogic Meson SPIFC controller"
 	depends on ARCH_MESON || COMPILE_TEST
@@ -417,6 +424,15 @@ config SPI_MESON_SPIFC
 	help
 	  This enables master mode support for the SPIFC (SPI flash
 	  controller) available in Amlogic Meson SoCs.
+
+config SPI_MESON_SPICC_SLAVE
+	tristate "Amlogic Meson SPICC Slave controller"
+	depends on ARCH_MESON || COMPILE_TEST
+	help
+	  This enables slave mode support for the SPICC (SPI communication
+	  controller) available in Amlogic Meson SoCs. SPICC can work both
+	  in master mode and slave mode.
+	  say Y or M here.If you are not sure, say N.
 
 config SPI_MT65XX
 	tristate "MediaTek SPI controller"

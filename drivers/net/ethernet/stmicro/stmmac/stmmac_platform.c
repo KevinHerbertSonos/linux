@@ -631,8 +631,12 @@ error_pclk_get:
 void stmmac_remove_config_dt(struct platform_device *pdev,
 			     struct plat_stmmacenet_data *plat)
 {
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+/*these clk operation will report warning when rmmod*/
+#else
 	clk_disable_unprepare(plat->stmmac_clk);
 	clk_disable_unprepare(plat->pclk);
+#endif
 	of_node_put(plat->phy_node);
 	of_node_put(plat->mdio_node);
 }
@@ -726,7 +730,11 @@ EXPORT_SYMBOL_GPL(stmmac_pltfr_remove);
  * call the main suspend function and then, if required, on some platform, it
  * can call an exit helper.
  */
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+int stmmac_pltfr_suspend(struct device *dev)
+#else
 static int stmmac_pltfr_suspend(struct device *dev)
+#endif
 {
 	int ret;
 	struct net_device *ndev = dev_get_drvdata(dev);
@@ -740,6 +748,9 @@ static int stmmac_pltfr_suspend(struct device *dev)
 	return ret;
 }
 
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+EXPORT_SYMBOL_GPL(stmmac_pltfr_suspend);
+#endif
 /**
  * stmmac_pltfr_resume
  * @dev: device pointer
@@ -747,7 +758,11 @@ static int stmmac_pltfr_suspend(struct device *dev)
  * the main resume function, on some platforms, it can call own init helper
  * if required.
  */
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+int stmmac_pltfr_resume(struct device *dev)
+#else
 static int stmmac_pltfr_resume(struct device *dev)
+#endif
 {
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct stmmac_priv *priv = netdev_priv(ndev);
@@ -760,6 +775,9 @@ static int stmmac_pltfr_resume(struct device *dev)
 }
 #endif /* CONFIG_PM_SLEEP */
 
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+EXPORT_SYMBOL_GPL(stmmac_pltfr_resume);
+#endif
 SIMPLE_DEV_PM_OPS(stmmac_pltfr_pm_ops, stmmac_pltfr_suspend,
 				       stmmac_pltfr_resume);
 EXPORT_SYMBOL_GPL(stmmac_pltfr_pm_ops);

@@ -35,6 +35,10 @@
 
 #include "internal.h"
 
+#ifdef CONFIG_AMLOGIC_DEBUG_FTRACE_PSTORE
+bool console_enable;
+#endif
+
 /*
  * We defer making "oops" entries appear in pstore - see
  * whether the system is actually still running well enough
@@ -224,7 +228,7 @@ static int zbufsize_842(size_t size)
 #if IS_ENABLED(CONFIG_PSTORE_ZSTD_COMPRESS)
 static int zbufsize_zstd(size_t size)
 {
-	return ZSTD_compressBound(size);
+	return zstd_compress_bound(size);
 }
 #endif
 
@@ -490,6 +494,7 @@ static void pstore_unregister_kmsg(void)
 }
 
 #ifdef CONFIG_PSTORE_CONSOLE
+#ifndef CONFIG_AMLOGIC_DEBUG_FTRACE_PSTORE
 static void pstore_console_write(struct console *con, const char *s, unsigned c)
 {
 	struct pstore_record record;
@@ -521,6 +526,17 @@ static void pstore_unregister_console(void)
 {
 	unregister_console(&pstore_console);
 }
+#else
+static void pstore_register_console(void)
+{
+	console_enable = 1;
+}
+
+static void pstore_unregister_console(void)
+{
+	console_enable = 0;
+}
+#endif
 #else
 static void pstore_register_console(void) {}
 static void pstore_unregister_console(void) {}

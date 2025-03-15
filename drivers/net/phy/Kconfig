@@ -95,7 +95,7 @@ config MDIO_BUS_MUX_MESON_G12A
 	depends on ARCH_MESON || COMPILE_TEST
 	depends on OF_MDIO && HAS_IOMEM && COMMON_CLK
 	select MDIO_BUS_MUX
-	default m if ARCH_MESON
+	default n
 	help
 	  This module provides a driver for the MDIO multiplexer/glue of
 	  the amlogic g12a SoC. The multiplexers connects either the external
@@ -454,6 +454,11 @@ config REALTEK_PHY
 	tristate "Realtek PHYs"
 	---help---
 	  Supports the Realtek 821x PHY.
+
+config MOTORCOMM_PHY
+	tristate "Motorcomm PHYs"
+	---help---
+	  Supports the YT8010, YT8510, YT8511, YT8512 PHYs.
 
 config RENESAS_PHY
 	tristate "Driver for Renesas PHYs"

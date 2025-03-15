@@ -17,6 +17,8 @@
  * As such, the enable set/clear, pending set/clear and active bit
  * registers are banked per-cpu for these sources.
  */
+#define SKIP_IO_TRACE
+
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/err.h>
@@ -49,6 +51,10 @@
 
 #ifdef CONFIG_ARM64
 #include <asm/cpufeature.h>
+
+#ifdef CONFIG_AMLOGIC_FREERTOS
+#include <linux/amlogic/freertos.h>
+#endif
 
 static void gic_check_cpu_features(void)
 {
@@ -486,6 +492,9 @@ static void gic_dist_init(struct gic_chip_data *gic)
 	u32 cpumask;
 	unsigned int gic_irqs = gic->gic_irqs;
 	void __iomem *base = gic_data_dist_base(gic);
+#ifdef CONFIG_AMLOGIC_FREERTOS
+	u32 tmp;
+#endif
 
 	writel_relaxed(GICD_DISABLE, base + GIC_DIST_CTRL);
 
@@ -495,9 +504,16 @@ static void gic_dist_init(struct gic_chip_data *gic)
 	cpumask = gic_get_cpumask(gic);
 	cpumask |= cpumask << 8;
 	cpumask |= cpumask << 16;
+#ifdef CONFIG_AMLOGIC_FREERTOS
+	for (i = 32; i < gic_irqs; i += 4) {
+		tmp = readl_relaxed(base + GIC_DIST_TARGET + i * 4 / 4);
+		tmp = freertos_get_irqregval(cpumask, tmp, i, 4);
+		writel_relaxed(tmp, base + GIC_DIST_TARGET + i * 4 / 4);
+	}
+#else
 	for (i = 32; i < gic_irqs; i += 4)
 		writel_relaxed(cpumask, base + GIC_DIST_TARGET + i * 4 / 4);
-
+#endif
 	gic_dist_config(base, gic_irqs, NULL);
 
 	writel_relaxed(GICD_ENABLE, base + GIC_DIST_CTRL);
@@ -1008,9 +1024,6 @@ static int gic_irq_domain_translate(struct irq_domain *d,
 			*hwirq += 16;
 
 		*type = fwspec->param[2] & IRQ_TYPE_SENSE_MASK;
-
-		/* Make it clear that broken DTs are... broken */
-		WARN_ON(*type == IRQ_TYPE_NONE);
 		return 0;
 	}
 
@@ -1020,8 +1033,6 @@ static int gic_irq_domain_translate(struct irq_domain *d,
 
 		*hwirq = fwspec->param[0];
 		*type = fwspec->param[1];
-
-		WARN_ON(*type == IRQ_TYPE_NONE);
 		return 0;
 	}
 
