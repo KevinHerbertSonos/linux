@@ -146,6 +146,44 @@ void earcrx_cmdc_arc_connect(struct regmap *cmdc_map, bool init)
 				);
 }
 
+void set_spdif_to_arc_hpd_status(struct regmap *cmdc_map, int st)
+{
+	//int val;
+	if (st) {
+		/*soft enabled*/
+		mmio_update_bits(cmdc_map,
+					EARC_RX_CMDC_VSM_CTRL0,
+					0x7 << 22 ,
+					0x1 << 24 |  /* comma_cnt_rst */
+					0x1 << 23 |  /* comma_cnt_rst */
+					0x1 << 22    /* comma_cnt_rst */
+					);
+		mmio_update_bits(cmdc_map,
+					EARC_RX_CMDC_VSM_CTRL1,
+					0x3 << 2 ,
+					0x1 << 3 |  /* comma_cnt_rst */
+					0x1 << 2    /* comma_cnt_rst */
+					);
+		//val = mmio_read(cmdc_map, EARC_RX_CMDC_VSM_CTRL0);
+		//printk("%s:%s:%d test EARC_RX_CMDC_VSM_CTRL0 = %#x\n", __FILE__, __func__, __LINE__, val);
+	} else {
+		/* soft reset */
+		mmio_update_bits(cmdc_map,
+					EARC_RX_CMDC_VSM_CTRL0,
+					0x7 << 22 ,
+					0x0 << 24 |  /* comma_cnt_rst */
+					0x0 << 23 |  /* comma_cnt_rst */
+					0x0 << 22    /* comma_cnt_rst */
+					);
+		mmio_update_bits(cmdc_map,
+					EARC_RX_CMDC_VSM_CTRL1,
+					0x3 << 2 ,
+					0x0 << 3 |  /* comma_cnt_rst */
+					0x0 << 2    /* comma_cnt_rst */
+					);
+	}
+}
+
 void earcrx_cmdc_hpd_detect(struct regmap *cmdc_map, bool st)
 {
 	if (st) {

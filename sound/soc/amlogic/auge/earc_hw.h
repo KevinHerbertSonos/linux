@@ -249,6 +249,7 @@ void earcrx_pll_refresh(struct regmap *top_map,
 void earcrx_cmdc_int_mask(struct regmap *top_map);
 void earcrx_cmdc_init(struct regmap *top_map, bool en, bool rx_dmac_sync_int, bool rterm_on);
 void earcrx_cmdc_arc_connect(struct regmap *cmdc_map, bool init);
+void set_spdif_to_arc_hpd_status(struct regmap *cmdc_map, int st);
 void earcrx_cmdc_hpd_detect(struct regmap *cmdc_map, bool st);
 void earcrx_dmac_sync_int_enable(struct regmap *top_map, int enable);
 void earcrx_dmac_init(struct regmap *top_map,
