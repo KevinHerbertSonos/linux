@@ -1207,9 +1207,11 @@ void aml_tdm_out_reset(unsigned int tdm_id, int offset)
 	audiobus_update_bits(reg, val, 0);
 }
 
-void aml_tdmout_auto_gain_enable(unsigned int tdm_id)
+void aml_tdmout_auto_gain_enable(unsigned int tdm_id, unsigned int gain_step, unsigned int gain_rate)
 {
 	unsigned int reg, offset;
+
+	pr_debug("%s(%d, %d, %d)", __func__, tdm_id, gain_step, gain_rate);
 
 	if (tdm_id >= 3) {
 		reg = EE_AUDIO_TDMOUT_D_GAIN_EN;
@@ -1232,7 +1234,8 @@ void aml_tdmout_auto_gain_enable(unsigned int tdm_id)
 	 */
 	audiobus_update_bits(reg,
 			     0x1 << 31 | 0xFF << 16 | 0xFFFF << 0,
-			     0x1 << 31 | 0x01 << 16 | 0x0002 << 0);
+			     0x1 << 31 | gain_step << 16 | gain_rate << 0);
+	pr_debug("  EE_AUDIO_TDMOUT_%c_GAIN_CTRL = 0x%8.8x", 'A' + tdm_id, audiobus_read(reg));
 }
 
 void aml_tdmout_set_gain(int tdmout_id, int value)

@@ -157,7 +157,7 @@ void aml_tdm_set_oe_v2(struct aml_audio_controller *actrl,
 	int index,
 	int force_oe,
 	int oe_val);
-void aml_tdmout_auto_gain_enable(unsigned int tdm_id);
+void aml_tdmout_auto_gain_enable(unsigned int tdm_id, unsigned int gain_step, unsigned int gain_rate);
 void aml_tdmout_set_gain(int tdmout_id, int value);
 int aml_tdmout_get_gain(int tdmout_id);
 void aml_tdmout_set_mute(int tdmout_id, int mute);
