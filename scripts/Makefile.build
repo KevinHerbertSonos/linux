@@ -419,6 +419,37 @@ define rule_ld_multi_m
 	$(call cmd,gen_objtooldep)
 endef
 
+dummy-object = $(obj)/.lib_exports.o
+ksyms-lds = $(dot-target).lds
+
+quiet_cmd_export_list = EXPORTS $@
+cmd_export_list = $(OBJDUMP) -h $< | \
+	sed -ne '/___ksymtab/s/.*+\([^ ]*\).*/EXTERN(\1)/p' >$(ksyms-lds);\
+	rm -f $(dummy-object);\
+	echo | $(CC) $(a_flags) -c -o $(dummy-object) -x assembler -;\
+	$(LD) $(ld_flags) -r -o $@ -T $(ksyms-lds) $(dummy-object);\
+	rm $(dummy-object) $(ksyms-lds)
+
+$(obj)/lib-ksyms.o: $(lib-target) FORCE
+	$(call if_changed,export_list)
+
+targets += $(obj)/lib-ksyms.o
+
+endif
+
+# NOTE:
+# Do not replace $(filter %.o,^) with $(real-prereqs). When a single object
+# module is turned into a multi object module, $^ will contain header file
+# dependencies recorded in the .*.cmd file.
+quiet_cmd_link_multi-m = LD [M]  $@
+      cmd_link_multi-m = $(file >$@.in,$(filter %.o,$^)) $(LD) $(ld_flags) -r -o $@ @$@.in && rm -f $@.in
+endif
+# Sonos patched cmd_link_multi-m to support arbitrarily long command lines
+
+$(multi-used-m): FORCE
+	$(call if_changed,link_multi-m)
+$(call multi_depend, $(multi-used-m), .o, -objs -y -m)
+
 $(multi-obj-m): private objtool-enabled := $(delay-objtool)
 $(multi-obj-m): private part-of-module := y
 $(multi-obj-m): %.o: %.mod FORCE
