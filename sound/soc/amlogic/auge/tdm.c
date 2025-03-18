@@ -52,8 +52,10 @@
 #define DRV_NAME "snd_tdm"
 
 #define TDMOUT_DEFAULT_DELAY 3072
-#define DEFAULT_UNDERRUN_THRESHOLD 960
+#define DEFAULT_UNDERRUN_THRESHOLD 600
 #define DEFAULT_DIFF_THRESHOLD 128
+#define DEFAULT_GAIN_STEP 1
+#define DEFAULT_GAIN_STEP_RATE 2
 
 static snd_pcm_uframes_t aml_tdm_pointer(struct snd_pcm_substream *substream);
 static void dump_pcm_setting(struct pcm_setting *setting)
@@ -125,12 +127,18 @@ struct aml_tdm {
 	bool vad_buf_occupation;
 	bool vad_buf_recovery;
 	enum trigger_state tdm_trigger_state;
+
 	int underrun_threshold;
 	snd_pcm_sframes_t tdmout_last_delay;
 	bool tdmout_gain_mute;
 	int disable_gain_count;
 	int tdm_for_speaker;
 	bool tdm_fade_out_enable;
+	int gain_step;
+	int gain_step_rate;
+	int diff_threshold;
+	bool report_clicks;
+
 	unsigned int syssrc_clk_rate;
 	void *pcpd_monitor_src;
 	int pcpd_monitor_enable;
@@ -833,7 +841,7 @@ static int tdmout_gain_set(struct snd_kcontrol *kcontrol,
 
 	pr_info("%s, id: %d, gain: 0x%x\n", __func__, p_tdm->id, value);
 	if (p_tdm->chipinfo->gain_ver == GAIN_VER3)
-		aml_tdmout_auto_gain_enable(p_tdm->id);
+		aml_tdmout_auto_gain_enable(p_tdm->id, p_tdm->gain_step, p_tdm->gain_step_rate);
 	aml_tdmout_set_gain(p_tdm->id, value);
 
 	return 0;
@@ -1048,12 +1056,16 @@ static irqreturn_t aml_tdm_ddr_isr(int irq, void *devid)
 		snd_pcm_stop_xrun(substream);
 	}
 
-	if (p_tdm->tdm_fade_out_enable && substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		snd_pcm_sframes_t delay;
-		int err;
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		snd_pcm_sframes_t delay = p_tdm->tdmout_last_delay;
+		int err = 0;
 
 		err = snd_pcm_kernel_ioctl(substream, SNDRV_PCM_IOCTL_DELAY,
-						&delay);
+							&delay);
+
+		// A kernel panic will occur if we try to return with interrupts enabled.
+		local_irq_disable();
+
 		if (!err) {
 			int difference = (p_tdm->tdmout_last_delay > delay) ?
 				(p_tdm->tdmout_last_delay - delay) :
@@ -1061,25 +1073,32 @@ static irqreturn_t aml_tdm_ddr_isr(int irq, void *devid)
 
 			if ((delay < p_tdm->underrun_threshold &&
 			    delay < p_tdm->tdmout_last_delay &&
-			    difference > DEFAULT_DIFF_THRESHOLD &&
+			    difference > p_tdm->diff_threshold &&
 			    !p_tdm->tdmout_gain_mute &&
 			    p_tdm->disable_gain_count < 5) ||
 			    (substream->runtime->status->state == SNDRV_PCM_STATE_DRAINING &&
 			     !p_tdm->tdmout_gain_mute)) {
-				pr_info("enable gain step, delay: %ld, last: %ld, threshold: %d\n",
-					delay, p_tdm->tdmout_last_delay, p_tdm->underrun_threshold);
-				aml_tdmout_gain_step(p_tdm->id, true);
-				p_tdm->tdmout_gain_mute = true;
+					if (p_tdm->tdm_fade_out_enable) {
+						pr_info("enable gain step, delay: %ld, last: %ld, threshold: %d\n",
+							delay, p_tdm->tdmout_last_delay, p_tdm->underrun_threshold);
+						aml_tdmout_gain_step(p_tdm->id, true);
+					}
+					p_tdm->tdmout_gain_mute = true;
 			} else if (p_tdm->tdmout_gain_mute &&
 				   delay >= p_tdm->tdmout_last_delay &&
 				   substream->runtime->status->state != SNDRV_PCM_STATE_DRAINING) {
-				pr_info("disable gain step, delay: %ld, last: %ld, threshold: %d\n",
-					delay, p_tdm->tdmout_last_delay, p_tdm->underrun_threshold);
-				aml_tdmout_gain_step(p_tdm->id, false);
+				if (p_tdm->report_clicks) {
+					pr_warn("%s(): TDM-%c: !!! Potential Underrun Pop/Click Warning!!!\n", __func__, 
+						'A' + p_tdm->id);
+				}
+				if (p_tdm->tdm_fade_out_enable) {
+					pr_info("disable gain step, delay: %ld, last: %ld, threshold: %d\n",
+							delay, p_tdm->tdmout_last_delay, p_tdm->underrun_threshold);
+					aml_tdmout_gain_step(p_tdm->id, false);
+				}
 				p_tdm->tdmout_gain_mute = false;
 				p_tdm->disable_gain_count++;
 			}
-
 			p_tdm->tdmout_last_delay = delay;
 		}
 	}
@@ -2427,6 +2446,24 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 	ret = of_property_read_u32(node, "ctrl_gain", &p_tdm->ctrl_gain_enable);
 	if (ret < 0)
 		p_tdm->ctrl_gain_enable = 0;
+    else
+		pr_info("TDM id %d ctrl_gain_enable\n", p_tdm->id);
+	ret = of_property_read_u32(node, "gain_step", &p_tdm->gain_step);
+	if (ret < 0)
+		p_tdm->gain_step = DEFAULT_GAIN_STEP;
+	else
+		pr_info("TDM id %d gain step = %d\n",
+			p_tdm->id, p_tdm->gain_step);
+	ret = of_property_read_u32(node, "gain_step_rate", &p_tdm->gain_step_rate);
+	if (ret < 0)
+		p_tdm->gain_step_rate = DEFAULT_GAIN_STEP_RATE;
+	else
+		pr_info("TDM id %d gain step rate = %d\n", p_tdm->id, p_tdm->gain_step_rate);
+	ret = of_property_read_u32(node, "diff_threshold", &p_tdm->diff_threshold);
+	if (ret < 0)
+		p_tdm->diff_threshold = DEFAULT_DIFF_THRESHOLD;
+	else
+		pr_info("TDM id %d diff threshold = %d\n", p_tdm->id, p_tdm->diff_threshold);
 
 	/*set default clk for output*/
 	if (p_tdm->start_clk_enable == 1)
@@ -2457,7 +2494,7 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 	}
 
 	if (p_tdm->ctrl_gain_enable)
-		aml_tdmout_auto_gain_enable(p_tdm->id);
+		aml_tdmout_auto_gain_enable(p_tdm->id, p_tdm->gain_step, p_tdm->gain_step_rate);
 
 	ret = of_property_read_u32(node, "clk_tuning_enable",
 				&p_tdm->clk_tuning_enable);
@@ -2517,7 +2554,18 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 	tdm_register_early_suspend_hdr(p_tdm->id, pdev);
 #endif
 
-	p_tdm->underrun_threshold = DEFAULT_UNDERRUN_THRESHOLD;
+	ret = of_property_read_u32(node, "underrun_threshold", &p_tdm->underrun_threshold);
+	p_tdm->report_clicks = false;
+	if (ret < 0)
+		p_tdm->underrun_threshold = DEFAULT_UNDERRUN_THRESHOLD;
+	else {
+		pr_info("TDM id %d underrun_threshold = %d\n", p_tdm->id, p_tdm->underrun_threshold);
+
+		// If underrun threshold is explicitly declared in the DTB, then we will enable click
+		// reporting.  We can assume that this player has been tested to avoid false positives
+		// (e.g. due to pauses and earcons).
+		p_tdm->report_clicks = true;
+	}
 
 	return 0;
 }
