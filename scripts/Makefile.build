@@ -440,7 +440,9 @@ endif
 # module is turned into a multi object module, $^ will contain header file
 # dependencies recorded in the .*.cmd file.
 quiet_cmd_link_multi-m = LD [M]  $@
-      cmd_link_multi-m = $(LD) $(ld_flags) -r -o $@ $(filter %.o,$^)
+      cmd_link_multi-m = $(file >$@.in,$(filter %.o,$^)) $(LD) $(ld_flags) -r -o $@ @$@.in && rm -f $@.in
+endif
+# Sonos patched cmd_link_multi-m to support arbitrarily long command lines
 
 $(multi-used-m): FORCE
 	$(call if_changed,link_multi-m)
