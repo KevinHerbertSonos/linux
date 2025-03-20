@@ -48,21 +48,10 @@ static void mpage_read_end_io(struct bio *bio)
 	struct folio_iter fi;
 	int err = blk_status_to_errno(bio->bi_status);
 
-	bio_for_each_folio_all(fi, bio)
-		folio_end_read(fi.folio, err == 0);
-
-	bio_put(bio);
-}
-
-static void mpage_write_end_io(struct bio *bio)
-{
-	struct folio_iter fi;
-	int err = blk_status_to_errno(bio->bi_status);
-
-	bio_for_each_folio_all(fi, bio) {
-		if (err)
-			mapping_set_error(fi.folio->mapping, err);
-		folio_end_writeback(fi.folio);
+	bio_for_each_segment_all(bv, bio, i) {
+		struct page *page = bv->bv_page;
+		page_endio(page, bio_op(bio),
+			   blk_status_to_errno(bio->bi_status));
 	}
 
 	bio_put(bio);
