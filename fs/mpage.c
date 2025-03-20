@@ -49,7 +49,7 @@ static void mpage_end_io(struct bio *bio)
 	struct bio_vec *bv;
 	struct bvec_iter_all iter_all;
 
-	bio_for_each_segment_all(bv, bio, iter_all) {
+	bio_for_each_segment_all(bv, bio, i) {
 		struct page *page = bv->bv_page;
 		page_endio(page, bio_op(bio),
 			   blk_status_to_errno(bio->bi_status));
@@ -60,30 +60,6 @@ static void mpage_end_io(struct bio *bio)
 
 static struct bio *mpage_bio_submit(int op, int op_flags, struct bio *bio)
 {
-	if (trace_android_fs_dataread_start_enabled() && (op == REQ_OP_READ)) {
-		struct page *first_page = bio->bi_io_vec[0].bv_page;
-
-		if (first_page != NULL) {
-		#ifdef CONFIG_AMLOGIC_VMAP
-			trace_android_fs_dataread_wrap(first_page->mapping->host,
-						page_offset(first_page),
-						bio->bi_iter.bi_size);
-		#else
-			char *path, pathbuf[MAX_TRACE_PATHBUF_LEN];
-
-			path = android_fstrace_get_pathname(pathbuf,
-						    MAX_TRACE_PATHBUF_LEN,
-						    first_page->mapping->host);
-			trace_android_fs_dataread_start(
-				first_page->mapping->host,
-				page_offset(first_page),
-				bio->bi_iter.bi_size,
-				current->pid,
-				path,
-				current->comm);
-		#endif
-		}
-	}
 	bio->bi_end_io = mpage_end_io;
 	bio_set_op_attrs(bio, op, op_flags);
 	guard_bio_eod(bio);

@@ -91,74 +91,6 @@ static void __read_end_io(struct bio *bio)
 	bio_put(bio);
 }
 
-static void bio_post_read_processing(struct bio_post_read_ctx *ctx);
-
-static void decrypt_work(struct work_struct *work)
-{
-	struct bio_post_read_ctx *ctx =
-		container_of(work, struct bio_post_read_ctx, work);
-
-	fscrypt_decrypt_bio(ctx->bio);
-
-	bio_post_read_processing(ctx);
-}
-
-static void verity_work(struct work_struct *work)
-{
-	struct bio_post_read_ctx *ctx =
-		container_of(work, struct bio_post_read_ctx, work);
-	struct bio *bio = ctx->bio;
-
-	/*
-	 * fsverity_verify_bio() may call readpages() again, and although verity
-	 * will be disabled for that, decryption may still be needed, causing
-	 * another bio_post_read_ctx to be allocated.  So to guarantee that
-	 * mempool_alloc() never deadlocks we must free the current ctx first.
-	 * This is safe because verity is the last post-read step.
-	 */
-	BUILD_BUG_ON(STEP_VERITY + 1 != STEP_MAX);
-	mempool_free(ctx, bio_post_read_ctx_pool);
-	bio->bi_private = NULL;
-
-	fsverity_verify_bio(bio);
-
-	__read_end_io(bio);
-}
-
-static void bio_post_read_processing(struct bio_post_read_ctx *ctx)
-{
-	/*
-	 * We use different work queues for decryption and for verity because
-	 * verity may require reading metadata pages that need decryption, and
-	 * we shouldn't recurse to the same workqueue.
-	 */
-	switch (++ctx->cur_step) {
-	case STEP_DECRYPT:
-		if (ctx->enabled_steps & (1 << STEP_DECRYPT)) {
-			INIT_WORK(&ctx->work, decrypt_work);
-			fscrypt_enqueue_decrypt_work(&ctx->work);
-			return;
-		}
-		ctx->cur_step++;
-		/* fall-through */
-	case STEP_VERITY:
-		if (ctx->enabled_steps & (1 << STEP_VERITY)) {
-			INIT_WORK(&ctx->work, verity_work);
-			fsverity_enqueue_verify_work(&ctx->work);
-			return;
-		}
-		ctx->cur_step++;
-		/* fall-through */
-	default:
-		__read_end_io(ctx->bio);
-	}
-}
-
-static bool bio_post_read_required(struct bio *bio)
-{
-	return bio->bi_private && !bio->bi_status;
-}
-
 /*
  * I/O completion handler for multipage BIOs.
  *
@@ -176,9 +108,13 @@ static void mpage_end_io(struct bio *bio)
 	if (bio_post_read_required(bio)) {
 		struct bio_post_read_ctx *ctx = bio->bi_private;
 
-		ctx->cur_step = STEP_INITIAL;
-		bio_post_read_processing(ctx);
-		return;
+	if (ext4_bio_encrypted(bio)) {
+		if (bio->bi_status) {
+			fscrypt_release_ctx(bio->bi_private);
+		} else {
+			fscrypt_enqueue_decrypt_bio(bio->bi_private, bio);
+			return;
+		}
 	}
 	__read_end_io(bio);
 }
@@ -220,36 +156,6 @@ static inline loff_t ext4_readpage_limit(struct inode *inode)
 		return inode->i_sb->s_maxbytes;
 
 	return i_size_read(inode);
-}
-
-static void
-ext4_submit_bio_read(struct bio *bio)
-{
-	if (trace_android_fs_dataread_start_enabled()) {
-		struct page *first_page = bio->bi_io_vec[0].bv_page;
-
-		if (first_page != NULL) {
-		#ifdef CONFIG_AMLOGIC_VMAP
-			trace_android_fs_dataread_wrap(first_page->mapping->host,
-						   page_offset(first_page),
-						   bio->bi_iter.bi_size);
-		#else
-			char *path, pathbuf[MAX_TRACE_PATHBUF_LEN];
-
-			path = android_fstrace_get_pathname(pathbuf,
-						    MAX_TRACE_PATHBUF_LEN,
-						    first_page->mapping->host);
-			trace_android_fs_dataread_start(
-				first_page->mapping->host,
-				page_offset(first_page),
-				bio->bi_iter.bi_size,
-				current->pid,
-				path,
-				current->comm);
-		#endif
-		}
-	}
-	submit_bio(bio);
 }
 
 int ext4_mpage_readpages(struct address_space *mapping,
