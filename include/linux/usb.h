@@ -731,6 +731,9 @@ struct usb_device {
 
 	u16 hub_delay;
 	unsigned use_generic_driver:1;
+#ifdef CONFIG_AMLOGIC_USB
+	struct delayed_work		portstatus_work;
+#endif
 };
 
 #define to_usb_device(__dev)	container_of_const(__dev, struct usb_device, dev)
@@ -1632,6 +1635,15 @@ struct urb {
 	void *context;			/* (in) context for completion */
 	usb_complete_t complete;	/* (in) completion routine */
 	struct usb_iso_packet_descriptor iso_frame_desc[];
+#ifdef CONFIG_AMLOGIC_USB
+	int need_event_data;
+	int need_event_data_flag;
+	u8 need_div;
+	void *tmp_buf;
+	dma_addr_t tmp_dma;
+	u64 dst_dma[6];
+	u64 dst_buf[6];
+#endif
 					/* (in) ISO ONLY */
 };
 

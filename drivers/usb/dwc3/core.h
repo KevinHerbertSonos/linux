@@ -1398,6 +1398,13 @@ struct dwc3 {
 	int			num_ep_resized;
 	struct dentry		*debug_root;
 	u32			gsbuscfg0_reqinfo;
+
+#ifdef CONFIG_AMLOGIC_USB
+	unsigned		super_speed_support:1;
+	struct regulator *usb_regulator_ao1v8;
+	struct regulator *usb_regulator_ao3v3;
+	struct regulator *usb_regulator_vcc5v;
+#endif
 };
 
 #define INCRX_BURST_MODE 0

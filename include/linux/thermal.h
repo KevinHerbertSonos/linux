@@ -117,6 +117,11 @@ struct thermal_cooling_device_ops {
 	int (*get_requested_power)(struct thermal_cooling_device *, u32 *);
 	int (*state2power)(struct thermal_cooling_device *, unsigned long, u32 *);
 	int (*power2state)(struct thermal_cooling_device *, u32, unsigned long *);
+#ifdef CONFIG_AMLOGIC_MODIFY
+	int (*notify_state)(void *thermal_instance,
+			    int trip,
+			    enum thermal_trip_type);
+#endif
 };
 
 struct thermal_cooling_device {
