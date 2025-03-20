@@ -159,8 +159,6 @@ struct usb_phy {
 	void (*phy_trim_tuning)(struct usb_phy *x,
 		int port, int default_val);
 #endif
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 /* for board-specific init logic */

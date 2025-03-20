@@ -1250,10 +1250,6 @@ struct dwc3 {
 	struct regulator *usb_regulator_ao3v3;
 	struct regulator *usb_regulator_vcc5v;
 #endif
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 #define INCRX_BURST_MODE 0

@@ -717,10 +717,6 @@ struct usb_device {
 	struct delayed_work		portstatus_work;
 #endif
 
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 #define	to_usb_device(d) container_of(d, struct usb_device, dev)
 
@@ -1621,10 +1617,6 @@ struct urb {
 	u64 dst_dma[6];
 	u64 dst_buf[6];
 #endif
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 
 	struct usb_iso_packet_descriptor iso_frame_desc[0];
 					/* (in) ISO ONLY */

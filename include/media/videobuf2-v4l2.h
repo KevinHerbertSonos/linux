@@ -51,8 +51,6 @@ struct vb2_v4l2_buffer {
 	__u32			private;
 	ulong                   meta_ptr;
 #endif
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 /*

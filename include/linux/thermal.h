@@ -130,7 +130,6 @@ struct thermal_cooling_device_ops {
 			    int trip,
 			    enum thermal_trip_type);
 #endif
-	ANDROID_KABI_RESERVE(1);
 };
 
 struct thermal_cooling_device {
