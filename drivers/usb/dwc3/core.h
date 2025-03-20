@@ -1220,6 +1220,12 @@ struct dwc3 {
 	unsigned		dis_metastability_quirk:1;
 
 	u16			imod_interval;
+#ifdef CONFIG_AMLOGIC_USB
+	unsigned		super_speed_support:1;
+	struct regulator *usb_regulator_ao1v8;
+	struct regulator *usb_regulator_ao3v3;
+	struct regulator *usb_regulator_vcc5v;
+#endif
 };
 
 #define INCRX_BURST_MODE 0
