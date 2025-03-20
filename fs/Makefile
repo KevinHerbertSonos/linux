@@ -134,5 +134,4 @@ obj-$(CONFIG_PSTORE)		+= pstore/
 obj-$(CONFIG_EFIVAR_FS)		+= efivarfs/
 obj-$(CONFIG_EROFS_FS)		+= erofs/
 obj-$(CONFIG_EXFAT_FS)		+= exfat/
-obj-$(CONFIG_SDCARD_FS)		+= sdcardfs/
 obj-$(CONFIG_YAFFS_FS)		+= yaffs2/
