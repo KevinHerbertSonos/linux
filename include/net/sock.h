@@ -511,6 +511,7 @@ struct sock {
 	kuid_t			sk_uid;
 	spinlock_t		sk_peer_lock;
 	int			sk_bind_phc;
+
 	struct pid		*sk_peer_pid;
 	const struct cred	*sk_peer_cred;
 
