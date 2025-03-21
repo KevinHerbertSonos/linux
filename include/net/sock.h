@@ -471,12 +471,7 @@ struct sock {
 	u32			sk_max_ack_backlog;
 	kuid_t			sk_uid;
 	spinlock_t		sk_peer_lock;
-#else
-	/* sk_peer_lock is in the ANDROID_KABI_RESERVE(1) field below */
-#ifdef CONFIG_AMLOGIC_MODIFY
-	spinlock_t		sk_peer_lock;
-#endif
-#endif
+
 	struct pid		*sk_peer_pid;
 	const struct cred	*sk_peer_cred;
 
