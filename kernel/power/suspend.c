@@ -429,11 +429,22 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 	if (suspend_test(TEST_PLATFORM))
 		goto Platform_wake;
 
+#ifdef CONFIG_AMLOGIC_MODIFY
+	error = pm_sleep_disable_secondary_cpus();
+	if (error || suspend_test(TEST_CPUS)) {
+		goto Enable_cpus;
+	}
+
+	if (state == PM_SUSPEND_TO_IDLE) {
+		s2idle_loop();
+		goto Enable_cpus;
+	}
+#else
 	if (state == PM_SUSPEND_TO_IDLE) {
 		s2idle_loop();
 		goto Platform_wake;
 	}
-
+#endif
 	error = pm_sleep_disable_secondary_cpus();
 	if (error || suspend_test(TEST_CPUS))
 		goto Enable_cpus;
