@@ -418,7 +418,6 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 #ifdef CONFIG_AMLOGIC_MODIFY
 	error = suspend_disable_secondary_cpus();
 	if (error || suspend_test(TEST_CPUS)) {
-		log_suspend_abort_reason("Disabling non-boot cpus failed");
 		goto Enable_cpus;
 	}
 
