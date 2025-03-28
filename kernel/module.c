@@ -4543,24 +4543,6 @@ int module_kallsyms_on_each_symbol(int (*fn)(void *, const char *,
 }
 #endif /* CONFIG_KALLSYMS */
 
-static void cfi_init(struct module *mod)
-{
-#ifdef CONFIG_AMLOGIC_CFI_CLANG
-	rcu_read_lock_sched();
-	mod->cfi_check = (cfi_check_fn)find_kallsyms_symbol_value(mod,
-						CFI_CHECK_FN_NAME);
-	rcu_read_unlock_sched();
-	cfi_module_add(mod, module_addr_min, module_addr_max);
-#endif
-}
-
-static void cfi_cleanup(struct module *mod)
-{
-#ifdef CONFIG_AMLOGIC_CFI_CLANG
-	cfi_module_remove(mod, module_addr_min, module_addr_max);
-#endif
-}
-
 /* Maximum number of characters written by module_flags() */
 #define MODULE_FLAGS_BUF_SIZE (TAINT_FLAGS_COUNT + 4)
 
