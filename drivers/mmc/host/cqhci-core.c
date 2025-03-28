@@ -19,6 +19,9 @@
 
 #include "cqhci.h"
 #include "cqhci-crypto.h"
+#ifdef CONFIG_AMLOGIC_MODIFY
+#include <linux/amlogic/aml_sd.h>
+#endif
 
 #define DCMD_SLOT 31
 #define NUM_SLOTS 32

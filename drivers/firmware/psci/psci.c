@@ -29,6 +29,11 @@
 #include <asm/smp_plat.h>
 #include <asm/suspend.h>
 
+#ifdef CONFIG_AMLOGIC_CPUIDLE
+#include <linux/cpumask.h>
+#include <linux/amlogic/aml_cpuidle.h>
+#endif
+
 /*
  * While a 64-bit OS can make calls with SMC32 calling conventions, for some
  * calls it is necessary to use SMC64 to pass or return 64-bit values.
