@@ -36,7 +36,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-buf.h>
-#include <linux/dma-heap.h>
 
 #ifdef CONFIG_COMPAT
 #include <linux/compat.h>

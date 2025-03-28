@@ -31,7 +31,6 @@
 #include <linux/cpumask.h>
 #include <linux/amlogic/aml_cpuidle.h>
 #endif
-#include <trace/hooks/psci.h>
 
 /*
  * While a 64-bit OS can make calls with SMC32 calling conventions, for some

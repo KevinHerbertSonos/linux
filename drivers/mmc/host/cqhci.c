@@ -18,7 +18,6 @@
 #include <linux/mmc/card.h>
 
 #include "cqhci.h"
-#include "cqhci-crypto.h"
 #ifdef CONFIG_AMLOGIC_MODIFY
 #include <linux/amlogic/aml_sd.h>
 #endif
