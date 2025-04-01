@@ -65,7 +65,12 @@ endif
 
 targets += $(modules:%.o=%.ko) $(modules:%.o=%.mod.o) $(extmod_prefix).module-common.o
 
-# Add FORCE to the prerequisites of a target to force it to be always rebuilt.
+$(modules): %.ko: %.o %.mod.o $(KBUILD_LDS_MODULE) FORCE
+	+$(call if_changed,ld_ko_o)
+
+targets += $(modules) $(modules:.ko=.mod.o)
+
+# Add FORCE to the prequisites of a target to force it to be always rebuilt.
 # ---------------------------------------------------------------------------
 
 PHONY += FORCE
