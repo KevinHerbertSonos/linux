@@ -44,6 +44,12 @@ struct vm_area_struct;
 #else
 #define ___GFP_NOLOCKDEP	0
 #endif
+
+#ifdef CONFIG_AMLOGIC_CMA
+#define ___GFP_NO_CMA		0x2000000u
+#define ___GFP_NO_FC_IN_CMA	0x4000000u
+#endif /* CONFIG_AMLOGIC_CMA */
+
 /* If the above are modified, __GFP_BITS_SHIFT may need updating */
 
 /*
@@ -217,7 +223,12 @@ struct vm_area_struct;
 #define __GFP_NOLOCKDEP ((__force gfp_t)___GFP_NOLOCKDEP)
 
 /* Room for N __GFP_FOO bits */
+#ifdef CONFIG_AMLOGIC_CMA
+#define __GFP_BITS_SHIFT (27)
+#else
 #define __GFP_BITS_SHIFT (23 + IS_ENABLED(CONFIG_LOCKDEP))
+#endif
+
 #define __GFP_BITS_MASK ((__force gfp_t)((1 << __GFP_BITS_SHIFT) - 1))
 
 /**
