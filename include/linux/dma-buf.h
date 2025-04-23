@@ -261,9 +261,9 @@ struct dma_buf_ops {
 	 * return -ERESTARTSYS or -EINTR when the call has been interrupted and
 	 * needs to be restarted.
 	 */
-	int (*begin_cpu_access_partial)(struct dma_buf *dmabuf,
-					enum dma_data_direction,
-					unsigned int offset, unsigned int len);
+	 int (*begin_cpu_access_partial)(struct dma_buf *dmabuf,
+		enum dma_data_direction,
+		unsigned int offset, unsigned int len);
 
 	/**
 	 * @end_cpu_access:
@@ -300,9 +300,9 @@ struct dma_buf_ops {
 	 * -ERESTARTSYS or -EINTR when the call has been interrupted and needs
 	 * to be restarted.
 	 */
-	int (*end_cpu_access_partial)(struct dma_buf *dmabuf,
-				      enum dma_data_direction,
-				      unsigned int offset, unsigned int len);
+	 int (*end_cpu_access_partial)(struct dma_buf *dmabuf,
+		enum dma_data_direction,
+		unsigned int offset, unsigned int len);
 
 	/**
 	 * @mmap:
@@ -343,6 +343,34 @@ struct dma_buf_ops {
 
 	int (*vmap)(struct dma_buf *dmabuf, struct iosys_map *map);
 	void (*vunmap)(struct dma_buf *dmabuf, struct iosys_map *map);
+
+	/**
+	 * @map:
+	 *
+	 * Maps a page from the buffer into kernel address space. The page is
+	 * specified by offset into the buffer in PAGE_SIZE units.
+	 *
+	 * This callback is optional.
+	 *
+	 * Returns:
+	 *
+	 * Virtual address pointer where requested page can be accessed. NULL
+	 * on error or when this function is unimplemented by the exporter.
+	 */
+	void *(*map)(struct dma_buf *, unsigned long);
+
+	/**
+	 * @unmap:
+	 *
+	 * Unmaps a page from the buffer. Page offset and address pointer should
+	 * be the same as the one passed to and returned by matching call to map.
+	 *
+	 * This callback is optional.
+	 */
+	void (*unmap)(struct dma_buf *, unsigned long, void *);
+
+	void *(*vmap)(struct dma_buf *);
+	void (*vunmap)(struct dma_buf *, void *vaddr);
 
 	/**
 	 * @get_flags:
@@ -733,4 +761,12 @@ int dma_buf_vmap_unlocked(struct dma_buf *dmabuf, struct iosys_map *map);
 void dma_buf_vunmap_unlocked(struct dma_buf *dmabuf, struct iosys_map *map);
 long dma_buf_set_name(struct dma_buf *dmabuf, const char *name);
 int dma_buf_get_flags(struct dma_buf *dmabuf, unsigned long *flags);
+int dma_buf_end_cpu_access_partial(struct dma_buf *dma_buf,
+				enum dma_data_direction dir,
+				unsigned int offset, unsigned int len);
+void *dma_buf_kmap(struct dma_buf *, unsigned long);
+void dma_buf_kunmap(struct dma_buf *, unsigned long, void *);
+
+int dma_buf_get_flags(struct dma_buf *dmabuf, unsigned long *flags);
+
 #endif /* __DMA_BUF_H__ */

@@ -1450,8 +1450,8 @@ int dma_buf_begin_cpu_access(struct dma_buf *dmabuf,
 EXPORT_SYMBOL_NS_GPL(dma_buf_begin_cpu_access, DMA_BUF);
 
 int dma_buf_begin_cpu_access_partial(struct dma_buf *dmabuf,
-				     enum dma_data_direction direction,
-				     unsigned int offset, unsigned int len)
+	enum dma_data_direction direction,
+	unsigned int offset, unsigned int len)
 {
 	int ret = 0;
 
@@ -1460,16 +1460,17 @@ int dma_buf_begin_cpu_access_partial(struct dma_buf *dmabuf,
 
 	if (dmabuf->ops->begin_cpu_access_partial)
 		ret = dmabuf->ops->begin_cpu_access_partial(dmabuf, direction,
-							    offset, len);
+			   offset, len);
 
 	/* Ensure that all fences are waited upon - but we first allow
 	 * the native handler the chance to do so more efficiently if it
 	 * chooses. A double invocation here will be reasonably cheap no-op.
-	 */
-	if (ret == 0)
-		ret = __dma_buf_begin_cpu_access(dmabuf, direction);
+	*/
 
-	return ret;
+	if (ret == 0)
+	  ret = __dma_buf_begin_cpu_access(dmabuf, direction);
+
+return ret;
 }
 EXPORT_SYMBOL_GPL(dma_buf_begin_cpu_access_partial);
 
@@ -1496,14 +1497,16 @@ int dma_buf_end_cpu_access(struct dma_buf *dmabuf,
 
 	if (dmabuf->ops->end_cpu_access)
 		ret = dmabuf->ops->end_cpu_access(dmabuf, direction);
-
+	
 	return ret;
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_end_cpu_access, DMA_BUF);
 
+EXPORT_SYMBOL_GPL(dma_buf_end_cpu_access);
+
 int dma_buf_end_cpu_access_partial(struct dma_buf *dmabuf,
-				   enum dma_data_direction direction,
-				   unsigned int offset, unsigned int len)
+	enum dma_data_direction direction,
+	unsigned int offset, unsigned int len)
 {
 	int ret = 0;
 
@@ -1511,11 +1514,48 @@ int dma_buf_end_cpu_access_partial(struct dma_buf *dmabuf,
 
 	if (dmabuf->ops->end_cpu_access_partial)
 		ret = dmabuf->ops->end_cpu_access_partial(dmabuf, direction,
-							  offset, len);
+			   offset, len);
 
 	return ret;
 }
 EXPORT_SYMBOL_GPL(dma_buf_end_cpu_access_partial);
+
+/**
+ * dma_buf_kmap - Map a page of the buffer object into kernel address space. The
+ * same restrictions as for kmap and friends apply.
+ * @dmabuf:	[in]	buffer to map page from.
+ * @page_num:	[in]	page in PAGE_SIZE units to map.
+ *
+ * This call must always succeed, any necessary preparations that might fail
+ * need to be done in begin_cpu_access.
+ */
+void *dma_buf_kmap(struct dma_buf *dmabuf, unsigned long page_num)
+{
+	WARN_ON(!dmabuf);
+
+	if (!dmabuf->ops->map)
+		return NULL;
+	return dmabuf->ops->map(dmabuf, page_num);
+}
+EXPORT_SYMBOL_GPL(dma_buf_kmap);
+
+/**
+ * dma_buf_kunmap - Unmap a page obtained by dma_buf_kmap.
+ * @dmabuf:	[in]	buffer to unmap page from.
+ * @page_num:	[in]	page in PAGE_SIZE units to unmap.
+ * @vaddr:	[in]	kernel space pointer obtained from dma_buf_kmap.
+ *
+ * This call must always succeed.
+ */
+void dma_buf_kunmap(struct dma_buf *dmabuf, unsigned long page_num,
+		    void *vaddr)
+{
+	WARN_ON(!dmabuf);
+
+	if (dmabuf->ops->unmap)
+		dmabuf->ops->unmap(dmabuf, page_num, vaddr);
+}
+EXPORT_SYMBOL_GPL(dma_buf_kunmap);
 
 /**
  * dma_buf_mmap - Setup up a userspace mmap with the given vma
