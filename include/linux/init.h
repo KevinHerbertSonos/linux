@@ -196,6 +196,7 @@ extern bool initcall_debug;
 	static initcall_t __initcall_##fn##id __used \
 		__attribute__((__section__(#__sec ".init"))) = fn;
 #endif
+#endif
 
 #define __define_initcall(fn, id) ___define_initcall(fn, id, .initcall##id)
 
