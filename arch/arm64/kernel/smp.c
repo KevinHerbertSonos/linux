@@ -90,18 +90,12 @@ enum ipi_msg_type {
 #ifdef CONFIG_AMLOGIC_FREERTOS
 	IPI_FREERTOS = 7,
 #endif
-	NR_IPI
 };
 
 #ifdef CONFIG_AMLOGIC_MODIFY
 bool panic_on_corefail;
 core_param(panic_on_corefail, panic_on_corefail, bool, 0644);
 #endif
-static int ipi_irq_base __read_mostly;
-static int nr_ipi __read_mostly = NR_IPI;
-static struct irq_desc *ipi_desc[NR_IPI] __read_mostly;
-
-static void ipi_setup(int cpu);
 
 #ifdef CONFIG_HOTPLUG_CPU
 static int op_cpu_kill(unsigned int cpu);
