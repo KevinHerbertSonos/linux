@@ -79,8 +79,22 @@ enum ipi_msg_type {
 	 */
 	IPI_CPU_BACKTRACE = NR_IPI,
 	IPI_KGDB_ROUNDUP,
+
+	IPI_WAKEUP,
+#ifdef CONFIG_AMLOGIC_CPUIDLE
+	IPI_SUSPEND_NOTIFIER = 8,
+#endif
+#ifdef CONFIG_AMLOGIC_FREERTOS
+	IPI_FREERTOS = 8,
+#endif
 	MAX_IPI
+
 };
+
+#ifdef CONFIG_AMLOGIC_MODIFY
+bool panic_on_corefail;
+core_param(panic_on_corefail, panic_on_corefail, bool, 0644);
+#endif
 
 static int ipi_irq_base __ro_after_init;
 static int nr_ipi __ro_after_init = NR_IPI;
