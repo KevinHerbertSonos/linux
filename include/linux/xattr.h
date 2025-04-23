@@ -43,6 +43,9 @@ struct xattr_handler {
 		   size_t size);
 	int (*set)(const struct xattr_handler *,
 		   struct mnt_idmap *idmap, struct dentry *dentry,
+=======
+	int (*get_ntfs3)(const struct xattr_handler *handler, struct dentry *dentry,
+		struct inode *inode, const char *name, void *buffer, size_t size);
 		   struct inode *inode, const char *name, const void *buffer,
 		   size_t size, int flags);
 };
