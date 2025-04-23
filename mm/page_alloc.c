@@ -2737,6 +2737,31 @@ retry:
 	return page;
 }
 
+#ifdef CONFIG_AMLOGIC_CMA
+/*
+ * get page but not cma
+ */
+static struct page *rmqueue_no_cma(struct zone *zone, unsigned int order,
+				   int migratetype, unsigned int alloc_flags)
+{
+	struct page *page;
+
+	spin_lock(&zone->lock);
+retry:
+	page = __rmqueue_smallest(zone, order, migratetype);
+	if (unlikely(!page)) {
+		if (!page && __rmqueue_fallback(zone, order, migratetype, alloc_flags))
+			goto retry;
+	}
+	WARN_ON(page && is_migrate_cma(get_pcppage_migratetype(page)));
+	if (page)
+		__mod_zone_page_state(zone, NR_FREE_PAGES, -(1 << order));
+
+	spin_unlock(&zone->lock);
+	return page;
+}
+#endif /* CONFIG_AMLOGIC_CMA */
+
 /*
  * Obtain a specified number of elements from the buddy allocator, all under
  * a single hold of the lock, for efficiency.  Add them to the supplied list.
@@ -2750,8 +2775,14 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 
 	spin_lock(&zone->lock);
 	for (i = 0; i < count; ++i) {
-		struct page *page = __rmqueue(zone, order, migratetype,
-								alloc_flags);
+		struct page *page;
+
+		#ifdef CONFIG_AMLOGIC_CMA
+		page = __rmqueue(zone, order, migratetype, alloc_flags, cma);
+		#else
+		page = __rmqueue(zone, order, migratetype, alloc_flags);
+		#endif
+
 		if (unlikely(page == NULL))
 			break;
 
@@ -3215,9 +3246,13 @@ static inline void zone_statistics(struct zone *preferred_zone, struct zone *z)
 static struct page *__rmqueue_pcplist(struct zone *zone, int migratetype,
 			unsigned int alloc_flags,
 			struct per_cpu_pages *pcp,
-			struct list_head *list)
+			struct list_head *list,
+			gfp_t gfp_flags)
 {
-	struct page *page;
+	struct page *page = NULL;
+#ifdef CONFIG_AMLOGIC_CMA
+	bool cma = can_use_cma(gfp_flags);
+#endif
 
 	do {
 		if (list_empty(list)) {
@@ -3225,6 +3260,15 @@ static struct page *__rmqueue_pcplist(struct zone *zone, int migratetype,
 					pcp->batch, list,
 					migratetype, alloc_flags);
 			if (unlikely(list_empty(list)))
+				pcp->batch, list,
+ #ifdef CONFIG_AMLOGIC_CMA
+				migratetype, alloc_flags, cma);
+ #else
+				migratetype, alloc_flags);
+ #endif
+
+			if (unlikely(list == NULL) ||
+					unlikely(list_empty(list)))
 				return NULL;
 		}
 
@@ -3249,7 +3293,7 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 	local_irq_save(flags);
 	pcp = &this_cpu_ptr(zone->pageset)->pcp;
 	list = &pcp->lists[migratetype];
-	page = __rmqueue_pcplist(zone,  migratetype, alloc_flags, pcp, list);
+	page = __rmqueue_pcplist(zone,  migratetype, alloc_flags, pcp, list, gfp_flags);
 	if (page) {
 		__count_zid_vm_events(PGALLOC, page_zonenum(page), 1);
 		zone_statistics(preferred_zone, zone);
