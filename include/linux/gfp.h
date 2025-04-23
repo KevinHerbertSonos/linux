@@ -231,7 +231,8 @@ struct vm_area_struct;
 #else
 #define __GFP_BITS_SHIFT (23 + IS_ENABLED(CONFIG_LOCKDEP))
 #endif
-#define __GFP_BITS_MASK ((__force gfp_t)((1 << __GFP_BITS_SHIFT) - 1))
+#define __GFP_BITS_MASK (((__force gfp_t)((1 << __GFP_BITS_SHIFT) - 1)) & \
+				~0x800000u)
 
 /**
  * DOC: Useful GFP flag combinations
