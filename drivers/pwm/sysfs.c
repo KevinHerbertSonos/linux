@@ -220,6 +220,9 @@ static DEVICE_ATTR_RW(duty_cycle);
 static DEVICE_ATTR_RW(enable);
 static DEVICE_ATTR_RW(polarity);
 static DEVICE_ATTR_RO(capture);
+#ifdef CONFIG_AMLOGIC_MODIFY
+static DEVICE_ATTR_WO(relative_duty);
+#endif
 
 static struct attribute *pwm_attrs[] = {
 	&dev_attr_period.attr,
@@ -227,6 +230,9 @@ static struct attribute *pwm_attrs[] = {
 	&dev_attr_enable.attr,
 	&dev_attr_polarity.attr,
 	&dev_attr_capture.attr,
+#ifdef CONFIG_AMLOGIC_MODIFY
+	&dev_attr_relative_duty.attr,
+#endif
 	NULL
 };
 ATTRIBUTE_GROUPS(pwm);
