@@ -1037,6 +1037,10 @@ static inline bool cpu_has_lpa2(void)
 	return false;
 #endif
 }
+#ifdef CONFIG_ARM64_AMU_EXTN
+/* Check whether the cpu supports the Activity Monitors Unit (AMU) */
+extern bool cpu_has_amu_feat(int cpu);
+#endif
 
 #endif /* __ASSEMBLY__ */
 
