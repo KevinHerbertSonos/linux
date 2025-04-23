@@ -269,6 +269,7 @@ extern struct module __this_module;
 	static initcall_t __name __used 			\
 		__attribute__((__section__(__sec))) = fn;
 #endif
+#endif
 
 #define __unique_initcall(fn, id, __sec, __iid)			\
 	____define_initcall(fn,					\
