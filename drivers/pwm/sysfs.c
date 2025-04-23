@@ -258,7 +258,6 @@ static DEVICE_ATTR_RW(duty_cycle);
 static DEVICE_ATTR_RW(enable);
 static DEVICE_ATTR_RW(polarity);
 static DEVICE_ATTR_RO(capture);
-static DEVICE_ATTR_RO(output_type);
 #ifdef CONFIG_AMLOGIC_MODIFY
 static DEVICE_ATTR_WO(relative_duty);
 #endif
@@ -269,7 +268,6 @@ static struct attribute *pwm_attrs[] = {
 	&dev_attr_enable.attr,
 	&dev_attr_polarity.attr,
 	&dev_attr_capture.attr,
-	&dev_attr_output_type.attr,
 #ifdef CONFIG_AMLOGIC_MODIFY
 	&dev_attr_relative_duty.attr,
 #endif
