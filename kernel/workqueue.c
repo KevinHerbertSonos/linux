@@ -1641,6 +1641,7 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 	WARN_ON_ONCE(!wq);
 #ifndef CONFIG_AMLOGIC_CFI_CLANG
 	WARN_ON_ONCE(timer->function != delayed_work_timer_fn);
+#endif
 	WARN_ON_ONCE(timer_pending(timer));
 	WARN_ON_ONCE(!list_empty(&work->entry));
 
