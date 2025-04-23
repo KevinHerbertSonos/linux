@@ -23,12 +23,6 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
-#undef CREATE_TRACE_POINTS
-#include <trace/hooks/dtask.h>
-
-#undef CREATE_TRACE_POINTS
-#include <trace/hooks/sched.h>
-
 #ifdef CONFIG_AMLOGIC_DEBUG_FTRACE_PSTORE
 #include <linux/amlogic/debug_ftrace_ramoops.h>
 #endif
