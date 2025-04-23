@@ -73,8 +73,20 @@ enum ipi_msg_type {
 	IPI_CPU_CRASH_STOP,
 	IPI_TIMER,
 	IPI_IRQ_WORK,
-	IPI_WAKEUP
+	IPI_WAKEUP,
+#ifdef CONFIG_AMLOGIC_CPUIDLE
+	IPI_SUSPEND_NOTIFIER = 8,
+#endif
+#ifdef CONFIG_AMLOGIC_FREERTOS
+	IPI_FREERTOS = 8,
+#endif
+
 };
+
+#ifdef CONFIG_AMLOGIC_MODIFY
+bool panic_on_corefail;
+core_param(panic_on_corefail, panic_on_corefail, bool, 0644);
+#endif
 
 #ifdef CONFIG_HOTPLUG_CPU
 static int op_cpu_kill(unsigned int cpu);
