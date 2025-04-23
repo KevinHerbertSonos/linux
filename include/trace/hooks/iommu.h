@@ -10,19 +10,9 @@
 #include <linux/types.h>
 
 #include <linux/tracepoint.h>
-#include <trace/hooks/vendor_hooks.h>
-
-#if defined(CONFIG_TRACEPOINTS) && defined(CONFIG_ANDROID_VENDOR_HOOKS)
-
-DECLARE_HOOK(android_vh_iommu_setup_dma_ops,
-	TP_PROTO(struct device *dev, u64 dma_base, u64 size),
-	TP_ARGS(dev, dma_base, size));
-
-#else
 
 #define trace_android_vh_iommu_setup_dma_ops(dev, dma_base, size)
 
-#endif
 
 #endif /* _TRACE_HOOK_IOMMU_H */
 
