@@ -32,7 +32,7 @@ struct xattr_handler {
 	bool (*list)(struct dentry *dentry);
 	int (*get)(const struct xattr_handler *, struct dentry *dentry,
 		   struct inode *inode, const char *name, void *buffer,
-		   size_t size, int flags);
+		   size_t size);
 	int (*get_ntfs3)(const struct xattr_handler *handler, struct dentry *dentry,
 		struct inode *inode, const char *name, void *buffer, size_t size);
 	int (*set)(const struct xattr_handler *handler, struct dentry *dentry,
