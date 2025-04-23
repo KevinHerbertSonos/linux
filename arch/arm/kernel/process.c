@@ -88,6 +88,333 @@ void arch_cpu_idle_enter(void)
 void arch_cpu_idle_exit(void)
 {
 	ledtrig_cpu(CPU_LED_IDLE_END);
+
+#ifdef CONFIG_AMLOGIC_DEBUG_LOCKUP
+	__arch_cpu_idle_exit();
+#endif
+}
+
+/*
+ * dump a block of kernel memory from around the given address
+ */
+static void show_data(unsigned long addr, int nbytes, const char *name)
+{
+	int	i, j;
+	int	nlines;
+	u32	*p;
+
+	/*
+	 * don't attempt to dump non-kernel addresses or
+	 * values that are probably just small negative numbers
+	 */
+	if (addr < PAGE_OFFSET || addr > -256UL)
+		return;
+
+#ifdef CONFIG_AMLOGIC_MODIFY
+	/*
+	 * Treating data in general purpose register as an address
+	 * and dereferencing it is quite a dangerous behaviour,
+	 * especially when it is an address belonging to secure
+	 * region or ioremap region, which can lead to external
+	 * abort on non-linefetch and can not be protected by
+	 * probe_kernel_address.
+	 * We need more strict filtering rules
+	 */
+
+#ifdef CONFIG_AMLOGIC_SEC
+	/*
+	 * filter out secure monitor region
+	 */
+	if (addr <= (unsigned long)high_memory)
+		if (within_secmon_region(addr))
+			return;
+#endif
+
+	/*
+	 * filter out ioremap region
+	 */
+	if ((addr >= VMALLOC_START) && (addr <= VMALLOC_END))
+		if (!pfn_valid(vmalloc_to_pfn((void *)addr)))
+			return;
+#endif
+
+	pr_info("\n%s: %#lx:\n", name, addr);
+
+	/*
+	 * round address down to a 32 bit boundary
+	 * and always dump a multiple of 32 bytes
+	 */
+	p = (u32 *)(addr & ~(sizeof(u32) - 1));
+	nbytes += (addr & (sizeof(u32) - 1));
+	nlines = (nbytes + 31) / 32;
+
+	for (i = 0; i < nlines; i++) {
+		/*
+		 * just display low 16 bits of address to keep
+		 * each line of the dump < 80 characters
+		 */
+		pr_info("%04lx ", (unsigned long)p & 0xffff);
+		for (j = 0; j < 8; j++) {
+			u32	data;
+
+			if (probe_kernel_address(p, data))
+				pr_cont(" ********");
+			else
+				pr_cont(" %08x", data);
+			++p;
+		}
+		pr_cont("\n");
+	}
+}
+
+#ifdef CONFIG_AMLOGIC_USER_FAULT
+/*
+ * dump a block of user memory from around the given address
+ */
+static void show_user_data(unsigned long addr, int nbytes, const char *name)
+{
+	int	i, j;
+	int	nlines;
+	u32	*p;
+
+	if (!access_ok((void *)addr, nbytes))
+		return;
+
+#ifdef CONFIG_AMLOGIC_MODIFY
+	/*
+	 * Treating data in general purpose register as an address
+	 * and dereferencing it is quite a dangerous behaviour,
+	 * especially when it is an address belonging to secure
+	 * region or ioremap region, which can lead to external
+	 * abort on non-linefetch and can not be protected by
+	 * probe_kernel_address.
+	 * We need more strict filtering rules
+	 */
+
+#ifdef CONFIG_AMLOGIC_SEC
+	/*
+	 * filter out secure monitor region
+	 */
+	if (addr <= (unsigned long)high_memory)
+		if (within_secmon_region(addr)) {
+			pr_info("\n%s: %#lx S\n", name, addr);
+			return;
+		}
+#endif
+
+	/*
+	 * filter out ioremap region
+	 */
+	if ((addr >= VMALLOC_START) && (addr <= VMALLOC_END))
+		if (!pfn_valid(vmalloc_to_pfn((void *)addr))) {
+			pr_info("\n%s: %#lx V\n", name, addr);
+			return;
+		}
+#endif
+
+	pr_info("\n%s: %#lx:\n", name, addr);
+
+	/*
+	 * round address down to a 32 bit boundary
+	 * and always dump a multiple of 32 bytes
+	 */
+	p = (u32 *)(addr & ~(sizeof(u32) - 1));
+	nbytes += (addr & (sizeof(u32) - 1));
+	nlines = (nbytes + 31) / 32;
+
+	for (i = 0; i < nlines; i++) {
+		/*
+		 * just display low 16 bits of address to keep
+		 * each line of the dump < 80 characters
+		 */
+		pr_info("%04lx ", (unsigned long)p & 0xffff);
+		if (irqs_disabled())
+			continue;
+		for (j = 0; j < 8; j++) {
+			u32 data;
+			int bad;
+
+			bad = __get_user(data, p);
+			if (bad) {
+				if (j != 7)
+					pr_cont(" ********");
+				else
+					pr_cont(" ********\n");
+			} else {
+				if (j != 7)
+					pr_cont(" %08x", data);
+				else
+					pr_cont(" %08x\n", data);
+			}
+			++p;
+		}
+	}
+}
+#endif /* CONFIG_AMLOGIC_USER_FAULT */
+
+static void show_extra_register_data(struct pt_regs *regs, int nbytes)
+{
+	mm_segment_t fs;
+
+	fs = get_fs();
+	set_fs(KERNEL_DS);
+	show_data(regs->ARM_pc - nbytes, nbytes * 2, "PC");
+	show_data(regs->ARM_lr - nbytes, nbytes * 2, "LR");
+	show_data(regs->ARM_sp - nbytes, nbytes * 2, "SP");
+	show_data(regs->ARM_ip - nbytes, nbytes * 2, "IP");
+	show_data(regs->ARM_fp - nbytes, nbytes * 2, "FP");
+	show_data(regs->ARM_r0 - nbytes, nbytes * 2, "R0");
+	show_data(regs->ARM_r1 - nbytes, nbytes * 2, "R1");
+	show_data(regs->ARM_r2 - nbytes, nbytes * 2, "R2");
+	show_data(regs->ARM_r3 - nbytes, nbytes * 2, "R3");
+	show_data(regs->ARM_r4 - nbytes, nbytes * 2, "R4");
+	show_data(regs->ARM_r5 - nbytes, nbytes * 2, "R5");
+	show_data(regs->ARM_r6 - nbytes, nbytes * 2, "R6");
+	show_data(regs->ARM_r7 - nbytes, nbytes * 2, "R7");
+	show_data(regs->ARM_r8 - nbytes, nbytes * 2, "R8");
+	show_data(regs->ARM_r9 - nbytes, nbytes * 2, "R9");
+	show_data(regs->ARM_r10 - nbytes, nbytes * 2, "R10");
+	set_fs(fs);
+}
+
+#ifdef CONFIG_AMLOGIC_USER_FAULT
+static void show_user_extra_register_data(struct pt_regs *regs, int nbytes)
+{
+	mm_segment_t fs;
+
+	fs = get_fs();
+	set_fs(KERNEL_DS);
+	show_user_data(regs->ARM_pc - nbytes, nbytes * 2, "PC");
+	show_user_data(regs->ARM_lr - nbytes, nbytes * 2, "LR");
+	show_user_data(regs->ARM_sp - nbytes, nbytes * 2, "SP");
+	show_user_data(regs->ARM_ip - nbytes, nbytes * 2, "IP");
+	show_user_data(regs->ARM_fp - nbytes, nbytes * 2, "FP");
+	show_user_data(regs->ARM_r0 - nbytes, nbytes * 2, "R0");
+	show_user_data(regs->ARM_r1 - nbytes, nbytes * 2, "R1");
+	show_user_data(regs->ARM_r2 - nbytes, nbytes * 2, "R2");
+	show_user_data(regs->ARM_r3 - nbytes, nbytes * 2, "R3");
+	show_user_data(regs->ARM_r4 - nbytes, nbytes * 2, "R4");
+	show_user_data(regs->ARM_r5 - nbytes, nbytes * 2, "R5");
+	show_user_data(regs->ARM_r6 - nbytes, nbytes * 2, "R6");
+	show_user_data(regs->ARM_r7 - nbytes, nbytes * 2, "R7");
+	show_user_data(regs->ARM_r8 - nbytes, nbytes * 2, "R8");
+	show_user_data(regs->ARM_r9 - nbytes, nbytes * 2, "R9");
+	show_user_data(regs->ARM_r10 - nbytes, nbytes * 2, "R10");
+	set_fs(fs);
+}
+
+void show_vma(struct mm_struct *mm, unsigned long addr)
+{
+	struct vm_area_struct *vma;
+	struct file *file;
+	vm_flags_t flags;
+	unsigned long ino = 0;
+	unsigned long long pgoff = 0;
+	unsigned long start, end;
+	dev_t dev = 0;
+	const char *name = NULL;
+
+	vma = find_vma(mm, addr);
+	if (!vma) {
+		pr_info("can't find vma for %lx\n", addr);
+		return;
+	}
+
+	file = vma->vm_file;
+	flags = vma->vm_flags;
+	if (file) {
+		struct inode *inode = file_inode(vma->vm_file);
+
+		dev = inode->i_sb->s_dev;
+		ino = inode->i_ino;
+		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
+	}
+
+	/* We don't show the stack guard page in /proc/maps */
+	start = vma->vm_start;
+	end = vma->vm_end;
+
+	pr_info("vma for %lx:\n", addr);
+	pr_info("%08lx-%08lx %c%c%c%c %08llx %02x:%02x %lu ",
+		start,
+		end,
+		flags & VM_READ ? 'r' : '-',
+		flags & VM_WRITE ? 'w' : '-',
+		flags & VM_EXEC ? 'x' : '-',
+		flags & VM_MAYSHARE ? 's' : 'p',
+		pgoff,
+		MAJOR(dev), MINOR(dev), ino);
+
+	/*
+	 * Print the dentry name for named mappings, and a
+	 * special [heap] marker for the heap:
+	 */
+	if (file) {
+		char file_name[256] = {};
+		char *p = d_path(&file->f_path, file_name, 256);
+
+		if (!IS_ERR(p)) {
+			mangle_path(file_name, p, "\n");
+			pr_cont("%s", p);
+		} else {
+			pr_cont(" get file path failed\n");
+		}
+		goto done;
+	}
+
+	name = arch_vma_name(vma);
+	if (!name) {
+		pid_t tid;
+
+		if (!mm) {
+			name = "[vdso]";
+			goto done;
+		}
+
+		if (vma->vm_start <= mm->brk &&
+		    vma->vm_end >= mm->start_brk) {
+			name = "[heap]";
+			goto done;
+		}
+
+		tid = vma_is_stack_for_current(vma);
+
+		if (tid != 0) {
+			/*
+			 * Thread stack in /proc/PID/task/TID/maps or
+			 * the main process stack.
+			 */
+			if ((vma->vm_start <= mm->start_stack &&
+			    vma->vm_end >= mm->start_stack)) {
+				name = "[stack]";
+			} else {
+				/* Thread stack in /proc/PID/maps */
+				pr_cont("[stack:%d]", tid);
+			}
+			goto done;
+		}
+	}
+
+done:
+	if (name)
+		pr_cont("%s", name);
+	pr_cont("\n");
+}
+
+static void show_vmalloc_pfn(struct pt_regs *regs)
+{
+	int i;
+	struct page *page;
+
+	for (i = 0; i < 16; i++) {
+		if (is_vmalloc_or_module_addr((void *)regs->uregs[i])) {
+			page = vmalloc_to_page((void *)regs->uregs[i]);
+			if (!page)
+				continue;
+			pr_info("R%-2d : %08lx, PFN:%5lx\n",
+				i, regs->uregs[i], page_to_pfn(page));
+		}
+	}
 }
 
 void __show_regs(struct pt_regs *regs)

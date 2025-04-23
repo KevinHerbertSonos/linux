@@ -561,9 +561,6 @@ void show_vma(struct mm_struct *mm, unsigned long addr)
 			}
 			goto done;
 		}
-
-		if (vma_get_anon_name(vma))
-			pr_info("[anon]");
 	}
 
 done:
