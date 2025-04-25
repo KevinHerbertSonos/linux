@@ -2185,6 +2185,19 @@ static inline void dm_queue_destroy_crypto_profile(struct request_queue *q)
 }
 #endif /* !CONFIG_BLK_INLINE_ENCRYPTION */
 
+#ifdef CONFIG_BLK_INLINE_ENCRYPTION
+static void dm_queue_destroy_keyslot_manager(struct request_queue *q)
+{
+	dm_destroy_keyslot_manager(q->ksm);
+}
+
+#else /* CONFIG_BLK_INLINE_ENCRYPTION */
+
+static inline void dm_queue_destroy_keyslot_manager(struct request_queue *q)
+{
+}
+#endif /* !CONFIG_BLK_INLINE_ENCRYPTION */
+
 static void cleanup_mapped_device(struct mapped_device *md)
 {
 	if (md->wq)
@@ -2223,9 +2236,9 @@ static void cleanup_mapped_device(struct mapped_device *md)
 		put_disk(md->disk);
 	}
 
-	if (md->pending_io) {
-		free_percpu(md->pending_io);
-		md->pending_io = NULL;
+	if (md->queue) {
+		dm_queue_destroy_keyslot_manager(md->queue);
+		blk_cleanup_queue(md->queue);
 	}
 
 	cleanup_srcu_struct(&md->io_barrier);

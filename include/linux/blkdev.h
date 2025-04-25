@@ -212,6 +212,27 @@ struct gendisk {
 	u64 diskseq;
 	blk_mode_t open_mode;
 
+#ifdef CONFIG_BLK_INLINE_ENCRYPTION
+	struct bio_crypt_ctx *crypt_ctx;
+	struct blk_ksm_keyslot *crypt_keyslot;
+#endif
+
+	unsigned short write_hint;
+	unsigned short ioprio;
+
+	unsigned int extra_len;	/* length of alignment and padding */
+
+	enum mq_rq_state state;
+	refcount_t ref;
+
+	unsigned int timeout;
+	unsigned long deadline;
+
+	union {
+		struct __call_single_data csd;
+		u64 fifo_time;
+	};
+
 	/*
 	 * Independent sector access ranges. This is always NULL for
 	 * devices that do not have multiple independent access ranges.
@@ -516,6 +537,14 @@ struct request_queue {
 	 * queue settings
 	 */
 	unsigned long		nr_requests;	/* Max # of requests */
+
+#ifdef CONFIG_BLK_INLINE_ENCRYPTION
+	/* Inline crypto capabilities */
+	struct blk_keyslot_manager *ksm;
+#endif
+
+	unsigned int		rq_timeout;
+	int			poll_nsec;
 
 #ifdef CONFIG_BLK_INLINE_ENCRYPTION
 	struct blk_crypto_profile *crypto_profile;
@@ -1372,7 +1401,13 @@ static inline sector_t bdev_offset_from_zone_start(struct block_device *bdev,
 	return sector & (bdev_zone_sectors(bdev) - 1);
 }
 
-static inline sector_t bio_offset_from_zone_start(struct bio *bio)
+static inline bool
+blk_integrity_queue_supports_integrity(struct request_queue *q)
+{
+	return q->integrity.profile;
+}
+
+static inline bool blk_integrity_rq(struct request *rq)
 {
 	return bdev_offset_from_zone_start(bio->bi_bdev,
 					   bio->bi_iter.bi_sector);
@@ -1415,8 +1450,47 @@ queue_atomic_write_max_bytes(const struct request_queue *q)
 {
 	return q->limits.atomic_write_max_sectors << SECTOR_SHIFT;
 }
-
-static inline unsigned int bdev_dma_alignment(struct block_device *bdev)
+static inline int blk_rq_count_integrity_sg(struct request_queue *q,
+					    struct bio *b)
+{
+	return 0;
+}
+static inline int blk_rq_map_integrity_sg(struct request_queue *q,
+					  struct bio *b,
+					  struct scatterlist *s)
+{
+	return 0;
+}
+static inline struct blk_integrity *bdev_get_integrity(struct block_device *b)
+{
+	return NULL;
+}
+static inline struct blk_integrity *blk_get_integrity(struct gendisk *disk)
+{
+	return NULL;
+}
+static inline bool
+blk_integrity_queue_supports_integrity(struct request_queue *q)
+{
+	return false;
+}
+static inline int blk_integrity_compare(struct gendisk *a, struct gendisk *b)
+{
+	return 0;
+}
+static inline void blk_integrity_register(struct gendisk *d,
+					 struct blk_integrity *b)
+{
+}
+static inline void blk_integrity_unregister(struct gendisk *d)
+{
+}
+static inline void blk_queue_max_integrity_segments(struct request_queue *q,
+						    unsigned int segs)
+{
+}
+static inline unsigned short queue_max_integrity_segments(const struct request_queue *q)
+>>>>>>> 7c8d312cb0634... porting CONFIG_BLK_INLINE_ENCRYPTION and CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK from old kernel
 {
 	return queue_dma_alignment(bdev_get_queue(bdev));
 }
@@ -1476,6 +1550,24 @@ enum blk_unique_id {
 	BLK_UID_EUI64	= 2,
 	BLK_UID_NAA	= 3,
 };
+
+#ifdef CONFIG_BLK_INLINE_ENCRYPTION
+
+bool blk_ksm_register(struct blk_keyslot_manager *ksm, struct request_queue *q);
+
+void blk_ksm_unregister(struct request_queue *q);
+
+#else /* CONFIG_BLK_INLINE_ENCRYPTION */
+
+static inline bool blk_ksm_register(struct blk_keyslot_manager *ksm,
+				    struct request_queue *q)
+{
+	return true;
+}
+
+static inline void blk_ksm_unregister(struct request_queue *q) { }
+
+#endif /* CONFIG_BLK_INLINE_ENCRYPTION */
 
 struct block_device_operations {
 	void (*submit_bio)(struct bio *bio);

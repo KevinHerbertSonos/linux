@@ -15,6 +15,7 @@
 #include <linux/blk-mq.h>
 #include <linux/blk-crypto-profile.h>
 #include <linux/jump_label.h>
+#include <linux/keyslot-manager.h>
 
 #include <trace/events/block.h>
 

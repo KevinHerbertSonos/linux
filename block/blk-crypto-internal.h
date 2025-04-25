@@ -7,11 +7,18 @@
 #define __LINUX_BLK_CRYPTO_INTERNAL_H
 
 #include <linux/bio.h>
+<<<<<<< HEAD
 #include <linux/blk-mq.h>
 
 /* Represents a crypto mode supported by blk-crypto  */
 struct blk_crypto_mode {
 	const char *name; /* name of this mode, shown in sysfs */
+=======
+#include <linux/blkdev.h>
+
+/* Represents a crypto mode supported by blk-crypto  */
+struct blk_crypto_mode {
+>>>>>>> 7c8d312cb0634... porting CONFIG_BLK_INLINE_ENCRYPTION and CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK from old kernel
 	const char *cipher_str; /* crypto API name (for fallback case) */
 	unsigned int keysize; /* key size in bytes */
 	unsigned int ivsize; /* iv size in bytes */
@@ -21,10 +28,13 @@ extern const struct blk_crypto_mode blk_crypto_modes[];
 
 #ifdef CONFIG_BLK_INLINE_ENCRYPTION
 
+<<<<<<< HEAD
 int blk_crypto_sysfs_register(struct gendisk *disk);
 
 void blk_crypto_sysfs_unregister(struct gendisk *disk);
 
+=======
+>>>>>>> 7c8d312cb0634... porting CONFIG_BLK_INLINE_ENCRYPTION and CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK from old kernel
 void bio_crypt_dun_increment(u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE],
 			     unsigned int inc);
 
@@ -65,6 +75,7 @@ static inline bool blk_crypto_rq_is_encrypted(struct request *rq)
 	return rq->crypt_ctx;
 }
 
+<<<<<<< HEAD
 static inline bool blk_crypto_rq_has_keyslot(struct request *rq)
 {
 	return rq->crypt_keyslot;
@@ -93,6 +104,10 @@ static inline void blk_crypto_sysfs_unregister(struct gendisk *disk)
 {
 }
 
+=======
+#else /* CONFIG_BLK_INLINE_ENCRYPTION */
+
+>>>>>>> 7c8d312cb0634... porting CONFIG_BLK_INLINE_ENCRYPTION and CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK from old kernel
 static inline bool bio_crypt_rq_ctx_compatible(struct request *rq,
 					       struct bio *bio)
 {
@@ -124,11 +139,14 @@ static inline bool blk_crypto_rq_is_encrypted(struct request *rq)
 	return false;
 }
 
+<<<<<<< HEAD
 static inline bool blk_crypto_rq_has_keyslot(struct request *rq)
 {
 	return false;
 }
 
+=======
+>>>>>>> 7c8d312cb0634... porting CONFIG_BLK_INLINE_ENCRYPTION and CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK from old kernel
 #endif /* CONFIG_BLK_INLINE_ENCRYPTION */
 
 void __bio_crypt_advance(struct bio *bio, unsigned int bytes);
@@ -163,6 +181,7 @@ static inline bool blk_crypto_bio_prep(struct bio **bio_ptr)
 	return true;
 }
 
+<<<<<<< HEAD
 blk_status_t __blk_crypto_rq_get_keyslot(struct request *rq);
 static inline blk_status_t blk_crypto_rq_get_keyslot(struct request *rq)
 {
@@ -178,6 +197,16 @@ static inline void blk_crypto_rq_put_keyslot(struct request *rq)
 		__blk_crypto_rq_put_keyslot(rq);
 }
 
+=======
+blk_status_t __blk_crypto_init_request(struct request *rq);
+static inline blk_status_t blk_crypto_init_request(struct request *rq)
+{
+	if (blk_crypto_rq_is_encrypted(rq))
+		return __blk_crypto_init_request(rq);
+	return BLK_STS_OK;
+}
+
+>>>>>>> 7c8d312cb0634... porting CONFIG_BLK_INLINE_ENCRYPTION and CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK from old kernel
 void __blk_crypto_free_request(struct request *rq);
 static inline void blk_crypto_free_request(struct request *rq)
 {
@@ -205,6 +234,24 @@ static inline int blk_crypto_rq_bio_prep(struct request *rq, struct bio *bio,
 	return 0;
 }
 
+<<<<<<< HEAD
+=======
+/**
+ * blk_crypto_insert_cloned_request - Prepare a cloned request to be inserted
+ *				      into a request queue.
+ * @rq: the request being queued
+ *
+ * Return: BLK_STS_OK on success, nonzero on error.
+ */
+static inline blk_status_t blk_crypto_insert_cloned_request(struct request *rq)
+{
+
+	if (blk_crypto_rq_is_encrypted(rq))
+		return blk_crypto_init_request(rq);
+	return BLK_STS_OK;
+}
+
+>>>>>>> 7c8d312cb0634... porting CONFIG_BLK_INLINE_ENCRYPTION and CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK from old kernel
 #ifdef CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK
 
 int blk_crypto_fallback_start_using_mode(enum blk_crypto_mode_num mode_num);

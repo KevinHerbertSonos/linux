@@ -278,7 +278,24 @@ static ssize_t write_generate_store(struct device *dev,
 				    struct device_attribute *attr,
 				    const char *page, size_t count)
 {
-	return flag_store(dev, page, count, BLK_INTEGRITY_NOGENERATE);
+	struct blk_integrity *bi = &disk->queue->integrity;
+
+	bi->flags = BLK_INTEGRITY_VERIFY | BLK_INTEGRITY_GENERATE |
+		template->flags;
+	bi->interval_exp = template->interval_exp ? :
+		ilog2(queue_logical_block_size(disk->queue));
+	bi->profile = template->profile ? template->profile : &nop_profile;
+	bi->tuple_size = template->tuple_size;
+	bi->tag_size = template->tag_size;
+
+	disk->queue->backing_dev_info->capabilities |= BDI_CAP_STABLE_WRITES;
+
+#ifdef CONFIG_BLK_INLINE_ENCRYPTION
+	if (disk->queue->ksm) {
+		pr_warn("blk-integrity: Integrity and hardware inline encryption are not supported together. Disabling hardware inline encryption.\n");
+		blk_ksm_unregister(disk->queue);
+	}
+#endif
 }
 
 static ssize_t write_generate_show(struct device *dev,
