@@ -5,7 +5,7 @@ config HAVE_ARCH_KFENCE
 
 menuconfig KFENCE
 	bool "KFENCE: low-overhead sampling-based memory safety error detector"
-	depends on HAVE_ARCH_KFENCE
+	depends on HAVE_ARCH_KFENCE && (SLAB || SLUB)
 	select STACKTRACE
 	select IRQ_WORK
 	help
@@ -97,3 +97,6 @@ config KFENCE_KUNIT_TEST
 	  if you are unsure.
 
 endif # KFENCE
+=======
+	  enable KASAN due to its cost, consider using KFENCE.
+>>>>>>> 0741209551fa0... porting CONFIG_HAVE_ARCH_KFENCE from old kernel

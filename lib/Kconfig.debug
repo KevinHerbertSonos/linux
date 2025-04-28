@@ -986,7 +986,12 @@ config DEBUG_STACKOVERFLOW
 
 	  If in doubt, say "N".
 
-config CODE_TAGGING
+source "lib/Kconfig.kasan"
+source "lib/Kconfig.kfence"
+
+endmenu # "Memory Debugging"
+
+config ARCH_HAS_KCOV
 	bool
 	select KALLSYMS
 
