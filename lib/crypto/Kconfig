@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0
+
+menu "Crypto library routines"
+
+config CRYPTO_LIB_BLAKE2S_GENERIC
+	def_bool !CRYPTO_ARCH_HAVE_LIB_BLAKE2S
+	help
+	  This symbol can be depended upon by arch implementations of the
+	  Blake2s library interface that require the generic code as a
+	  fallback, e.g., for SIMD implementations. If no arch specific
+	  implementation is enabled, this implementation serves the users
+	  of CRYPTO_LIB_BLAKE2S.
+
+endmenu

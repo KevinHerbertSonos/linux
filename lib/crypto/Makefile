@@ -17,3 +17,5 @@ libblake2s-y += blake2s.o blake2s-generic.o
 ifneq ($(CONFIG_CRYPTO_MANAGER_DISABLE_TESTS),y)
 libblake2s-y += blake2s-selftest.o
 endif
+
+libblake2s-$(CONFIG_CRYPTO_LIB_BLAKE2S_GENERIC)	+= blake2s-generic.o
