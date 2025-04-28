@@ -88,13 +88,14 @@ config CRYPTO_LIB_CURVE25519
 	depends on CRYPTO_ARCH_HAVE_LIB_CURVE25519 || !CRYPTO_ARCH_HAVE_LIB_CURVE25519
 	select CRYPTO_LIB_CURVE25519_GENERIC if CRYPTO_ARCH_HAVE_LIB_CURVE25519=n
 	select CRYPTO_LIB_UTILS
+	select LIB_MEMNEQ
 	help
 	  Enable the Curve25519 library interface. This interface may be
 	  fulfilled by either the generic implementation or an arch-specific
 	  one, if one is available and enabled.
 
 config CRYPTO_LIB_DES
-	tristate
+       tristate
 
 config CRYPTO_LIB_POLY1305_RSIZE
 	int
@@ -144,3 +145,4 @@ config CRYPTO_LIB_SHA256
 	tristate
 
 endmenu
+
