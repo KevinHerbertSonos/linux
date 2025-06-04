@@ -1089,6 +1089,11 @@
 			compatible = "syna,dolphin-isp-scaler";
 		};
 
+		isp_be: isp_be {
+			status = "disabled";
+			compatible = "syna,dolphin-isp-be";
+		};
+
 		isp_vsi: isp_vsi@f9100000{
 			id = <0>;
 			status = "disabled";
@@ -1132,6 +1137,16 @@
 					isp_vsi_video_ep2: endpoint@2 {
 						reg = <2>;
 						remote-endpoint = <&isp_vsi_subdev_ep2>;
+					};
+				};
+
+				port@3 {
+					reg = <3>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+					isp_vsi_video_ep3: endpoint@3 {
+						reg = <3>;
+						remote-endpoint = <&isp_vsi_subdev_ep3>;
 					};
 				};
 			};
@@ -1183,6 +1198,16 @@
 					isp_vsi_subdev_ep2: endpoint@3 {
 						reg = <3>;
 						remote-endpoint = <&isp_vsi_video_ep2>;
+					};
+				};
+
+				port@4 {
+					reg = <4>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+					isp_vsi_subdev_ep3: endpoint@4 {
+						reg = <4>;
+						remote-endpoint = <&isp_vsi_video_ep3>;
 					};
 				};
 			};

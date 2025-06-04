@@ -158,14 +158,6 @@
 				#gpio-cells = <2>;
 			};
 
-			expander2: gpio@49 {
-				compatible = "ti,pca9536";
-				reg = <0x49>;
-				gpio-controller;
-				#gpio-cells = <2>;
-				reset-gpios = <&expander1 4 GPIO_ACTIVE_LOW>;
-			};
-
 			rtc0: rtc@68 {
 				compatible = "dallas,ds1339";
 				wakeup-source;
@@ -523,6 +515,10 @@
 	dev-addr = <112>;
 };
 
+&isp_be {
+	status = "okay";
+};
+
 &isp_scaler {
 	status = "okay";
 };
@@ -533,8 +529,8 @@
 
 &isp_vsi {
 	status = "okay";
-	enable-gpio = <&expander2 1 GPIO_ACTIVE_HIGH>;
-	reset-gpio = <&expander2 0 GPIO_ACTIVE_HIGH>;
+	reset-gpios = <&expander1 0 0>, <&expander1 6 0>;
+	enable-gpios = <&expander1 4 0>, <&expander1 7 0>;
 };
 
 &isp_vsi_video {
