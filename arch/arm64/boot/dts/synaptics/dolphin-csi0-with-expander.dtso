@@ -1,0 +1,33 @@
+#include <dt-bindings/gpio/gpio.h>
+
+/dts-v1/;
+/plugin/;
+
+
+/ {
+	fragment@0 {
+		target-path = "/i2cdemux3/i2c@0";
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			expander2: gpio@49 {
+				compatible = "ti,pca9536";
+				reg = <0x49>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				reset-gpios = <&expander1 4 GPIO_ACTIVE_LOW>;
+			};
+		};
+	};
+
+	fragment@1 {
+		target-path = "/soc";
+		__overlay__ {
+			isp_vsi: isp_vsi@f9100000 {
+				status = "okay";
+				reset-gpios = <&expander2 1 0>, <&expander1 6 0>;
+				enable-gpios = <&expander2 0 0>, <&expander1 7 0>;
+			};
+		};
+    	};
+};

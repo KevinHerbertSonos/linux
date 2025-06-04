@@ -1,0 +1,261 @@
+#include <dt-bindings/gpio/gpio.h>
+
+/dts-v1/;
+/plugin/;
+
+
+/ {
+
+	fragment@0 {
+		target-path = "/soc";
+		__overlay__ {
+			isp_vsi: isp_vsi@f9100000 {
+				/delete-property/reset-gpios;
+				/delete-property/enable-gpio;
+				status = "okay";
+			};
+		};
+	};
+
+	fragment@1 {
+		target-path = "/soc";
+		__overlay__ {
+			isp_vsi_video: isp_vsi_video {
+				status = "okay";
+				compatible = "verisilicon,video";
+				ports {
+					/delete-property/port@0;
+					/delete-property/port@1;
+					/delete-property/port@2;
+					/delete-property/port@3;
+					/delete-property/port@4;
+					/delete-property/port@5;
+					/delete-property/port@6;
+					/delete-property/port@7;
+					#address-cells = <1>;
+					#size-cells = <0>;
+					port@0 {
+						reg = <0>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_video_ep0: endpoint@0 {
+							reg = <0>;
+							remote-endpoint = <&isp_vsi_subdev_ep1>;
+						};
+					};
+					port@1 {
+						reg = <1>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_video_ep1: endpoint@1 {
+							reg = <1>;
+							remote-endpoint = <&isp_vsi_subdev_ep2>;
+						};
+					};
+					port@2 {
+						reg = <2>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_video_ep2: endpoint@2 {
+							reg = <2>;
+							remote-endpoint = <&isp_vsi_subdev_ep3>;
+						};
+					};
+					port@3 {
+						reg = <3>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_video_ep3: endpoint@3 {
+							reg = <3>;
+							remote-endpoint = <&isp_vsi_subdev_ep4>;
+						};
+					};
+					port@4 {
+						reg = <4>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_video_ep4: endpoint@4 {
+							reg = <4>;
+							remote-endpoint = <&isp_vsi_subdev_ep6>;
+						};
+					};
+					port@5 {
+						reg = <5>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_video_ep5: endpoint@5 {
+							reg = <5>;
+							remote-endpoint = <&isp_vsi_subdev_ep7>;
+						};
+					};
+					port@6 {
+						reg = <6>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_video_ep6: endpoint@6 {
+							reg = <6>;
+							remote-endpoint = <&isp_vsi_subdev_ep8>;
+						};
+					};
+					port@7 {
+						reg = <7>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_video_ep7: endpoint@7 {
+							reg = <7>;
+							remote-endpoint = <&isp_vsi_subdev_ep9>;
+						};
+					};
+				};
+			};
+       };
+	};
+
+	fragment@2 {
+		target-path = "/soc";
+		__overlay__ {
+			isp_vsi_subdev: isp_vsi_subdev {
+				id = <0>;
+				status = "okay";
+				compatible = "verisilicon,isp";
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+					/delete-property/port@1;
+					/delete-property/port@2;
+					/delete-property/port@3;
+					/delete-property/port@4;
+					/delete-property/port@6;
+					/delete-property/port@7;
+					/delete-property/port@8;
+					/delete-property/port@9;
+					port@0 {
+						reg = <0>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_subdev_ep0: endpoint@0 {
+							reg = <0>;
+							remote-endpoint = <&isp_mcm_subdev_ep1>;
+						};
+					};
+					port@1 {
+						reg = <1>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_subdev_ep1: endpoint@1 {
+							reg = <1>;
+							remote-endpoint = <&isp_vsi_video_ep0>;
+						};
+					};
+					port@2 {
+						reg = <2>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_subdev_ep2: endpoint@2 {
+							reg = <2>;
+							remote-endpoint = <&isp_vsi_video_ep1>;
+						};
+					};
+					port@3 {
+						reg = <3>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_subdev_ep3: endpoint@3 {
+							reg = <3>;
+							remote-endpoint = <&isp_vsi_video_ep2>;
+						};
+					};
+					port@4 {
+						reg = <4>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_subdev_ep4: endpoint@4 {
+							reg = <4>;
+							remote-endpoint = <&isp_vsi_video_ep3>;
+						};
+					};
+					port@5 {
+						reg = <5>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_subdev_ep5: endpoint@5 {
+							reg = <5>;
+							remote-endpoint = <&isp_mcm_subdev_ep3>;
+						};
+					};
+					port@6 {
+						reg = <6>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_subdev_ep6: endpoint@6 {
+							reg = <6>;
+							remote-endpoint = <&isp_vsi_video_ep4>;
+						};
+					};
+					port@7 {
+						reg = <7>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_subdev_ep7: endpoint@7 {
+							reg = <7>;
+							remote-endpoint = <&isp_vsi_video_ep5>;
+						};
+					};
+					port@8 {
+						reg = <8>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_subdev_ep8: endpoint@8 {
+							reg = <8>;
+							remote-endpoint = <&isp_vsi_video_ep6>;
+						};
+					};
+					port@9 {
+						reg = <9>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_vsi_subdev_ep9: endpoint@9 {
+							reg = <9>;
+							remote-endpoint = <&isp_vsi_video_ep7>;
+						};
+					};
+
+				};
+        	};
+		};
+	};
+
+	fragment@3 {
+		target-path = "/soc";
+		__overlay__ {
+			isp_mcm_subdev: isp_mcm_subdev{
+				id = <0>;
+				status = "okay";
+				compatible = "syna,dolphin-mcm";
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+					port@1 {
+						reg = <1>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_mcm_subdev_ep1: endpoint@1 {
+							reg = <1>;
+							remote-endpoint = <&isp_vsi_subdev_ep0>;
+						};
+					};
+
+					port@3 {
+						reg = <3>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						isp_mcm_subdev_ep3: endpoint@3 {
+							reg = <3>;
+							remote-endpoint = <&isp_vsi_subdev_ep5>;
+						};
+					};
+				};
+			};
+		};
+	};
+};
