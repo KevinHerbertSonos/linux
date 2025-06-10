@@ -280,7 +280,6 @@
 				dev-offset = <0x9d000000>;
 				interrupts = <GIC_SPI 160 IRQ_TYPE_LEVEL_HIGH>;
 				interrupt-names = "combined";
-
 				status = "disabled";
 			};
 		};
@@ -462,6 +461,18 @@
 		pinctrl: pinctrl@f7e18000 {
 			compatible = "syna,sl261x-soc-pinctrl";
 			reg = <0xf7e18000 0x18>, <0xf7e18800 0xf0>;
+		};
+
+		ipc: ipc@f7e22000 {
+			compatible = "syna,sl261x-ipc";
+			reg = <0xf7e22000 0x30>;
+			interrupts = <GIC_SPI 102 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 103 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 104 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 105 IRQ_TYPE_LEVEL_HIGH>;
+			#mbox-cells = <1>;
+			#hwlock-cells = <1>;
+			status = "disabled";
 		};
 
 		gic: interrupt-controller@f7e59000 {
