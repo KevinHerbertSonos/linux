@@ -465,7 +465,7 @@
 
 		ipc: ipc@f7e22000 {
 			compatible = "syna,sl261x-ipc";
-			reg = <0xf7e22000 0x30>;
+			reg = <0xf7e22000 0x60>;
 			interrupts = <GIC_SPI 102 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 103 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 104 IRQ_TYPE_LEVEL_HIGH>,
