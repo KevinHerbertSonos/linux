@@ -1,0 +1,827 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
+/*
+* Copyright (C) 2016~2023 Synaptics Incorporated. All rights reserved.
+*
+* This program is free software; you can redistribute it and/or modify
+* it under the terms of the GNU General Public License version 2 or
+* later as published by the Free Software Foundation.
+*
+* INFORMATION CONTAINED IN THIS DOCUMENT IS PROVIDED "AS-IS," AND
+* SYNAPTICS EXPRESSLY DISCLAIMS ALL EXPRESS AND IMPLIED WARRANTIES,
+* INCLUDING ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+* A PARTICULAR PURPOSE, AND ANY WARRANTIES OF NON-INFRINGEMENT OF ANY
+* INTELLECTUAL PROPERTY RIGHTS. IN NO EVENT SHALL SYNAPTICS BE LIABLE
+* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, PUNITIVE, OR
+* CONSEQUENTIAL DAMAGES ARISING OUT OF OR IN CONNECTION WITH THE USE
+* OF THE INFORMATION CONTAINED IN THIS DOCUMENT, HOWEVER CAUSED AND
+* BASED ON ANY THEORY OF LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+* NEGLIGENCE OR OTHER TORTIOUS ACTION, AND EVEN IF SYNAPTICS WAS
+* ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. IF A TRIBUNAL OF
+* COMPETENT JURISDICTION DOES NOT PERMIT THE DISCLAIMER OF DIRECT
+* DAMAGES OR ANY OTHER DAMAGES, SYNAPTICS' TOTAL CUMULATIVE LIABILITY
+* TO ANY PARTY SHALL NOT EXCEED ONE HUNDRED U.S. DOLLARS.
+*/
+
+#include <dt-bindings/clock/myna2.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+	compatible = "syna,myna2";
+	interrupt-parent = <&gic>;
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	aliases {
+		serial0 = &uart0;
+		i2c0 = &i2c0;
+		i2c1 = &i2c1;
+		i2c2 = &i2c2;
+		i2c3 = &i2c3;
+		mmc0 = &sdhci0;
+		mmc1 = &sdhci1;
+		spi1 = &spi1;
+		spi2 = &spi2;
+	};
+
+	psci {
+		compatible = "arm,psci-1.0";
+		method = "smc";
+	};
+
+	optee {
+		compatible = "linaro,optee-tz";
+		method = "smc";
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu0: cpu@0 {
+			compatible = "arm,cortex-a55";
+			device_type = "cpu";
+			reg = <0x0>;
+			enable-method = "psci";
+			next-level-cache = <&L2_0>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
+			clocks = <&cpupll 1>;
+			operating-points-v2 = <&cpu_opp_table>;
+			L2_0: l2-cache {
+				compatible = "cache";
+				next-level-cache = <&L3>;
+			};
+		};
+
+		cpu1: cpu@100 {
+			compatible = "arm,cortex-a55";
+			device_type = "cpu";
+			reg = <0x100>;
+			enable-method = "psci";
+			next-level-cache = <&L2_1>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
+			clocks = <&cpupll 1>;
+			operating-points-v2 = <&cpu_opp_table>;
+			L2_1: l2-cache {
+				compatible = "cache";
+				next-level-cache = <&L3>;
+			};
+		};
+
+		cpu2: cpu@200 {
+			compatible = "arm,cortex-a55";
+			device_type = "cpu";
+			reg = <0x200>;
+			enable-method = "psci";
+			next-level-cache = <&L2_2>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
+			clocks = <&cpupll 1>;
+			operating-points-v2 = <&cpu_opp_table>;
+			L2_2: l2-cache {
+				compatible = "cache";
+				next-level-cache = <&L3>;
+			};
+		};
+
+		cpu3: cpu@300 {
+			compatible = "arm,cortex-a55";
+			device_type = "cpu";
+			reg = <0x300>;
+			enable-method = "psci";
+			next-level-cache = <&L2_3>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
+			clocks = <&cpupll 1>;
+			operating-points-v2 = <&cpu_opp_table>;
+			L2_3: l2-cache {
+				compatible = "cache";
+				next-level-cache = <&L3>;
+			};
+		};
+
+		L3: l3-cache0 {
+			compatible = "cache";
+		};
+
+		idle-states {
+			entry-method = "psci";
+			CPU_SLEEP_0: cpu-sleep-0 {
+				compatible = "arm,idle-state";
+				local-timer-stop;
+				arm,psci-suspend-param = <0x0010000>;
+				entry-latency-us = <75>;
+				exit-latency-us = <155>;
+				min-residency-us = <50000>;
+			};
+		};
+
+		cpu_opp_table: opp_table0 {
+			compatible = "operating-points-v2";
+			opp-shared;
+
+			opp@1400000000 {
+				opp-hz = /bits/ 64 <1400000000>;
+				opp-microvolt = <800000 800000 900000>;
+				clock-latency-ns = <12600000>;
+			};
+
+			opp@1700000000 {
+				opp-hz = /bits/ 64 <1700000000>;
+				opp-microvolt = <800000 800000 900000>;
+				clock-latency-ns = <12600000>;
+				opp-suspend;
+			};
+
+			opp@1900000000 {
+				opp-hz = /bits/ 64 <1900000000>;
+				opp-microvolt = <900000 900000 900000>;
+				clock-latency-ns = <12600000>;
+			};
+		};
+	};
+
+	osc: osc {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <25000000>;
+	};
+
+	pmu {
+		compatible = "arm,cortex-a55-pmu";
+		interrupts = <GIC_SPI 17 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 18 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 19 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 20 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-affinity = <&cpu0>,
+				     <&cpu1>,
+				     <&cpu2>,
+				     <&cpu3>;
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <GIC_PPI 13 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 14 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 11 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_LOW)>;
+	};
+
+	soc {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges = <0 0 0 0xffffffff>;
+
+		avio: avio {
+			compatible = "syna,berlin-avio";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			reg = <0xf7400000 0x200000>;
+			ranges = <0 0xf7400000 0x200000>;
+			status = "disabled";
+			aio {
+				compatible = "syna,berlin-aio";
+				reg = <0x65c00 0x400>, <0x60000 0x4000>;
+				reg-names = "aio_base", "gbl_base";
+				clocks = <&apll0 0>, <&apll1 0>, <&clk CLK_AIOSYS>;
+				clock-names = "audio0_clk", "audio1_clk", "aio_sysclk";
+				clock-rates = <294912000 270950400 0>;
+			};
+
+			dhub {
+				compatible = "syna,berlin-dhub";
+				frame-rate = <60>;
+				interrupts = <GIC_SPI 62 IRQ_TYPE_LEVEL_HIGH>;
+				interrupt-names = "vpp_dhub";
+			};
+		};
+
+		dhubctr_a: interrupt-controller@f7418000 {
+			compatible = "syna,myna2-dhub-irq";
+			interrupts = <GIC_SPI 24 IRQ_TYPE_LEVEL_HIGH>;
+			reg = <0xf7418000 0x418>;
+			interrupt-controller;
+			#interrupt-cells = <1>;
+		};
+
+		i2s1_dai: i2s1-soc-dai {
+			compatible = "syna,myna2-i2s-soc";
+			interrupt-parent = <&dhubctr_a>;
+			interrupts = <0>, <1>, <22>;
+			interrupt-names = "tx", "rx", "status";
+			status = "disabled";
+		};
+
+		i2s2_dai: i2s2-soc-dai {
+			compatible = "syna,myna2-i2s-soc";
+			interrupt-parent = <&dhubctr_a>;
+			interrupts = <2>, <3>, <22>;
+			interrupt-names = "tx", "rx", "status";
+			status = "disabled";
+		};
+
+		i2s3_dai: i2s3-soc-dai {
+			compatible = "syna,myna2-i2s-soc";
+			interrupt-parent = <&dhubctr_a>;
+			interrupts = <4>, <5>, <22>;
+			interrupt-names = "tx", "rx", "status";
+			status = "disabled";
+		};
+
+		i2s4_dai: i2s4-soc-dai {
+			compatible = "syna,myna2-i2s-soc";
+			interrupt-parent = <&dhubctr_a>;
+			interrupts = <6>, <7>, <22>;
+			interrupt-names = "tx", "rx", "status";
+			status = "disabled";
+		};
+
+		i2s5_dai: i2s5-soc-dai {
+			compatible = "syna,myna2-i2s-soc";
+			interrupt-parent = <&dhubctr_a>;
+			interrupts = <9>, <10>, <22>;
+			interrupt-names = "tx", "rx", "status";
+			status = "disabled";
+		};
+
+		dmic: dmic-pdm {
+			compatible = "syna,myna2-dmic-pdm";
+			interrupt-parent = <&dhubctr_a>;
+			interrupts = <11>;
+			interrupt-names = "pdm";
+			status = "disabled";
+		};
+
+		myna2_pcm: myna2-pcm {
+			compatible = "syna,myna2-pcm";
+			status = "disabled";
+		};
+
+		myna2_asoc: myna2-asoc {
+			compatible = "syna,myna2-asoc";
+			status = "disabled";
+		};
+
+		apll0: apll0 {
+			compatible = "syna,dolphin-pll";
+			reg = <0xf7462050 0x20>, <0xf74620e8 0x4>;
+			#clock-cells = <1>;
+			clocks = <&osc>;
+			bypass-shift = /bits/ 8 <0>;
+			pd-bypass;
+		};
+
+		apll1: apll1 {
+			compatible = "syna,dolphin-pll";
+			reg = <0xf7462078 0x20>, <0xf74620e8 0x4>;
+			#clock-cells = <1>;
+			clocks = <&osc>;
+			bypass-shift = /bits/ 8 <0>;
+			pd-bypass;
+		};
+
+		gic: interrupt-controller@f7901000 {
+			compatible = "arm,gic-400";
+			#interrupt-cells = <3>;
+			interrupt-controller;
+			reg = <0xf7901000 0x1000>,
+			      <0xf7902000 0x2000>,
+			      <0xf7904000 0x2000>,
+			      <0xf7906000 0x2000>;
+			interrupts = <GIC_PPI 9 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_HIGH)>;
+		};
+
+		hwmon@f79200f0 {
+			compatible = "syna,myna2-hwmon";
+			reg = <0xf79200f0 0x20>;
+			interrupts = <GIC_SPI 3 IRQ_TYPE_LEVEL_HIGH>;
+		};
+
+		cpupll: cpupll@f7922000 {
+			compatible = "syna,dolphin-pll";
+			reg = <0xf7922000 0x20>, <0xf7ea0710 0x4>;
+			#clock-cells = <1>;
+			clocks = <&osc>;
+			bypass-shift = /bits/ 8 <3>;
+		};
+
+		axi_meter: axi_meter@f7940000 {
+			compatible = "syna,myna2-axi-meter";
+			reg = <0xf7940000 0x300>;
+			status = "disabled";
+		};
+
+		mempll: mempll@f7940008 {
+			compatible = "syna,dolphin-pll";
+			reg = <0xf7940008 0x20>, <0xf7ea0710 0x4>;
+			#clock-cells = <1>;
+			clocks = <&osc>;
+			bypass-shift = /bits/ 8 <2>;
+		};
+
+		drm: drm {
+			compatible = "syna,berlin-drm";
+			status = "disabled";
+
+			lcdc_panel {
+				compatible = "syna,drm-lcdc";
+				status= "disabled";
+			};
+
+			dsi_panel {
+				compatible = "syna,drm-dsi";
+				status= "disabled";
+			};
+		};
+
+		gpu: gpu@0xf7980000 {
+			compatible = "img,powervr";
+			reg = <0xf7980000 0x80000>, <0xf7ea0694 0x4>;
+			clocks = <&clk CLK_GPU>, <&gateclk CLK_GPUAXI>;
+			clock-names = "gfx3dcore", "gfxaxi";
+			interrupts = <GIC_SPI 14 IRQ_TYPE_LEVEL_HIGH>;
+			status = "disabled";
+		};
+
+		sdhci0: sdhci@f7aa0000 {
+			compatible = "snps,dwcmshc-sdhci";
+			reg = <0xf7aa0000 0x1000>;
+			interrupts = <GIC_SPI 12 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk CLK_EMMC>, <&gateclk CLK_EMMCSYS>;
+			clock-names = "core", "bus";
+			resets = <&chip 0x680 5 0 0>;
+			reset-names = "host";
+			phy-offset = <0x300>;
+			bus-width = <8>;
+			non-removable;
+			no-sd;
+			no-sdio;
+			status = "disabled";
+		};
+
+		sdhci1: sdhci@f7ab0000 {
+			compatible = "snps,dwcmshc-sdhci";
+			reg = <0xf7ab0000 0x1000>;
+			interrupts = <GIC_SPI 13 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk CLK_SD0>, <&gateclk CLK_SDIOSYS>;
+			clock-names = "core", "bus";
+			resets = <&chip 0x680 2 0 0 >;
+			reset-names = "host";
+			phy-offset = <0x300>;
+			bus-width = <4>;
+			status = "disabled";
+		};
+
+		gmac0: ethernet@f7b60000 {
+			compatible = "snps,dwmac";
+			reg = <0xf7b60000 0x2000>;
+			interrupts = <GIC_SPI 107 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "macirq";
+			clocks = <&clk CLK_GETHRGMII>, <&gateclk CLK_GETHRGMIISYS>;
+			clock-names = "stmmaceth", "pclk";
+			clk_csr = <1>;
+			snps,multicast-filter-bins = <128>;
+			snps,perfect-filter-entries = <16>;
+			snps,pbl = <32>;
+			rx-fifo-depth = <4096>;
+			tx-fifo-depth = <4096>;
+			snps,axi-config = <&gmac0_stmmac_axi_setup>;
+			status = "disabled";
+
+			mdio0: mdio0 {
+				compatible = "snps,dwmac-mdio";
+				#address-cells = <1>;
+				#size-cells = <0>;
+			};
+
+			gmac0_stmmac_axi_setup: stmmac-axi-config {
+				snps,wr_osr_lmt = <7>;
+				snps,rd_osr_lmt = <7>;
+			};
+		};
+
+		usb0: usb@f7c00000 {
+			compatible = "syna,berlin-usb";
+			reg = <0xf7c00000 0x40000>;
+			interrupts = <GIC_SPI 11 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&gateclk CLK_USB0CORE>;
+			clock-names = "core";
+			phys = <&usb_phy0>;
+			phy-names = "usb2-phy";
+			resets = <&chip 0x688 1 1 0>, <&chip 0x688 2 1 0>, <&chip 0x680 4 0 0>;
+			reset-names = "dwc2", "dwc2-ecc", "dwc2-sync";
+			dr_mode = "otg";
+			status = "disabled";
+		};
+
+		usb_phy0: phy@f7c40000 {
+			compatible = "syna,dolphin-usb2-phy";
+			reg = <0xf7c40000 0x100>;
+			#phy-cells = <0>;
+			resets = <&chip 0x688 0 1 0>;
+			reset-names = "phy";
+			status = "disabled";
+		};
+
+		xhci0: xhci@f7d00000 {
+			compatible = "syna,dolphin-dwusb3";
+			clocks = <&clk CLK_USB3CORE>;
+			clock-names = "core_clk";
+			resets = <&chip 0x680 7 0 0>;
+			reset-names = "rst-sync";
+			phys = <&usb_phy1>;
+			phy-names = "usb-phy";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
+			status = "disabled";
+			usb_dwc3: dwc3@f7d00000 {
+				compatible = "snps,dwc3";
+				reg = <0xf7d00000 0x20000>;
+				interrupts = <GIC_SPI 105 IRQ_TYPE_LEVEL_HIGH>;
+				dr_mode = "host";
+			};
+		};
+
+		usb_phy1: phy@f7d20100 {
+			compatible = "syna,dolphin-usb3-phy";
+			reg = <0xf7d20100 0x20>;
+			#phy-cells = <0>;
+			resets = <&chip 0x688 3 1 0>;
+			reset-names = "phy";
+			status = "disabled";
+		};
+
+		apb@f7e80000 {
+			compatible = "simple-bus";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0 0xf7e80000 0x10000>;
+
+			timer0: timer@0400 {
+				compatible = "snps,dw-apb-timer";
+				reg = <0x0400 0x14>;
+				clocks = <&clk CLK_APBCORE>;
+				clock-names = "timer";
+				clock-freq = <100000000>;
+				interrupts = <GIC_SPI 40 IRQ_TYPE_LEVEL_HIGH>;
+			};
+
+			timer1: timer@0414 {
+				compatible = "snps,dw-apb-timer";
+				reg = <0x0414 0x14>;
+				clocks = <&clk CLK_APBCORE>;
+				clock-names = "timer";
+				clock-freq = <100000000>;
+				status = "disabled";
+			};
+
+			timer2: timer@0428 {
+				compatible = "snps,dw-apb-timer";
+				reg = <0x0428 0x14>;
+				clocks = <&clk CLK_APBCORE>;
+				clock-names = "timer";
+				clock-freq = <100000000>;
+				status = "disabled";
+			};
+
+			timer3: timer@043c {
+				compatible = "snps,dw-apb-timer";
+				reg = <0x043c 0x14>;
+				clocks = <&clk CLK_APBCORE>;
+				clock-names = "timer";
+				clock-freq = <100000000>;
+				status = "disabled";
+			};
+
+			timer4: timer@0450 {
+				compatible = "snps,dw-apb-timer";
+				reg = <0x0450 0x14>;
+				clocks = <&clk CLK_APBCORE>;
+				clock-names = "timer";
+				clock-freq = <100000000>;
+				status = "disabled";
+			};
+
+			timer5: timer@0464 {
+				compatible = "snps,dw-apb-timer";
+				reg = <0x0464 0x14>;
+				clocks = <&clk CLK_APBCORE>;
+				clock-names = "timer";
+				clock-freq = <100000000>;
+				status = "disabled";
+			};
+
+			timer6: timer@0478 {
+				compatible = "snps,dw-apb-timer";
+				reg = <0x0478 0x14>;
+				clocks = <&clk CLK_APBCORE>;
+				clock-names = "timer";
+				clock-freq = <100000000>;
+				status = "disabled";
+			};
+
+			timer7: timer@048c {
+				compatible = "snps,dw-apb-timer";
+				reg = <0x048c 0x14>;
+				clocks = <&clk CLK_APBCORE>;
+				clock-names = "timer";
+				clock-freq = <100000000>;
+				status = "disabled";
+			};
+
+			gpio0: gpio@0800 {
+				compatible = "snps,dw-apb-gpio";
+				dev_name = "gpio_soc_1";
+				reg = <0x0800 0x400>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				porta: gpio-port@1 {
+					gpio-controller;
+					#gpio-cells = <2>;
+					ngpios = <32>;
+					reg = <0>;
+					interrupt-controller;
+					#interrupt-cells = <2>;
+					interrupts = <GIC_SPI 34 IRQ_TYPE_LEVEL_HIGH>;
+				};
+			};
+
+			gpio1: gpio@0c00 {
+				compatible = "snps,dw-apb-gpio";
+				dev_name = "gpio_soc_2";
+				reg = <0x0c00 0x400>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				portb: gpio-port@1 {
+					gpio-controller;
+					#gpio-cells = <2>;
+					ngpios = <32>;
+					reg = <0>;
+					interrupt-controller;
+					#interrupt-cells = <2>;
+					interrupts = <GIC_SPI 35 IRQ_TYPE_LEVEL_HIGH>;
+				};
+			};
+
+			gpio2: gpio@1000 {
+				compatible = "snps,dw-apb-gpio";
+				dev_name = "gpio_soc_2";
+				reg = <0x1000 0x400>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				portc: gpio-port@1 {
+					gpio-controller;
+					#gpio-cells = <2>;
+					ngpios = <32>;
+					reg = <0>;
+					interrupt-controller;
+					#interrupt-cells = <2>;
+					interrupts = <GIC_SPI 36 IRQ_TYPE_LEVEL_HIGH>;
+				};
+			};
+
+			uart0: uart@1400 {
+				compatible = "snps,dw-apb-uart";
+				reg = <0x1400 0x100>;
+				interrupts = <GIC_SPI 52 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&osc>;
+				reg-shift = <2>;
+				status = "disabled";
+			};
+
+			uart1: uart@1800 {
+				compatible = "snps,dw-apb-uart";
+				reg = <0x1800 0x100>;
+				interrupts = <GIC_SPI 53 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk CLK_APBCORE>;
+				reg-shift = <2>;
+				status = "disabled";
+			};
+
+			i2c0: i2c@1c00 {
+				compatible = "snps,designware-i2c";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				reg = <0x1c00 0x100>;
+				clocks = <&clk CLK_APBCORE>;
+				i2c-sda-hold-time-ns = <449>;
+				i2c-sda-falling-time-ns = <425>;
+				i2c-scl-falling-time-ns = <205>;
+				interrupts = <GIC_SPI 37 IRQ_TYPE_LEVEL_HIGH>;
+				status = "disabled";
+			};
+
+			i2c1: i2c@2000 {
+				compatible = "snps,designware-i2c";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				reg = <0x2000 0x100>;
+				clocks = <&clk CLK_APBCORE>;
+				i2c-sda-hold-time-ns = <449>;
+				i2c-sda-falling-time-ns = <425>;
+				i2c-scl-falling-time-ns = <205>;
+				interrupts = <GIC_SPI 38 IRQ_TYPE_LEVEL_HIGH>;
+				status = "disabled";
+			};
+
+			i2c2: i2c@2400 {
+				compatible = "snps,designware-i2c";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				reg = <0x2400 0x100>;
+				clocks = <&clk CLK_APBCORE>;
+				i2c-sda-hold-time-ns = <449>;
+				i2c-sda-falling-time-ns = <425>;
+				i2c-scl-falling-time-ns = <205>;
+				interrupts = <GIC_SPI 68 IRQ_TYPE_LEVEL_HIGH>;
+				status = "disabled";
+			};
+
+			i2c3: i2c@2800 {
+				compatible = "snps,designware-i2c";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				reg = <0x2800 0x100>;
+				clocks = <&clk CLK_APBCORE>;
+				i2c-sda-hold-time-ns = <449>;
+				i2c-sda-falling-time-ns = <425>;
+				i2c-scl-falling-time-ns = <205>;
+				interrupts = <GIC_SPI 69 IRQ_TYPE_LEVEL_HIGH>;
+				status = "disabled";
+			};
+
+			spi1: spi@2c00 {
+				compatible = "snps,dw-apb-ssi";
+				reg = <0x2c00 0x100>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				num-cs = <4>;
+				clocks = <&clk CLK_APBCORE>;
+				interrupts = <GIC_SPI 39 IRQ_TYPE_LEVEL_HIGH>;
+				status = "disabled";
+			};
+
+			spi2: spi@3000 {
+				compatible = "snps,dw-apb-ssi";
+				reg = <0x3000 0x100>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				num-cs = <4>;
+				clocks = <&clk CLK_APBCORE>;
+				interrupts = <GIC_SPI 70 IRQ_TYPE_LEVEL_HIGH>;
+				status = "disabled";
+			};
+
+			watchdog0: watchdog@3400 {
+				compatible = "snps,dw-wdt";
+				reg = <0x3400 0x100>;
+				clocks = <&osc>;
+				status = "disabled";
+			};
+
+			watchdog1: watchdog@3800 {
+				compatible = "snps,dw-wdt";
+				reg = <0x3800 0x100>;
+				clocks = <&osc>;
+				status = "disabled";
+			};
+
+			watchdog2: watchdog@3c00 {
+				compatible = "snps,dw-wdt";
+				reg = <0x3c00 0x100>;
+				clocks = <&osc>;
+				status = "disabled";
+			};
+		};
+
+		chipid@f7ea0000 {
+			compatible = "marvell,berlin-chipid";
+			reg = <0xf7ea0000 12>;
+		};
+
+		chip: chip-control@f7ea0000 {
+			compatible = "marvell,berlin4ct-chip-ctrl";
+			reg = <0xf7ea0000 0x700>;
+			#reset-cells = <4>;
+		};
+
+		adc: adc@f7ea0134 {
+			compatible = "syna,myna2-adc";
+			reg = <0xf7ea0134 0x10>;
+			interrupts = <GIC_SPI 99 IRQ_TYPE_LEVEL_HIGH>;
+			#io-channel-cells = <1>;
+			status = "disabled";
+		};
+
+		syspll0: syspll0@f7ea0200 {
+			compatible = "syna,dolphin-pll";
+			reg = <0xf7ea0200 0x20>, <0xf7ea0710 0x4>;
+			#clock-cells = <1>;
+			clocks = <&osc>;
+			bypass-shift = /bits/ 8 <0>;
+		};
+
+		syspll1: syspll1@f7ea0220 {
+			compatible = "syna,dolphin-pll";
+			reg = <0xf7ea0220 0x20>, <0xf7ea0710 0x4>;
+			#clock-cells = <1>;
+			clocks = <&osc>;
+			bypass-shift = /bits/ 8 <1>;
+		};
+
+		gateclk: gateclk@f7ea0700 {
+			compatible = "syna,myna2-gateclk";
+			reg = <0xf7ea0700 0x4>;
+			#clock-cells = <1>;
+		};
+
+		clk: clk@f7ea0720 {
+			compatible = "syna,myna2-clk";
+			reg = <0xf7ea0720 0x88>;
+			#clock-cells = <1>;
+			clocks = <&syspll0 0>, <&apll0 0>, <&syspll0 1>, <&apll0 1>, <&syspll1 0>, <&syspll1 1>;
+		};
+
+		pinctrl: pinctrl@f7ea8000 {
+			compatible = "syna,myna2-soc-pinctrl";
+			reg = <0xf7ea8000 0x28>, <0xf7ea8800 0x194>;
+		};
+
+		nand0: nand@f7f10000 {
+			compatible = "cdns,hpnfc-dt";
+			reg = <0xf7f10000 0x10000>, <0xf7f00000 0x10000>, <0xf7aa0000 0x1000>, <0xf7ea0a10 0x10>;
+			interrupts = <GIC_SPI 106 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk CLK_NFCCORE>, <&clk CLK_NFCECC>, <&gateclk CLK_NFCSYS>;
+			clock-names = "core", "ecc", "sys";
+			resets = <&chip 0x680 8 0 0>, <&chip 0x680 9 0 0>;
+			reset-names = "host", "reg";
+			status = "disabled";
+		};
+
+		pwm0: pwm@f7f20000 {
+			compatible = "marvell,berlin-pwm";
+			reg = <0xf7f20000 0x40>;
+			clocks = <&clk CLK_CFG>;
+			#pwm-cells = <3>;
+			status = "disabled";
+		};
+
+		vpll0: vpll0 {
+			compatible = "syna,dolphin-pll";
+			reg = <0xf7462004 0x20>, <0xf74620E8 0x4>;
+			#clock-cells = <1>;
+			clocks = <&osc>;
+			bypass-shift = /bits/ 8 <0>;
+			pd-bypass;
+		};
+
+		vpll1: vpll1 {
+			compatible = "syna,dolphin-pll";
+			reg = <0xf7462028 0x20>, <0xf74620E8 0x4>;
+			#clock-cells = <1>;
+			clocks = <&osc>;
+			bypass-shift = /bits/ 8 <1>;
+			pd-bypass;
+		};
+
+		vpp: vpp {
+			status = "disabled";
+			compatible = "syna,vpp-drv";
+			clocks = <&vpll0 0>, <&vpll1 0>;
+			clock-names = "avio_vclk0", "avio_dpiclk";
+		};
+
+		fb: fb {
+			compatible = "marvell,berlin-fb";
+			frame-size-ndx = <1>;
+			status = "disabled";
+		};
+
+		lcdc: lcdc {
+			compatible = "syna,lcdc";
+			status = "disabled";
+		};
+	};
+};
