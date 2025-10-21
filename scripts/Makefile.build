@@ -165,7 +165,6 @@ gen_symversions =								\
 cmd_gen_symversions_c =	$(call gen_symversions,c)
 
 endif
-endif
 
 ifdef CONFIG_FTRACE_MCOUNT_USE_RECORDMCOUNT
 # compiler will not generate __mcount_loc use recordmcount or recordmcount.pl
@@ -181,7 +180,6 @@ sub_cmd_record_mcount =					\
 	if [ $(@) != "scripts/mod/empty.o" ]; then	\
 		$(objtree)/scripts/recordmcount $(RECORDMCOUNT_FLAGS) "$(@)";	\
 	fi;
-endif
 
 recordmcount_source := $(srctree)/scripts/recordmcount.c \
 		    $(srctree)/scripts/recordmcount.h
@@ -439,25 +437,18 @@ $(obj)/lib-ksyms.o: $(lib-target) FORCE
 
 targets += $(obj)/lib-ksyms.o
 
-endif
-
 # NOTE:
 # Do not replace $(filter %.o,^) with $(real-prereqs). When a single object
 # module is turned into a multi object module, $^ will contain header file
 # dependencies recorded in the .*.cmd file.
 quiet_cmd_link_multi-m = LD [M]  $@
       cmd_link_multi-m = $(file >$@.in,$(filter %.o,$^)) $(LD) $(ld_flags) -r -o $@ @$@.in && rm -f $@.in
-endif
+
 # Sonos patched cmd_link_multi-m to support arbitrarily long command lines
 
 $(multi-used-m): FORCE
 	$(call if_changed,link_multi-m)
 $(call multi_depend, $(multi-used-m), .o, -objs -y -m)
-
-$(multi-obj-m): private objtool-enabled := $(delay-objtool)
-$(multi-obj-m): private part-of-module := y
-$(multi-obj-m): %.o: %.mod FORCE
-	$(call if_changed_rule,ld_multi_m)
 $(call multi_depend, $(multi-obj-m), .o, -objs -y -m)
 
 # Add intermediate targets:
