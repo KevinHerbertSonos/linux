@@ -97,6 +97,3 @@ config KFENCE_KUNIT_TEST
 	  if you are unsure.
 
 endif # KFENCE
-=======
-	  enable KASAN due to its cost, consider using KFENCE.
->>>>>>> 0741209551fa0... porting CONFIG_HAVE_ARCH_KFENCE from old kernel

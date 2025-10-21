@@ -89,6 +89,6 @@ config SONOS_BRIDGE_PROXY
 	bool
 	depends on BRIDGE
 	depends on SONOS
-	---help---
-	Sonos bridge proxy support for NATting frames across a bridge,
-	initially to support satellites in station mode.
+	help
+	  Sonos bridge proxy support for NATting frames across a bridge,
+	  initially to support satellites in station mode.

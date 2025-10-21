@@ -214,6 +214,8 @@ menu "Partition Types"
 
 source "block/partitions/Kconfig"
 
+endmenu
+
 config BLK_MQ_PCI
 	def_bool PCI
 

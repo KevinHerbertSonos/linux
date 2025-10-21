@@ -988,6 +988,7 @@ config DEBUG_STACKOVERFLOW
 
 source "lib/Kconfig.kasan"
 source "lib/Kconfig.kfence"
+source "lib/Kconfig.kmsan"
 
 endmenu # "Memory Debugging"
 
@@ -1021,10 +1022,6 @@ config MEM_ALLOC_PROFILING_DEBUG
 	help
 	  Adds warnings with helpful error messages for memory allocation
 	  profiling.
-
-source "lib/Kconfig.kasan"
-source "lib/Kconfig.kfence"
-source "lib/Kconfig.kmsan"
 
 endmenu # "Memory Debugging"
 
@@ -3078,8 +3075,6 @@ config RUST_KERNEL_DOCTESTS
 	  If unsure, say N.
 
 endmenu # "Rust"
-
-endmenu # Kernel hacking
 
 config INT_POW_TEST
 	tristate "Integer exponentiation (int_pow) test" if !KUNIT_ALL_TESTS
