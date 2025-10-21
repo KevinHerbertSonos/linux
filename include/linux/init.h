@@ -182,8 +182,6 @@ extern struct module __this_module;
 #define THIS_MODULE ((struct module *)0)
 #endif
 
-#endif
-  
 #ifndef MODULE
 
 #ifndef __ASSEMBLY__
